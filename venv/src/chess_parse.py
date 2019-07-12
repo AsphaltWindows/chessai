@@ -1,6 +1,5 @@
 import chess_consts as cc
 
-
 letter_to_fl = {
     "a": cc.A,
     "b": cc.B,
@@ -24,7 +23,7 @@ fl_to_letter = {
 }
 
 letter_to_pce = {
-    "P": cc.Pawn,
+    "": cc.Pawn,
     "N": cc.Knight,
     "B": cc.Bishop,
     "R": cc.Rook,
@@ -33,7 +32,7 @@ letter_to_pce = {
 }
 
 pce_to_letter = {
-    cc.Pawn: "P",
+    cc.Pawn: "",
     cc.Knight: "N",
     cc.Bishop: "B",
     cc.Rook: "R",
@@ -56,6 +55,14 @@ def file_to_letter(file):
 
 def piece_to_letter(piece):
     return pce_to_letter[piece]
+
+
+def square_to_string(sq):
+    return file_to_letter(sq[0]) + str(sq[1])
+
+
+def string_to_square(st):
+    return letter_to_file(st[0]) + int(st[1])
 
 # def string_to_move(board, move):
 #

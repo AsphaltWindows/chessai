@@ -146,11 +146,19 @@ class ChessGame:
                         self.board[move.enPassant][4].appendleft(None)
                 if move.promote is not None:
                     self.pieces[piecenum][1] = move.promote
+
         phash = self.position_hash()
+
         if phash not in self.repetitions:
             self.repetitions[phash] += 1
         else:
             self.repetitions.update({phash: 1})
+
+        if self.to_move == cc.White:
+            self.to_move = cc.Black
+        else:
+            self.to_move = cc.White
+
         self.movesPlayed.append(move)
 
     def unapply_move(self):
@@ -214,3 +222,8 @@ class ChessGame:
 
         for pce in pos_changed:
             self.positions[pce].popleft()
+
+        if self.to_move == cc.White:
+            self.to_move = cc.Black
+        else:
+            self.to_move = cc.White
