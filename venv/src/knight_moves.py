@@ -1,5 +1,5 @@
 import chess_consts as cc
-import chess_moves as cm
+import chess_move as cm
 
 knightMoves = {}
 knightCaptures = {}
@@ -31,11 +31,11 @@ for file in range(cc.A, cc.H + 1):
 def valid_knight_moves(side, square, game):
     valid_moves = []
     for move in knightMoves[square]:
-        if game.board[move.to[0]][move.to[1]] is None:
+        if game.board[move.to[1]][move.to[0]][0] is None:
             valid_moves.append(move)
 
     for move in knightCaptures[square]:
-        piecenum = game.board[move.to[0]][move.to[1]]
+        piecenum = game.board[move.to[1]][move.to[0]][0]
         if piecenum is not None and game.pieces[piecenum][0] != side and game.pieces[piecenum][1] != cc.King:
             valid_moves.append(move)
 

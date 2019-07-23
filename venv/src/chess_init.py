@@ -9,6 +9,7 @@ initialPieces = [
     (cc.White, cc.King),
     (cc.White, cc.Bishop),
     (cc.White, cc.Knight),
+    (cc.White, cc.Rook),
     (cc.White, cc.Pawn),
     (cc.White, cc.Pawn),
     (cc.White, cc.Pawn),
@@ -24,6 +25,7 @@ initialPieces = [
     (cc.Black, cc.King),
     (cc.Black, cc.Bishop),
     (cc.Black, cc.Knight),
+    (cc.Black, cc.Rook),
     (cc.Black, cc.Pawn),
     (cc.Black, cc.Pawn),
     (cc.Black, cc.Pawn),
@@ -70,14 +72,15 @@ initialPositions = [
 ]
 
 initialBoard = [
-    [deque([0]), deque([1]), deque([2]), deque([3]), deque([4]), deque([5]), deque([6]), deque([7])],
-    [deque([8]), deque([9]), deque([10]), deque([11]), deque([12]), deque([13]), deque([14]), deque([15])],
-    [deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None])],
-    [deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None])],
-    [deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None])],
-    [deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None])],
-    [deque([24]), deque([25]), deque([26]), deque([27]), deque([28]), deque([29]), deque([30]), deque([31])],
-    [deque([16]), deque([17]), deque([18]), deque([19]), deque([20]), deque([21]), deque([22]), deque([23])]
+    [],
+    [None, deque([0]), deque([1]), deque([2]), deque([3]), deque([4]), deque([5]), deque([6]), deque([7])],
+    [None, deque([8]), deque([9]), deque([10]), deque([11]), deque([12]), deque([13]), deque([14]), deque([15])],
+    [None, deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None])],
+    [None, deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None])],
+    [None, deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None])],
+    [None, deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None]), deque([None])],
+    [None, deque([24]), deque([25]), deque([26]), deque([27]), deque([28]), deque([29]), deque([30]), deque([31])],
+    [None, deque([16]), deque([17]), deque([18]), deque([19]), deque([20]), deque([21]), deque([22]), deque([23])]
 ]
 
 initialPieceMoveNums = [

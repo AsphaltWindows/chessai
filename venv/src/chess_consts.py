@@ -17,3 +17,7 @@ King = 6
 White = 0
 Black = 1
 
+WhiteWin = 0
+BlackWin = 1
+Draw = 2
+InProgress = 3

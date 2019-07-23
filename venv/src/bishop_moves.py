@@ -1,5 +1,5 @@
 import chess_consts as cc
-import chess_moves as cm
+import chess_move as cm
 
 bishopVectors = {}
 
@@ -42,7 +42,7 @@ def valid_bishop_moves(side, square, game):
     for vector in bishopVectors[square]:
         for movepair in vector:
             to = movepair[0].to
-            piecenum = game.board[to[0]][to[1]]
+            piecenum = game.board[to[1]][to[0]][0]
             if piecenum is None:
                 valid_moves.append(movepair[0])
             elif game.pieces[piecenum][0] != side and game.pieces[piecenum][1] != cc.King:

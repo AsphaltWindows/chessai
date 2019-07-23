@@ -71,13 +71,13 @@ for fr in pm.blackPawnEnPassant:
         black_string_to_move.update({string: move})
 
 for fr in nm.knightMoves:
-    for move in pm.knightMoves[fr]:
+    for move in nm.knightMoves[fr]:
         string = 'N' + cp.square_to_string(fr) + '-' + cp.square_to_string(move.to)
         white_string_to_move.update({string: move})
         black_string_to_move.update({string: move})
 
 for fr in nm.knightCaptures:
-    for move in pm.knightCaptures[fr]:
+    for move in nm.knightCaptures[fr]:
         string = 'N' + cp.square_to_string(fr) + 'x' + cp.square_to_string(move.to)
         white_string_to_move.update({string: move})
         black_string_to_move.update({string: move})
@@ -89,7 +89,7 @@ for fr in km.kingMoves:
         black_string_to_move.update({string: move})
 
 for fr in km.kingCaptures:
-    for move in pm.kingtMoves[fr]:
+    for move in km.kingMoves[fr]:
         string = 'K' + cp.square_to_string(fr) + 'x' + cp.square_to_string(move.to)
         white_string_to_move.update({string: move})
         black_string_to_move.update({string: move})
@@ -138,4 +138,28 @@ string_to_move = {
 
 
 def parse_move(side, move_string):
-    return string[side[move_string]]
+    return string_to_move[side][move_string]
+
+
+def move_to_string(mv, game):
+    if mv.longCastleWhite or mv.longCastleBlack:
+        return "O-O-O"
+    elif mv.shortCastleWhite or mv.shortCastleBlack:
+        return "O-O"
+    else:
+        piecenum = game.board[mv.fr[1]][mv.fr[0]][0]
+        piecetype = game.pieces[piecenum][1]
+        move_str = ""
+        move_str += cp.piece_to_letter(piecetype)
+        move_str += cp.square_to_string(mv.fr)
+        if mv.capture:
+            move_str += "x"
+        else:
+            move_str += "-"
+        move_str += cp.square_to_string(mv.to)
+
+        if mv.promote is not None:
+            move_str += "="
+            move_str += cp.piece_to_letter(mv.promote)
+
+        return move_str

@@ -19,7 +19,7 @@ fl_to_letter = {
     cc.E: "e",
     cc.F: "f",
     cc.G: "g",
-    cc.H: "H",
+    cc.H: "h",
 }
 
 letter_to_pce = {
@@ -38,6 +38,23 @@ pce_to_letter = {
     cc.Rook: "R",
     cc.Queen: "Q",
     cc.King: "K",
+}
+
+string_to_clr = {
+    "White": cc.White,
+    "Black": cc.Black
+}
+
+clr_to_string = {
+    cc.White: "White",
+    cc.Black: "Black"
+}
+
+st_to_string = {
+    cc.InProgress: "In Progress",
+    cc.WhiteWin: "White Wins",
+    cc.BlackWin: "Black Wins",
+    cc.Draw: "Draw"
 }
 
 
@@ -63,6 +80,19 @@ def square_to_string(sq):
 
 def string_to_square(st):
     return letter_to_file(st[0]) + int(st[1])
+
+
+def color_to_string(clr):
+    return clr_to_string[clr]
+
+
+def string_to_color(st):
+    return string_to_clr[st]
+
+
+def state_to_string(state):
+    return st_to_string[state]
+
 
 # def string_to_move(board, move):
 #
