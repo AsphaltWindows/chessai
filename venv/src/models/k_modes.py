@@ -19,6 +19,8 @@ class KModes:
         self.data_labels = [0 for d in batch_data]
 
         if len(batch_data) > cluster_num:
+            print("Clustering " + str(len(batch_data)) + " data points.")
+
             additional_modes = cluster_num - start_modes
             indices = set()
             while len(indices) != additional_modes:
@@ -46,7 +48,7 @@ class KModes:
 
     def cluster_data(self):
         for idx, d in enumerate(self.data):
-            self.data_labels[idx] = self.assign_cluster(d)
+            self.data_labels[idx] = rand.choice(self.assign_cluster(d))
 
     def recalculate_modes(self):
         freqs = [[[0 for n in cl] for cl in self.classes] for m in self.cluster_modes]
@@ -74,16 +76,18 @@ class KModes:
         return diss
 
     def assign_cluster(self, data):
-        cluster_idx = 0
+        cluster_indices = [0]
         min_score = self.dissimilarity(data, 0)
 
         for idx in range(1, self.cluster_num - 1):
             diss = self.dissimilarity(data, idx)
             if diss < min_score:
-                cluster_idx = idx
+                cluster_indices = [idx]
                 min_score = diss
+            elif diss == min_score:
+                cluster_indices.append(idx)
 
-        return cluster_idx
+        return cluster_indices
 
     def store_model(self, file_name):
         file = open(file_name, "w")
@@ -97,7 +101,7 @@ class KModes:
 def k_modes(file_name):
     file = open(file_name, "r")
     fmodel = file.readlines()
-    classes = map(int, fmodel[0].split(" "))
+    classes = list(map(int, fmodel[0].split(" ")))
     model = KModes(classes)
     cluster_num = int(fmodel[1])
     model.cluster_num = cluster_num
