@@ -1,6 +1,6 @@
-import chess_init as ci
-import chess_consts as cc
-import chess_parse as cp
+from chess import chess_init as ci
+from chess import chess_consts as cc
+from chess import chess_parse as cp
 import copy as copy
 from collections import deque
 

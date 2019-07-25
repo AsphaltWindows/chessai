@@ -1,5 +1,5 @@
 from collections import deque
-import chess_consts as cc
+from chess import chess_consts as cc
 
 initialPieces = [
     (cc.White, cc.Rook),

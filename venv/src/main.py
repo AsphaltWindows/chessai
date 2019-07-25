@@ -1,9 +1,9 @@
-import chess_game as cg
-import chess_parse as cp
-import game_state as gs
-import chess_consts as cc
-import move_strings as ms
-import moves as m
+import chess.chess_game as cg
+import chess.chess_parse as cp
+import chess.game_state as gs
+import chess.chess_consts as cc
+import chess.move_strings as ms
+import chess.moves as m
 
 
 game = cg.ChessGame()
@@ -13,7 +13,7 @@ print (gs.game_state(game))
 while gs.game_state(game) == cc.InProgress:
     board = game.print_board()
     print(board)
-    legal_moves = m.all_legal_moves(game)
+    legal_moves = m.all_legal_moves(game)[0]
     print("number of legal moves: " + str(len(legal_moves)))
     print(game.enPassant)
     # if len(legal_moves) == 1:

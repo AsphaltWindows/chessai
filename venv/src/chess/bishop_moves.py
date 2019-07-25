@@ -1,5 +1,5 @@
-import chess_consts as cc
-import chess_move as cm
+from chess import chess_consts as cc
+from chess import chess_move as cm
 
 bishopVectors = {}
 

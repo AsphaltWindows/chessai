@@ -1,4 +1,4 @@
-import chess_consts as cc
+from chess import chess_consts as cc
 
 letter_to_fl = {
     "a": cc.A,

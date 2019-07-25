@@ -1,6 +1,6 @@
-import threats as t
-import chess_consts as cc
-import moves as m
+from chess import threats as t
+from chess import chess_consts as cc
+from chess import moves as m
 
 
 def game_state(game):
@@ -12,7 +12,7 @@ def game_state(game):
         opponent = cc.White
         king_pos = game.positions[20][0]
 
-    moves = m.all_legal_moves(game)
+    moves = m.all_legal_moves(game)[0]
     phash = game.position_hash()
 
     if len(moves) == 0 and t.is_threatened(opponent, king_pos, game):

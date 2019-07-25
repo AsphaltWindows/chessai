@@ -1,9 +1,9 @@
-import chess_game as cg
-import chess_parse as cp
-import game_state as gs
-import chess_consts as cc
-import move_strings as ms
-import moves as m
+import chess.chess_game as cg
+import chess.chess_parse as cp
+import chess.game_state as gs
+import chess.chess_consts as cc
+import chess.move_strings as ms
+import chess.moves as m
 import random as rand
 
 directory = "/home/iv/dev/chessai/games/random/"
@@ -18,7 +18,7 @@ for num in range(0, game_num):
     move_num = 1
     game_str = ""
     while gs.game_state(game) == cc.InProgress:
-        legal_moves = m.all_legal_moves(game)
+        legal_moves = m.all_legal_moves(game)[0]
         move = rand.choice(legal_moves)
 
         if game.to_move == cc.White:

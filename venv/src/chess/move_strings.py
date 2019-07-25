@@ -1,11 +1,11 @@
-import bishop_moves as bm
-import pawn_moves as pm
-import knight_moves as nm
-import king_moves as km
-import rook_moves as rm
-import castle_moves as cm
-import chess_parse as cp
-import chess_consts as cc
+from chess import bishop_moves as bm
+from chess import pawn_moves as pm
+from chess import knight_moves as nm
+from chess import king_moves as km
+from chess import rook_moves as rm
+from chess import castle_moves as cm
+from chess import chess_parse as cp
+from chess import chess_consts as cc
 
 string_to_move = {}
 

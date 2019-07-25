@@ -1,19 +1,18 @@
-import chess_consts as cc
-import threats as t
-import bishop_moves as bm
-import knight_moves as nm
-import king_moves as km
-import pawn_moves as pm
-import rook_moves as rm
-import queen_moves as qm
-import castle_moves as cm
-
-import chess_parse as cp
+from chess import chess_consts as cc
+from chess import threats as t
+from chess import bishop_moves as bm
+from chess import knight_moves as nm
+from chess import king_moves as km
+from chess import pawn_moves as pm
+from chess import rook_moves as rm
+from chess import queen_moves as qm
+from chess import castle_moves as cm
 
 
-def all_legal_moves(game):
+def all_legal_moves(game, pos_fn=lambda x: None):
     side = game.to_move
     legal_moves = []
+    pos_res = []
 
     castle_moves = cm.valid_castle_moves(side, game)
 
@@ -21,6 +20,7 @@ def all_legal_moves(game):
         game.apply_move(move)
         if t.is_legal(side, game):
             legal_moves.append(move)
+            pos_res.append(pos_fn(game))
         game.unapply_move()
 
     for file in range(cc.A, cc.H + 1):
@@ -39,6 +39,7 @@ def all_legal_moves(game):
                             game.apply_move(move)
                             if t.is_legal(side, game):
                                 legal_moves.append(move)
+                                pos_res.append(pos_fn(game))
                             game.unapply_move()
                     elif piecetype == cc.Knight:
                         valid_moves = nm.valid_knight_moves(side, (file, rank), game)
@@ -46,6 +47,7 @@ def all_legal_moves(game):
                             game.apply_move(move)
                             if t.is_legal(side, game):
                                 legal_moves.append(move)
+                                pos_res.append(pos_fn(game))
                             game.unapply_move()
                     elif piecetype == cc.Bishop:
                         valid_moves = bm.valid_bishop_moves(side, (file, rank), game)
@@ -53,6 +55,7 @@ def all_legal_moves(game):
                             game.apply_move(move)
                             if t.is_legal(side, game):
                                 legal_moves.append(move)
+                                pos_res.append(pos_fn(game))
                             game.unapply_move()
                     elif piecetype == cc.Rook:
                         valid_moves = rm.valid_rook_moves(side, (file, rank), game)
@@ -60,6 +63,7 @@ def all_legal_moves(game):
                             game.apply_move(move)
                             if t.is_legal(side, game):
                                 legal_moves.append(move)
+                                pos_res.append(pos_fn(game))
                             game.unapply_move()
                     elif piecetype == cc.Queen:
                         valid_moves = qm.valid_queen_moves(side, (file, rank), game)
@@ -67,6 +71,7 @@ def all_legal_moves(game):
                             game.apply_move(move)
                             if t.is_legal(side, game):
                                 legal_moves.append(move)
+                                pos_res.append(pos_fn(game))
                             game.unapply_move()
                     elif piecetype == cc.King:
                         valid_moves = km.valid_king_moves(side, (file, rank), game)
@@ -74,6 +79,6 @@ def all_legal_moves(game):
                             game.apply_move(move)
                             if t.is_legal(side, game):
                                 legal_moves.append(move)
+                                pos_res.append(pos_fn(game))
                             game.unapply_move()
-
-    return legal_moves
+    return legal_moves, pos_res

@@ -1,5 +1,5 @@
-import rook_moves as rm
-import bishop_moves as bm
+from chess import rook_moves as rm
+from chess import bishop_moves as bm
 
 
 def valid_queen_moves(side, square, game):

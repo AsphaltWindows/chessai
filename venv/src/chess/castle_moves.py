@@ -1,6 +1,6 @@
-import chess_consts as cc
-import chess_move as cm
-import threats as t
+from chess import chess_consts as cc
+from chess import chess_move as cm
+from chess import threats as t
 
 longWhiteCastle = cm.ChessMove(None, None, False, 0, None, True, False, False, False)
 longBlackCastle = cm.ChessMove(None, None, False, 0, None, False, True, False, False)
