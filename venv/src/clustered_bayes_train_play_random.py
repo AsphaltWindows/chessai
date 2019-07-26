@@ -1,10 +1,12 @@
-import models.categorical_naive_bayes as cnb
+import models.clustered_bayes as cb
 import chess.categorical_input as ci
 import chess.chess_consts as cc
 import chess.chess_game as cg
 import chess.game_state as gs
 import chess.moves as m
 import random as rand
+
+import sys
 
 
 def select_position(positions, play_as):
@@ -46,23 +48,23 @@ def play_move(mod, gam):
 
 
 # Train bayesian model
-model = cnb.CategoricalNaiveBayes(3, ci.game_classes())
-directory = "/home/iv/dev/chessai/games/random/"
+model = cb.ClusteredBayes(3, ci.game_classes())
+num_games = int(sys.argv[1])
+directory = sys.argv[2]
 whitewinsfile = open(directory + "white_wins.games", "r")
 blackwinsfile = open(directory + "black_wins.games", "r")
 drawsfile = open(directory + "draws.games", "r")
 
-whitewins = [(0, map(int, line.split(" "))) for line in whitewinsfile.readlines()]
-blackwins = [(1, map(int, line.split(" "))) for line in blackwinsfile.readlines()]
-draws = [(2, map(int, line.split(" "))) for line in drawsfile.readlines()]
+whitewins = [(0, list(map(int, line.split(" ")))) for line in whitewinsfile.readlines()]
+blackwins = [(1, list(map(int, line.split(" ")))) for line in blackwinsfile.readlines()]
+draws = [(2, list(map(int, line.split(" ")))) for line in drawsfile.readlines()]
 
-model.train_batch(whitewins + blackwins + draws)
+model.train_batch([], 128, whitewins + blackwins + draws)
 
 whitewinsfile.close()
 blackwinsfile.close()
 drawsfile.close()
 
-num_games = 200
 player = lambda g: play_move(model, g)
 opponent = lambda g: g.apply_move(rand.choice(m.all_legal_moves(g)[0]))
 

@@ -1,0 +1,83 @@
+import sys
+
+import models.categorical_naive_bayes as cnb
+import models.clustered_bayes as cb
+import models.k_network_bayes as knb
+import chess.categorical_input as ci
+
+model_type = sys.argv[1]
+model_dir = sys.argv[2]
+model_version = int(sys.argv[3])
+games_dir = sys.argv[4]
+model_args = list(map(int, sys.argv[5].split(",")))
+
+if model_type == "nb":
+    if model_version == 0:
+        model = cnb.CategoricalNaiveBayes(3, ci.game_classes())
+    else:
+        model = cnb.CategoricalNaiveBayes.load_model(model_dir + "/nb" + str(model_version) + ".model")
+
+    whitewinsfile = open(games_dir + "white_wins.games", "r")
+    blackwinsfile = open(games_dir + "black_wins.games", "r")
+    drawsfile = open(games_dir + "draws.games", "r")
+
+    whitewins = [(0, map(int, line.split(" "))) for line in whitewinsfile.readlines()]
+    blackwins = [(1, map(int, line.split(" "))) for line in blackwinsfile.readlines()]
+    draws = [(2, map(int, line.split(" "))) for line in drawsfile.readlines()]
+
+    model.train_batch(whitewins + blackwins + draws)
+
+    whitewinsfile.close()
+    blackwinsfile.close()
+    drawsfile.close()
+
+    model.store_model(model_dir + "/nb" + str(model_version + 1) + ".model")
+elif model_type == "cb":
+    if model_version == 0:
+        model = cb.ClusteredBayes(3, ci.game_classes())
+        cluster_num = model_args[0]
+        init_modes = []
+    else:
+        model = cb.ClusteredBayes.load_model(model_dir + "/cb" + str(model_version) + ".model")
+        cluster_num = model.clustering.cluster_num
+        init_modes = model.clustering.cluster_modes
+
+    whitewinsfile = open(games_dir + "white_wins.games", "r")
+    blackwinsfile = open(games_dir + "black_wins.games", "r")
+    drawsfile = open(games_dir + "draws.games", "r")
+
+    whitewins = [(0, list(map(int, line.split(" ")))) for line in whitewinsfile.readlines()]
+    blackwins = [(1, list(map(int, line.split(" ")))) for line in blackwinsfile.readlines()]
+    draws = [(2, list(map(int, line.split(" ")))) for line in drawsfile.readlines()]
+
+    model.train_batch(init_modes, cluster_num, whitewins + blackwins + draws)
+
+    whitewinsfile.close()
+    blackwinsfile.close()
+    drawsfile.close()
+    model.store_model(model_dir + "/cb" + str(model_version + 1) + ".model")
+elif model_type == "knb":
+    if model_version == 0:
+        cluster_num = model_args[0]
+        node_num = model_args[1]
+        layer_num = model_args[2]
+        model = knb.KNetworkBayes(3, cluster_num, node_num, layer_num, ci.game_classes())
+    else:
+        model = knb.KNetworkBayes.load_model(model_dir + "/knb" + str(model_version) + ".model")
+
+    whitewinsfile = open(games_dir + "white_wins.games", "r")
+    blackwinsfile = open(games_dir + "black_wins.games", "r")
+    drawsfile = open(games_dir + "draws.games", "r")
+
+    whitewins = [(0, list(map(int, line.split(" ")))) for line in whitewinsfile.readlines()]
+    blackwins = [(1, list(map(int, line.split(" ")))) for line in blackwinsfile.readlines()]
+    draws = [(2, list(map(int, line.split(" ")))) for line in drawsfile.readlines()]
+
+    model.train_batch(whitewins + blackwins + draws)
+
+    whitewinsfile.close()
+    blackwinsfile.close()
+    drawsfile.close()
+    model.store_model(model_dir + "/knb" + str(model_version + 1) + ".model")
+
+

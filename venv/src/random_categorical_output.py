@@ -7,8 +7,8 @@ import chess.game_state as gs
 import random as rand
 import sys
 
-directory = "/home/iv/dev/chessai/games/random/"
 game_num = int(sys.argv[1])
+directory = sys.argv[2]
 white_win = 0
 black_win = 0
 draw = 0

@@ -1,103 +1,150 @@
-import models.categorical_naive_bayes as cnb
+import models.categorical_naive_bayes as nb
+import models.clustered_bayes as cb
 import chess.categorical_input as ci
 import chess.chess_consts as cc
 import chess.chess_game as cg
 import chess.game_state as gs
 import chess.moves as m
+import chess.move_strings as ms
 import random as rand
 
 import sys
 
-def select_position(positions, play_as):
-    chance_to_win = False
-    best_idx = 0
-    best_win = 0
-    best_draw = 0
 
-    for idx, pos in enumerate(positions):
+def select_position(positions, play_as):
+    weights = []
+
+    for pos in positions:
         total = sum(pos)
         win_n = pos[play_as] / total
         draw_n = pos[cc.Draw] / total
-        lose_n = 1 - (win_n - draw_n)
+        weights.append(win_n + draw_n / 2)
 
-        if win_n > lose_n:
-            chance_to_win = True
-
-        if chance_to_win and best_win < win_n:
-            best_win = win_n
-            best_idx = idx
-
-        if not chance_to_win and best_draw < draw_n:
-            best_draw = draw_n
-            best_idx = idx
-
-    # if chance_to_win:
-    #     print("playing for win")
-    # else:
-    #     print("playing for draw")
-
-    return best_idx
+    return rand.choices(range(0, len(positions)), weights)[0]
 
 
-def play_move(mod, gam):
-    moves = m.all_legal_moves(gam, ci.game_as_input)
-    evals = [mod.predict_cat(pos) for pos in moves[1]]
-    idx = select_position(evals, gam.to_move)
-    gam.apply_move(moves[0][idx])
+def select_move(mod, tomov, moves):
+    evals = [mod.predict_cat(pos) for pos in moves]
+    return select_position(evals, tomov)
 
 
-# Train bayesian model
-num_games = int(sys.argv[1])
-model_dir = sys.argv[2]
-model_num = int(sys.argv[3])
+game_num = int(sys.argv[1])
+game_dir = sys.argv[2]
 
-model = cnb.CategoricalNaiveBayes(3, ci.game_classes())
+model1_type = sys.argv[3]
+model1_dir = sys.argv[4]
+model1_version = int(sys.argv[5])
 
-whitewinsfile = open(games_dir + "white_wins.games", "r")
-blackwinsfile = open(games_dir + "black_wins.games", "r")
-drawsfile = open(games_dir + "draws.games", "r")
+model2_type = sys.argv[6]
+model2_dir = sys.argv[7]
+model2_version = int(sys.argv[8])
 
-whitewins = [(0, map(int, line.split(" "))) for line in whitewinsfile.readlines()]
-blackwins = [(1, map(int, line.split(" "))) for line in blackwinsfile.readlines()]
-draws = [(2, map(int, line.split(" "))) for line in drawsfile.readlines()]
+player1 = None
+player2 = None
 
-model.train_batch(whitewins + blackwins + draws)
+if model1_type == "rand":
+    player1 = lambda m, t: rand.randrange(0, len(m))
+elif model1_type == "nb":
+    model1 = nb.CategoricalNaiveBayes.load_model(model1_dir + "/" + model1_type + str(model1_version) + ".model")
+    player1 = lambda m, t: select_move(model1, t, m)
+elif model1_type == "cb":
+    model1 = cb.ClusteredBayes.load_model(model1_dir + "/" + model1_type + str(model1_version) + ".model")
+    player1 = lambda m, t: select_move(model1, t, m)
 
-whitewinsfile.close()
-blackwinsfile.close()
-drawsfile.close()
+if model2_type == "rand":
+    player2 = lambda m, t: rand.randrange(0, len(m))
+elif model2_type == "nb":
+    model2 = nb.CategoricalNaiveBayes.load_model(model2_dir + "/" + model2_type + str(model2_version) + ".model")
+    player2 = lambda m, t: select_move(model2, t, m)
+elif model2_type == "cb":
+    model2 = cb.ClusteredBayes.load_model(model2_dir + "/" + model2_type + str(model2_version) + ".model")
+    player2 = lambda m, t: select_move(model2, t, m)
 
-player = lambda g: play_move(model, g)
-opponent = lambda g: g.apply_move(rand.choice(m.all_legal_moves(g)[0]))
-
-current_side = cc.White
+player1_side = cc.White
 
 draw_num = 0
 win_num = 0
 loss_num = 0
 
-for n in range(0, num_games):
+whitewins = open(game_dir + "white_wins.games", "w")
+blackwins = open(game_dir + "black_wins.games", "w")
+draws = open(game_dir + "draws.games", "w")
+human = open(game_dir + "human.games", "w")
+
+for n in range(0, game_num):
 
     game = cg.ChessGame()
+    position_inputs = []
+    human_game = ""
+    move_num = 0
 
     while gs.game_state(game) == cc.InProgress:
-        if game.to_move == current_side:
-            player(game)
+        to_move = game.to_move
+
+        if to_move == cc.White:
+            move_num += 1
+            human_game += (str(move_num) + ". ")
+
+        all_moves = m.all_legal_moves(game, ci.game_as_input)
+        encoded_moves = all_moves[1]
+        actual_moves = all_moves[0]
+        idx = 0
+
+        if to_move == player1_side:
+            idx = player1(encoded_moves, to_move)
+
         else:
-            opponent(game)
+            idx = player2(encoded_moves, to_move)
+
+        pos = (str(all_moves[1][idx])[1:-1])
+        pos = pos.replace(',', '') + '\n'
+        position_inputs.append(pos)
+        human_game += ms.move_to_string(actual_moves[idx], game)
+        human_game += " "
+        game.apply_move(actual_moves[idx])
 
     state = gs.game_state(game)
+    out = "Game " + str(n) + ": "
 
     if state == cc.Draw:
         draw_num += 1
-    elif state == current_side:
+        human_game += "1/2-1/2\n\n"
+        for p in position_inputs:
+            draws.write(p)
+        print(out + "Draw")
+    elif state == player1_side:
         win_num += 1
+        print(out + model1_type + " Wins")
+        if player1_side == cc.White:
+            for p in position_inputs:
+                whitewins.write(p)
+            human_game += "1-0\n\n"
+        else:
+            for p in position_inputs:
+                blackwins.write(p)
+            human_game += "0-1\n\n"
     else:
         loss_num += 1
+        print(out + model2_type + " Wins")
+        if player1_side == cc.White:
+            for p in position_inputs:
+                blackwins.write(p)
+            human_game += "0-1\n\n"
+        else:
+            for p in position_inputs:
+                whitewins.write(p)
+            human_game += "1-0\n\n"
 
-    if current_side == cc.White:
-        current_side = cc.Black
+    if player1_side == cc.White:
+        player1_side = cc.Black
     else:
-        current_side = cc.White
+        player1_side = cc.White
 
-print("+" + str(win_num) + "-" + str(loss_num) + "=" + str(draw_num))
+    human.write(human_game)
+
+whitewins.close()
+blackwins.close()
+draws.close()
+human.close()
+
+print(model1_type + str(model1_version) + " vs " + model2_type + str(model2_version) + ": +" + str(win_num) + "-" + str(loss_num) + "=" + str(draw_num))
