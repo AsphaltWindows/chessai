@@ -6,6 +6,7 @@ import chess.game_state as gs
 import chess.moves as m
 import random as rand
 
+import sys
 
 def select_position(positions, play_as):
     chance_to_win = False
@@ -46,11 +47,15 @@ def play_move(mod, gam):
 
 
 # Train bayesian model
+num_games = int(sys.argv[1])
+model_dir = sys.argv[2]
+model_num = int(sys.argv[3])
+
 model = cnb.CategoricalNaiveBayes(3, ci.game_classes())
-directory = "/home/iv/dev/chessai/games/random/"
-whitewinsfile = open(directory + "white_wins.games", "r")
-blackwinsfile = open(directory + "black_wins.games", "r")
-drawsfile = open(directory + "draws.games", "r")
+
+whitewinsfile = open(games_dir + "white_wins.games", "r")
+blackwinsfile = open(games_dir + "black_wins.games", "r")
+drawsfile = open(games_dir + "draws.games", "r")
 
 whitewins = [(0, map(int, line.split(" "))) for line in whitewinsfile.readlines()]
 blackwins = [(1, map(int, line.split(" "))) for line in blackwinsfile.readlines()]
@@ -62,7 +67,6 @@ whitewinsfile.close()
 blackwinsfile.close()
 drawsfile.close()
 
-num_games = 200
 player = lambda g: play_move(model, g)
 opponent = lambda g: g.apply_move(rand.choice(m.all_legal_moves(g)[0]))
 
