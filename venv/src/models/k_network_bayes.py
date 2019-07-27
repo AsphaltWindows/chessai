@@ -5,9 +5,9 @@ import random as rand
 
 
 class KNetworkBayes:
-    def __init__(self, cat_num, classes, clusters_per_node, node_num, layer_num, alpha=1):
-        self.cat_num = cat_num
-        self.classes = classes
+    def __init__(self, class_num, categories, clusters_per_node, node_num, layer_num, alpha=1):
+        self.class_num = class_num
+        self.categories = categories
         self.clusters_per_node = clusters_per_node
         self.node_num = node_num
         self.layer_num = layer_num
@@ -16,54 +16,63 @@ class KNetworkBayes:
         self.classifier = None
 
     def train_batch(self, batch_data):
-        classes = self.classes
-        data = batch_data
+        categories = self.categories
+        data = [d[1] for d in batch_data]
         clustered_data = []
-        clustered_classes = self.classes
-        for l in self.layers:
-            initial_clustering = km.Kmodes(classes)
+        clustered_categories = []
+        clustered_categories += self.categories
+        for lidx, l in enumerate(self.layers):
+            print("Clustering seed of layer " + str(lidx))
+            initial_clustering = km.KModes(categories)
             initial_clustering.train_batch([], self.clusters_per_node * self.node_num, data)
             modes = initial_clustering.cluster_modes
             rand.shuffle(modes)
+            print("Clustering nodes of layer " + str(lidx))
             for n in range(0, self.node_num):
                 initial_modes = modes[n * self.clusters_per_node: (n+1) * self.clusters_per_node]
-                node = km.Kmodes(classes)
+                node = km.KModes(categories)
                 node.train_batch(initial_modes, self.clusters_per_node, data)
                 l.append(node)
-            classes = [self.clusters_per_node for n in range(0, self.node_num)]
-            clustered_classes += classes
+            print("Generating labels from nodes of layer " + str(lidx))
+            categories = [self.clusters_per_node for n in range(0, self.node_num)]
+            clustered_categories += categories
             new_data = []
-            for d in data:
+            for didx, d in enumerate(data):
+                new_data.append([])
                 for nidx, n in enumerate(l):
                     value = rand.choice(n.assign_cluster(d)[0])
-                    new_data.append(value)
+                    new_data[didx].append(value)
             clustered_data.append(new_data)
             data = new_data
+            print(str(data[0]))
 
-        self.classifier = cnb.CategoricalNaiveBayes(self.cat_num, classes, self.alpha)
+        self.classifier = cnb.CategoricalNaiveBayes(self.class_num, clustered_categories, self.alpha)
 
+        enriched_data = []
         for didx, d in enumerate(batch_data):
+            ndata = d[1]
             for cd in clustered_data:
-                d += cd[didx]
+                ndata += cd[didx]
+            enriched_data.append((d[0], ndata))
 
-        self.classifier.train_batch(batch_data)
+        self.classifier.train_batch(enriched_data)
 
-    def predict_cat(self, data):
+    def predict_class(self, data):
         enriched_data = data
         for_layer = data
         for l in self.layers:
             new_for_layer = []
             for n in l:
                 value = rand.choice(n.assign_cluster(for_layer)[0])
-                enriched_data.append(value)
                 new_for_layer.append(value)
+            enriched_data += new_for_layer
             for_layer = new_for_layer
 
-        return self.classifier.predict_cat(enriched_data)
+        return self.classifier.predict_class(enriched_data)
 
     def model_to_string(self):
-        model_str = str(self.cat_num) + '\n'
-        model_str += " ".join(map(str, self.classes)) + '\n'
+        model_str = str(self.class_num) + '\n'
+        model_str += " ".join(map(str, self.categories)) + '\n'
         model_str += str(self.clusters_per_node) + '\n'
         model_str += str(self.node_num) + '\n'
         model_str += str(self.layer_num) + '\n'
@@ -81,18 +90,18 @@ class KNetworkBayes:
 
     @staticmethod
     def model_from_lines(model_lines):
-        cat_num = int(model_lines[0])
-        classes = list(map(int, model_lines[1].split(" ")))
+        class_num = int(model_lines[0])
+        categories = list(map(int, model_lines[1].split(" ")))
         clusters_per_node = int(model_lines[2])
         node_num = int(model_lines[3])
         layer_num = int(model_lines[4])
         alpha = int(model_lines[5])
-        model = KNetworkBayes(cat_num, classes, clusters_per_node, node_num, layer_num, alpha)
+        model = KNetworkBayes(class_num, categories, clusters_per_node, node_num, layer_num, alpha)
         at = 6
         lines_per_km = 2 + clusters_per_node
         for l in range(0, layer_num):
             for n in range(0, node_num):
-                model.layers[l].append(km.model_from_lines(model_lines[at:]))
+                model.layers[l].append(km.KModes.model_from_lines(model_lines[at:]))
                 at += lines_per_km
         model.classifier = cnb.CategoricalNaiveBayes.model_from_lines(model_lines[at:])
         return model

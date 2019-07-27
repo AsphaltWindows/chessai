@@ -3,9 +3,9 @@ import models.k_modes as km
 
 
 class ClusteredBayes:
-    def __init__(self, cat_num, classes, alpha = 1):
-        self.cat_num = cat_num
-        self.classes = classes
+    def __init__(self, class_num, classes, alpha = 1):
+        self.class_num = class_num
+        self.categories = classes
         self.alpha = alpha
         self.clustering = km.KModes(classes)
         self.classifiers = []
@@ -14,7 +14,7 @@ class ClusteredBayes:
 
         self.clustering.train_batch(start_modes, cluster_num, [data[1] for data in batch_data])
 
-        self.classifiers = [cnb.CategoricalNaiveBayes(self.cat_num, self.classes, self.alpha) for cl in range(0, cluster_num)]
+        self.classifiers = [cnb.CategoricalNaiveBayes(self.class_num, self.categories, self.alpha) for cl in range(0, cluster_num)]
 
         bucketed_data = [[] for cl in range(0, cluster_num)]
 
@@ -24,12 +24,12 @@ class ClusteredBayes:
         for cidx, bucket in enumerate(bucketed_data):
             self.classifiers[cidx].train_batch(bucket)
 
-    def predict_cat(self, data):
+    def predict_class(self, data):
         predictions = []
         for cidx in self.clustering.assign_cluster(data)[0]:
-            predictions.append(self.classifiers[cidx].predict_cat(data))
+            predictions.append(self.classifiers[cidx].predict_class(data))
         num_preds = len(predictions)
-        normalized = [0 for n in range(0, self.cat_num)]
+        normalized = [0 for n in range(0, self.class_num)]
         for pred in predictions:
             total = sum(pred)
             for pidx, prob in enumerate(pred):
@@ -37,8 +37,8 @@ class ClusteredBayes:
         return normalized
 
     def model_to_string(self):
-        model_str = str(self.cat_num) + '\n'
-        model_str += " ".join(map(str, self.classes)) + '\n'
+        model_str = str(self.class_num) + '\n'
+        model_str += " ".join(map(str, self.categories)) + '\n'
         model_str += str(self.alpha) + '\n'
         model_str += self.clustering.model_to_string()
         for c in self.classifiers:
@@ -52,10 +52,10 @@ class ClusteredBayes:
 
     @staticmethod
     def model_from_lines(model_lines):
-        cat_num = int(model_lines[0])
-        classes = list(map(int, model_lines[1].split(" ")))
+        class_num = int(model_lines[0])
+        categories = list(map(int, model_lines[1].split(" ")))
         alpha = int(model_lines[2])
-        model = ClusteredBayes(cat_num, classes, alpha)
+        model = ClusteredBayes(class_num, categories, alpha)
         model.clustering = km.KModes.model_from_lines(model_lines[3:])
         cluster_num = model.clustering.cluster_num
         start_at = 5 + cluster_num

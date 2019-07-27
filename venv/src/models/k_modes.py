@@ -4,9 +4,9 @@ import copy as cp
 
 
 class KModes:
-    def __init__(self, classes):
-        self.classes = classes
-        self.row_size = len(classes)
+    def __init__(self, categories):
+        self.categories = categories
+        self.row_size = len(categories)
         self.cluster_num = 0
         self.cluster_modes = []
         self.frequencies = []
@@ -18,7 +18,7 @@ class KModes:
         self.cluster_num = cluster_num
         self.data = batch_data
         self.data_labels = [0 for d in batch_data]
-        self.frequencies = [[[0 for n in range(0, cl)] for cl in self.classes] for m in self.cluster_modes]
+        self.frequencies = [[[0 for n in range(0, cat)] for cat in self.categories] for m in self.cluster_modes]
 
         if len(batch_data) > cluster_num:
             print("Clustering " + str(len(batch_data)) + " data points.")
@@ -33,27 +33,28 @@ class KModes:
 
             print("Initial clustering")
             self.cluster_data()
-            print("Calculating loss")
-            last_loss = self.calculate_loss()
+            print("Calculating cost")
+            last_cost = self.calculate_cost()
+            print("Cost: " + last_cost)
 
             recluster_num = 1
             while True:
-                print("Reclustering number: " + str(recluster_num) + " last_loss: " + str(last_loss))
+                print("Reclustering number: " + str(recluster_num) + " last_cost: " + str(last_cost))
                 last_labels = cp.deepcopy(self.data_labels)
                 last_modes = cp.deepcopy(self.cluster_modes)
                 self.cluster_data()
-                current_loss = self.calculate_loss()
-                if current_loss >= last_loss:
+                current_cost = self.calculate_cost()
+                if current_cost >= last_cost:
                     break
                 else:
-                    last_loss = current_loss
+                    last_cost = current_cost
                 recluster_num += 1
 
             self.data_labels = last_labels
             self.cluster_modes = last_modes
 
     def cluster_data(self):
-        self.frequencies = [[[0 for n in range(0, cl)] for cl in self.classes] for m in self.cluster_modes]
+        self.frequencies = [[[0 for n in range(0, cat)] for cat in self.categories] for m in self.cluster_modes]
         for didx, d in enumerate(self.data):
             assign_to = rand.choice(self.assign_cluster(d)[0])
             self.data_labels[didx] = assign_to
@@ -61,14 +62,14 @@ class KModes:
                 self.frequencies[assign_to][cidx][value] += 1
 
         for midx, f in enumerate(self.frequencies):
-            for cidx, clfreqs in enumerate(f):
-                self.cluster_modes[midx][cidx] = np.argmax(clfreqs)
+            for cidx, catfreqs in enumerate(f):
+                self.cluster_modes[midx][cidx] = np.argmax(catfreqs)
 
-    def calculate_loss(self):
-        loss = 0
+    def calculate_cost(self):
+        cost = 0
         for didx, label in enumerate(self.data_labels):
-            loss += self.dissimilarity(self.data[didx], label)
-        return loss
+            cost += self.dissimilarity(self.data[didx], label)
+        return cost
 
     def dissimilarity(self, row, mode_idx):
         diss = 0
@@ -92,7 +93,7 @@ class KModes:
         return cluster_indices, min_score
 
     def model_to_string(self):
-        model_str = " ".join(map(str, self.classes)) + '\n'
+        model_str = " ".join(map(str, self.categories)) + '\n'
         model_str += (str(self.cluster_num) + '\n')
         for m in self.cluster_modes:
             model_str += " ".join(map(str, m)) + '\n'
@@ -105,8 +106,8 @@ class KModes:
 
     @staticmethod
     def model_from_lines(model_lines):
-        classes = list(map(int, model_lines[0].split(" ")))
-        model = KModes(classes)
+        cats = list(map(int, model_lines[0].split(" ")))
+        model = KModes(cats)
         cluster_num = int(model_lines[1])
         model.cluster_num = cluster_num
         for idx in range(0, cluster_num):

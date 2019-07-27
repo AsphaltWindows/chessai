@@ -61,7 +61,7 @@ elif model_type == "knb":
         cluster_num = model_args[0]
         node_num = model_args[1]
         layer_num = model_args[2]
-        model = knb.KNetworkBayes(3, cluster_num, node_num, layer_num, ci.game_classes())
+        model = knb.KNetworkBayes(3, ci.game_classes(), cluster_num, node_num, layer_num)
     else:
         model = knb.KNetworkBayes.load_model(model_dir + "/knb" + str(model_version) + ".model")
 

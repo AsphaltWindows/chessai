@@ -1,58 +1,58 @@
 class CategoricalNaiveBayes:
-    def __init__(self, cat_num, classes, alpha=1):
-        self.categories = [c for c in range(0, cat_num)]
-        self.classes = classes
+    def __init__(self, class_num, categories, alpha=1):
+        self.classes = [c for c in range(0, class_num)]
+        self.categories = categories
         self.alpha = alpha
 
-        self.cat_totals = [0 for n in range(0, cat_num)]
-        self.cat_probabilities = [0 for n in range(0, cat_num)]
+        self.class_totals = [0 for n in range(0, class_num)]
+        self.class_probabilities = [0 for n in range(0, class_num)]
 
-        self.cat_class_totals = [[[0 for n in range(0, cl)] for cl in classes] for cat in self.categories]
-        self.cat_class_probabilities = [[[0 for n in range(0, cl)] for cl in classes] for cat in self.categories]
+        self.class_category_totals = [[[0 for n in range(0, cat)] for cat in categories] for cl in self.classes]
+        self.class_category_probabilities = [[[0 for n in range(0, cat)] for cat in categories] for cl in self.classes]
 
     def train_batch(self, batch_data):
         for data in batch_data:
-            self.cat_totals[data[0]] += 1
-            for idx, cl in enumerate(data[1]):
-                self.cat_class_totals[data[0]][idx][cl] += 1
+            self.class_totals[data[0]] += 1
+            for idx, cat in enumerate(data[1]):
+                self.class_category_totals[data[0]][idx][cat] += 1
 
         self.recalculate_probabilities()
         print("Categorical Naive Bayes trained on " + str(len(batch_data)) + " data points")
 
     def recalculate_probabilities(self):
-        for idx, cat in enumerate(self.categories):
-            if sum(self.cat_totals) == 0:
-                self.cat_probabilities[idx] = 1 / float(len(self.categories))
+        for idx, cl in enumerate(self.classes):
+            if sum(self.class_totals) == 0:
+                self.class_probabilities[idx] = 1 / float(len(self.classes))
             else:
-                self.cat_probabilities[idx] = self.cat_totals[idx] / float(sum(self.cat_totals))
+                self.class_probabilities[idx] = self.class_totals[idx] / float(sum(self.class_totals))
 
-            for idx2 in range(0, len(self.cat_class_totals[idx])):
-                for idx3 in range(0, len(self.cat_class_totals[idx][idx2])):
-                    self.cat_class_probabilities[idx][idx2][idx3] = (self.cat_class_totals[idx][idx2][
+            for idx2 in range(0, len(self.class_category_totals[idx])):
+                for idx3 in range(0, len(self.class_category_totals[idx][idx2])):
+                    self.class_category_probabilities[idx][idx2][idx3] = (self.class_category_totals[idx][idx2][
                                                                          idx3] + self.alpha) / float(
-                                                                                sum(self.cat_class_totals[idx][idx2]) +
-                                                                                self.classes[idx2])
+                        sum(self.class_category_totals[idx][idx2]) +
+                        self.categories[idx2])
 
-    def predict_cat(self, data):
-        probabilities = [self.cat_probabilities[i] for i in self.categories]
+    def predict_class(self, data):
+        probabilities = [self.class_probabilities[i] for i in self.classes]
 
-        for cat in self.categories:
-            for idx, cl in enumerate(data):
-                probabilities[cat] *= self.cat_class_probabilities[cat][idx][cl]
+        for cl in self.classes:
+            for idx, cat in enumerate(data):
+                probabilities[cl] *= self.class_category_probabilities[cl][idx][cat]
 
         return probabilities
 
     def model_to_string(self):
-        model_str = str(len(self.categories)) + '\n'
-        model_str += " ".join(map(str, self.classes)) + '\n'
+        model_str = str(len(self.classes)) + '\n'
+        model_str += " ".join(map(str, self.categories)) + '\n'
         model_str += str(self.alpha) + '\n'
-        model_str += " ".join(map(str, self.cat_totals)) + '\n'
+        model_str += " ".join(map(str, self.class_totals)) + '\n'
 
         freqs = []
-        for cat in self.cat_class_totals:
-            for cls in cat:
-                for cl in cls:
-                    freqs.append(cl)
+        for cl in self.class_category_totals:
+            for cats in cl:
+                for cat in cats:
+                    freqs.append(cat)
 
         model_str += " ".join(map(str, freqs)) + '\n'
         return model_str
@@ -64,18 +64,18 @@ class CategoricalNaiveBayes:
 
     @staticmethod
     def model_from_lines(model_lines):
-        cat_num = int(model_lines[0])
-        classes = list(map(int, model_lines[1].split(" ")))
+        class_num = int(model_lines[0])
+        cats = list(map(int, model_lines[1].split(" ")))
         alpha = int(model_lines[2])
         cat_totals = list(map(int, model_lines[3].split(" ")))
-        model = CategoricalNaiveBayes(cat_num, classes, alpha)
-        model.cat_totals = cat_totals
+        model = CategoricalNaiveBayes(class_num, cats, alpha)
+        model.class_totals = cat_totals
         freqs = list(map(int, model_lines[4].split(" ")))
         at = 0
-        for idx1 in range(0, len(model.cat_class_totals)):
-            for idx2 in range(0, len(model.cat_class_totals[idx1])):
-                for idx3 in range(0, len(model.cat_class_totals[idx1][idx2])):
-                    model.cat_class_totals[idx1][idx2][idx3] = freqs[at]
+        for idx1 in range(0, len(model.class_category_totals)):
+            for idx2 in range(0, len(model.class_category_totals[idx1])):
+                for idx3 in range(0, len(model.class_category_totals[idx1][idx2])):
+                    model.class_category_totals[idx1][idx2][idx3] = freqs[at]
                     at += 1
         model.recalculate_probabilities()
         return model

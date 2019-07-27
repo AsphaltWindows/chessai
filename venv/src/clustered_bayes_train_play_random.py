@@ -42,7 +42,7 @@ def select_position(positions, play_as):
 
 def play_move(mod, gam):
     moves = m.all_legal_moves(gam, ci.game_as_input)
-    evals = [mod.predict_cat(pos) for pos in moves[1]]
+    evals = [mod.predict_class(pos) for pos in moves[1]]
     idx = select_position(evals, gam.to_move)
     gam.apply_move(moves[0][idx])
 

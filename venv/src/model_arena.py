@@ -1,4 +1,5 @@
 import models.categorical_naive_bayes as nb
+import models.k_network_bayes as knb
 import models.clustered_bayes as cb
 import chess.categorical_input as ci
 import chess.chess_consts as cc
@@ -18,13 +19,13 @@ def select_position(positions, play_as):
         total = sum(pos)
         win_n = pos[play_as] / total
         draw_n = pos[cc.Draw] / total
-        weights.append(win_n + draw_n / 2)
+        weights.append((win_n + draw_n / 2)**2)
 
     return rand.choices(range(0, len(positions)), weights)[0]
 
 
 def select_move(mod, tomov, moves):
-    evals = [mod.predict_cat(pos) for pos in moves]
+    evals = [mod.predict_class(pos) for pos in moves]
     return select_position(evals, tomov)
 
 
@@ -50,6 +51,9 @@ elif model1_type == "nb":
 elif model1_type == "cb":
     model1 = cb.ClusteredBayes.load_model(model1_dir + "/" + model1_type + str(model1_version) + ".model")
     player1 = lambda m, t: select_move(model1, t, m)
+elif model1_type == "knb":
+    model1 = knb.KNetworkBayes.load_model(model1_dir + "/" + model1_type + str(model1_version) + ".model")
+    player1 = lambda m, t: select_move(model1, t, m)
 
 if model2_type == "rand":
     player2 = lambda m, t: rand.randrange(0, len(m))
@@ -58,6 +62,9 @@ elif model2_type == "nb":
     player2 = lambda m, t: select_move(model2, t, m)
 elif model2_type == "cb":
     model2 = cb.ClusteredBayes.load_model(model2_dir + "/" + model2_type + str(model2_version) + ".model")
+    player2 = lambda m, t: select_move(model2, t, m)
+elif model2_type == "knb":
+    model2 = knb.KNetworkBayes.load_model(model2_dir + "/" + model2_type + str(model2_version) + ".model")
     player2 = lambda m, t: select_move(model2, t, m)
 
 player1_side = cc.White
@@ -142,9 +149,12 @@ for n in range(0, game_num):
 
     human.write(human_game)
 
+results = model1_type + str(model1_version) + " vs " + model2_type + str(model2_version) + ": +" + str(win_num) + "-" + str(loss_num) + "=" + str(draw_num)
+human.write(results)
+print(results)
+
 whitewins.close()
 blackwins.close()
 draws.close()
 human.close()
 
-print(model1_type + str(model1_version) + " vs " + model2_type + str(model2_version) + ": +" + str(win_num) + "-" + str(loss_num) + "=" + str(draw_num))
