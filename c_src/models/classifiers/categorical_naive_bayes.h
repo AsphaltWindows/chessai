@@ -1,3 +1,6 @@
+#ifndef K_CNB_H_INCLUDED
+#define K_CNB_H_INCLUDED
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -29,3 +32,4 @@ uint32_t * cnb_model_to_vals(const cnb_clas_t * cnb);
 
 void free_cnb(cnb_clas_t *cnb);
 
+#endif

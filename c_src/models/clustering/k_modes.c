@@ -36,7 +36,7 @@ kmodes_clust_t * create_kmodes(const uint8_t * categories, size_t cat_num, uint8
     memset(res->cat_idx, 0, cat_num * sizeof(uint32_t));
     res->total_cat_val = 0;
 
-    for (int cat = 0; cat < cat_num; ++cat) {
+    for (unsigned int cat = 0; cat < cat_num; ++cat) {
         res->total_cat_val += categories[cat];
         res->categories[cat] = categories[cat];
 
@@ -50,7 +50,7 @@ kmodes_clust_t * create_kmodes(const uint8_t * categories, size_t cat_num, uint8
         return NULL;
     }
 
-    for (int m = 0; m < smsize; ++m) {
+    for (unsigned int m = 0; m < smsize; ++m) {
         memcpy(res->cluster_modes + (m * cat_num) * sizeof(uint8_t), start_modes[m], cat_num * sizeof(uint8_t));
     }
 
@@ -116,7 +116,7 @@ void train_batch(kmodes_clust_t *kmodes, const uint8_t * const * data, size_t ds
 
         memset(freqs, 0, kmodes->cluster_num * kmodes->total_cat_val * sizeof(uint32_t));
 
-        for (int didx = 0; didx < dsize; ++didx) {
+        for (unsigned int didx = 0; didx < dsize; ++didx) {
             assign_cluster_with_mem((const kmodes_clust_t *)kmodes, data[didx], (uint8_t **) &cc);
             cost += cc[1];
 
@@ -140,7 +140,7 @@ void train_batch(kmodes_clust_t *kmodes, const uint8_t * const * data, size_t ds
                 mfreq_count = 0;
                 mfreq = 0;
                 for (int val = 0; val < kmodes->categories[cat]; ++val) {
-                    int f = freqs[cl * kmodes->total_cat_val + kmodes->cat_idx[cat] + val];
+                    uint32_t f = freqs[cl * kmodes->total_cat_val + kmodes->cat_idx[cat] + val];
                     if (f > mfreq || !mfreq_count) {
                         memset(mfreq_idx, 0, sizeof(mfreq_idx));
                         mfreq_idx[0] = val;

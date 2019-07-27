@@ -8,6 +8,7 @@ import chess.game_state as gs
 import chess.moves as m
 import chess.move_strings as ms
 import random as rand
+import numpy as np
 
 import sys
 
@@ -15,13 +16,41 @@ import sys
 def select_position(positions, play_as):
     weights = []
 
-    for pos in positions:
+    for idx, pos in enumerate(positions):
         total = sum(pos)
         win_n = pos[play_as] / total
         draw_n = pos[cc.Draw] / total
-        weights.append((win_n + draw_n / 2)**2)
+        weights.append((win_n + draw_n / 2)**3)
+        # weights.append((win_n + draw_n / 2))
+        if idx > 0:
+            weights[idx] += weights[idx - 1]
 
-    return rand.choices(range(0, len(positions)), weights)[0]
+    # return np.argmax(weights)
+    return rand.choices(range(0, len(positions)), cum_weights=weights)[0]
+
+    # chance_to_win = False
+    # best_idx = 0
+    # best_win = 0
+    # best_draw = 0
+    #
+    # for idx, pos in enumerate(positions):
+    #     total = sum(pos)
+    #     win_n = pos[play_as] / total
+    #     draw_n = pos[cc.Draw] / total
+    #     lose_n = 1 - (win_n - draw_n)
+    #
+    #     if win_n > lose_n:
+    #         chance_to_win = True
+    #
+    #     if chance_to_win and best_win < win_n:
+    #         best_win = win_n
+    #         best_idx = idx
+    #
+    #     if not chance_to_win and best_draw < draw_n:
+    #         best_draw = draw_n
+    #         best_idx = idx
+    #
+    # return best_idx
 
 
 def select_move(mod, tomov, moves):
@@ -121,7 +150,7 @@ for n in range(0, game_num):
         print(out + "Draw")
     elif state == player1_side:
         win_num += 1
-        print(out + model1_type + " Wins")
+        print(out + model1_type + str(model1_version) + " Wins")
         if player1_side == cc.White:
             for p in position_inputs:
                 whitewins.write(p)
@@ -132,7 +161,7 @@ for n in range(0, game_num):
             human_game += "0-1\n\n"
     else:
         loss_num += 1
-        print(out + model2_type + " Wins")
+        print(out + model2_type + str(model2_version) + " Wins")
         if player1_side == cc.White:
             for p in position_inputs:
                 blackwins.write(p)

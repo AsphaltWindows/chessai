@@ -1,3 +1,6 @@
+#ifndef K_MODES_H_INCLUDED
+#define K_MODES_H_INCLUDED
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -23,3 +26,4 @@ void train_batch(kmodes_clust_t *kmodes, const uint8_t * const * data, size_t ds
 
 uint8_t * assign_cluster(const kmodes_clust_t * kmodes, const uint8_t * data);
 
+#endif

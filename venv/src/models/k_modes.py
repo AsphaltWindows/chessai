@@ -35,7 +35,7 @@ class KModes:
             self.cluster_data()
             print("Calculating cost")
             last_cost = self.calculate_cost()
-            print("Cost: " + last_cost)
+            print("Cost: " + str(last_cost))
 
             recluster_num = 1
             while True:

@@ -22,7 +22,7 @@ cnb_clas_t * create_cnb_with_alpha(uint8_t class_num, const uint8_t * cats, size
         return NULL;
     }
 
-    for (int cn = 0; cn < csize; ++cn) {
+    for (unsigned int cn = 0; cn < csize; ++cn) {
         res->categories[cn] = cats[cn];
     }
 
@@ -47,7 +47,7 @@ cnb_clas_t * create_cnb_with_alpha(uint8_t class_num, const uint8_t * cats, size
 
     memset(res->class_cat_idx, 0, csize * sizeof(uint32_t));
 
-    for (int cn = 0; cn < csize; ++cn) {
+    for (unsigned int cn = 0; cn < csize; ++cn) {
 
         if (cn > 0) {
             res->class_cat_idx[cn] = res->class_cat_idx[cn - 1] + cats[cn - 1];
@@ -94,7 +94,7 @@ cnb_clas_t * create_cnb(uint8_t class_num, const uint8_t * cats, size_t csize) {
 }
 
 void train_batch(cnb_clas_t *cnb, const uint8_t * const * data, const uint8_t * labels, size_t dsize) {
-    for (int dn = 0; dn < dsize; ++dn) {
+    for (unsigned int dn = 0; dn < dsize; ++dn) {
         cnb->class_totals[labels[dn]] += 1;
 
         for (int cat = 0; cat < cnb->class_num; ++cat) {
