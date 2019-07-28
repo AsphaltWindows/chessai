@@ -3,26 +3,30 @@ import models.k_modes as km
 
 
 class ClusteredBayes:
-    def __init__(self, class_num, classes, alpha = 1):
+    def __init__(self, start_modes, class_num, cluster_num, categories, alpha = 1):
         self.class_num = class_num
-        self.categories = classes
+        self.cluster_num = cluster_num
+        self.categories = categories
         self.alpha = alpha
-        self.clustering = km.KModes(classes)
+        self.clustering = km.KModes(start_modes, cluster_num, categories)
         self.classifiers = []
 
-    def train_batch(self, start_modes, cluster_num, batch_data):
+    def train_batch(self, labels, batch_data):
 
-        self.clustering.train_batch(start_modes, cluster_num, [data[1] for data in batch_data])
+        self.clustering.train_batch(batch_data)
 
-        self.classifiers = [cnb.CategoricalNaiveBayes(self.class_num, self.categories, self.alpha) for cl in range(0, cluster_num)]
+        self.classifiers = [cnb.CategoricalNaiveBayes(self.class_num, self.categories, self.alpha) for cl in range(0, self.cluster_num)]
 
-        bucketed_data = [[] for cl in range(0, cluster_num)]
+        bucketed_data = [[] for cl in range(0, self.cluster_num)]
+        bucketed_labels = [[] for cl in range(0, self.cluster_num)]
 
         for didx, data in enumerate(batch_data):
-            bucketed_data[self.clustering.data_labels[didx]].append(data)
+            cluster = self.clustering.assign_cluster(data)
+            bucketed_data[cluster].append(data)
+            bucketed_labels[cluster].append(labels)
 
         for cidx, bucket in enumerate(bucketed_data):
-            self.classifiers[cidx].train_batch(bucket)
+            self.classifiers[cidx].train_batch(bucketed_labels[cidx], bucket)
 
     def predict_class(self, data):
         predictions = []
@@ -55,9 +59,10 @@ class ClusteredBayes:
         class_num = int(model_lines[0])
         categories = list(map(int, model_lines[1].split(" ")))
         alpha = int(model_lines[2])
-        model = ClusteredBayes(class_num, categories, alpha)
-        model.clustering = km.KModes.model_from_lines(model_lines[3:])
-        cluster_num = model.clustering.cluster_num
+        clustering = km.KModes.model_from_lines(model_lines[3:])
+        cluster_num = clustering.cluster_num
+        model = ClusteredBayes([], class_num, cluster_num, categories, alpha)
+        model.clustering = clustering
         start_at = 5 + cluster_num
         for cl in range(0, cluster_num):
             model.classifiers.append(cnb.CategoricalNaiveBayes.model_from_lines(model_lines[start_at:]))

@@ -15,28 +15,28 @@ if model_type == "nb":
     if model_version == 0:
         model = cnb.CategoricalNaiveBayes(3, ci.game_classes())
     else:
-        model = cnb.CategoricalNaiveBayes.load_model(model_dir + "/nb" + str(model_version) + ".model")
+        model = cnb.CategoricalNaiveBayes.load_model2(model_dir + "/nb" + str(model_version) + ".model")
 
     whitewinsfile = open(games_dir + "white_wins.games", "r")
     blackwinsfile = open(games_dir + "black_wins.games", "r")
     drawsfile = open(games_dir + "draws.games", "r")
 
-    whitewins = [(0, map(int, line.split(" "))) for line in whitewinsfile.readlines()]
-    blackwins = [(1, map(int, line.split(" "))) for line in blackwinsfile.readlines()]
-    draws = [(2, map(int, line.split(" "))) for line in drawsfile.readlines()]
+    whitewins = [map(int, line.split(" ")) for line in whitewinsfile.readlines()]
+    blackwins = [map(int, line.split(" ")) for line in blackwinsfile.readlines()]
+    draws = [map(int, line.split(" ")) for line in drawsfile.readlines()]
 
-    model.train_batch(whitewins + blackwins + draws)
+    model.train_batch([0 for i in whitewins] + [1 for i in blackwins] + [2 for i in draws], whitewins + blackwins + draws)
 
     whitewinsfile.close()
     blackwinsfile.close()
     drawsfile.close()
 
-    model.store_model(model_dir + "/nb" + str(model_version + 1) + ".model")
+    model.store_model2(model_dir + "/nb" + str(model_version + 1) + ".model")
 elif model_type == "cb":
     if model_version == 0:
-        model = cb.ClusteredBayes(3, ci.game_classes())
         cluster_num = model_args[0]
         init_modes = []
+        model = cb.ClusteredBayes(init_modes, 3, cluster_num, ci.game_classes())
     else:
         model = cb.ClusteredBayes.load_model(model_dir + "/cb" + str(model_version) + ".model")
         cluster_num = model.clustering.cluster_num
@@ -46,11 +46,11 @@ elif model_type == "cb":
     blackwinsfile = open(games_dir + "black_wins.games", "r")
     drawsfile = open(games_dir + "draws.games", "r")
 
-    whitewins = [(0, list(map(int, line.split(" ")))) for line in whitewinsfile.readlines()]
-    blackwins = [(1, list(map(int, line.split(" ")))) for line in blackwinsfile.readlines()]
-    draws = [(2, list(map(int, line.split(" ")))) for line in drawsfile.readlines()]
+    whitewins = [map(int, line.split(" ")) for line in whitewinsfile.readlines()]
+    blackwins = [map(int, line.split(" ")) for line in blackwinsfile.readlines()]
+    draws = [map(int, line.split(" ")) for line in drawsfile.readlines()]
 
-    model.train_batch(init_modes, cluster_num, whitewins + blackwins + draws)
+    model.train_batch([0 for i in whitewins] + [1 for i in blackwins] + [2 for i in draws], whitewins + blackwins + draws)
 
     whitewinsfile.close()
     blackwinsfile.close()
@@ -69,11 +69,11 @@ elif model_type == "knb":
     blackwinsfile = open(games_dir + "black_wins.games", "r")
     drawsfile = open(games_dir + "draws.games", "r")
 
-    whitewins = [(0, list(map(int, line.split(" ")))) for line in whitewinsfile.readlines()]
-    blackwins = [(1, list(map(int, line.split(" ")))) for line in blackwinsfile.readlines()]
-    draws = [(2, list(map(int, line.split(" ")))) for line in drawsfile.readlines()]
+    whitewins = [map(int, line.split(" ")) for line in whitewinsfile.readlines()]
+    blackwins = [map(int, line.split(" ")) for line in blackwinsfile.readlines()]
+    draws = [map(int, line.split(" ")) for line in drawsfile.readlines()]
 
-    model.train_batch(whitewins + blackwins + draws)
+    model.train_batch([0 for i in whitewins] + [1 for i in blackwins] + [2 for i in draws], whitewins + blackwins + draws)
 
     whitewinsfile.close()
     blackwinsfile.close()

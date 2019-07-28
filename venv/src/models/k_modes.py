@@ -4,26 +4,24 @@ import copy as cp
 
 
 class KModes:
-    def __init__(self, categories):
+    def __init__(self, start_modes, cluster_num, categories):
         self.categories = categories
         self.row_size = len(categories)
-        self.cluster_num = 0
-        self.cluster_modes = []
+        self.cluster_num = cluster_num
+        self.cluster_modes = start_modes
         self.frequencies = []
         self.data_labels = []
         self.data = []
 
-    def train_batch(self, start_modes, cluster_num, batch_data):
-        self.cluster_modes = start_modes
-        self.cluster_num = cluster_num
+    def train_batch(self, batch_data):
         self.data = batch_data
         self.data_labels = [0 for d in batch_data]
         self.frequencies = [[[0 for n in range(0, cat)] for cat in self.categories] for m in self.cluster_modes]
 
-        if len(batch_data) > cluster_num:
+        if len(batch_data) > self.cluster_num:
             print("Clustering " + str(len(batch_data)) + " data points.")
 
-            additional_modes = cluster_num - len(start_modes)
+            additional_modes = self.cluster_num - len(self.cluster_modes)
             indices = set()
             while len(indices) != additional_modes:
                 indices.add(rand.randrange(0, len(batch_data)))
@@ -99,17 +97,40 @@ class KModes:
             model_str += " ".join(map(str, m)) + '\n'
         return model_str
 
+    def model_to_vals(self):
+        model_vals = [len(self.categories), self.cluster_num]
+        for cl in self.cluster_modes:
+            for cat in self.categories:
+                model_vals.append(self.cluster_modes[cl][cat])
+        return model_vals
+
     def store_model(self, file_name):
         file = open(file_name, "w")
         file.write(self.model_to_string())
         file.close()
 
+    def store_model2(self, file_name):
+        file = open(file_name, "w")
+        file.write("\n".join(map(str, self.model_to_vals())))
+        file.close()
+
+    @staticmethod
+    def model_from_vals(model_vals):
+        cat_num = model_vals[0]
+        cluster_num = model_vals[1]
+        cats = model_vals[2:cat_num + 2]
+        at = cat_num + 2
+        model = KModes([], cluster_num, cats)
+        for idx in range(0, cluster_num):
+            model.cluster_modes.append(model_vals[at:at + cat_num])
+            at += cat_num
+        return model
+
     @staticmethod
     def model_from_lines(model_lines):
         cats = list(map(int, model_lines[0].split(" ")))
-        model = KModes(cats)
         cluster_num = int(model_lines[1])
-        model.cluster_num = cluster_num
+        model = KModes([], cluster_num, cats)
         for idx in range(0, cluster_num):
             model.cluster_modes.append(list(map(int, model_lines[idx + 2].split(" "))))
         return model
@@ -119,6 +140,15 @@ class KModes:
         file = open(file_name, "r")
         model_lines = file.readlines()
         model = KModes.model_from_lines(model_lines)
+        file.close()
+        print("Loaded K-Modes model")
+        return model
+
+    @staticmethod
+    def load_model2(file_name):
+        file = open(file_name, "r")
+        model_vals = list(map(int, file.readlines())) 
+        model = KModes.model_from_vals(model_vals)
         file.close()
         print("Loaded K-Modes model")
         return model

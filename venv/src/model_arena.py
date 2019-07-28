@@ -75,7 +75,7 @@ player2 = None
 if model1_type == "rand":
     player1 = lambda m, t: rand.randrange(0, len(m))
 elif model1_type == "nb":
-    model1 = nb.CategoricalNaiveBayes.load_model(model1_dir + "/" + model1_type + str(model1_version) + ".model")
+    model1 = nb.CategoricalNaiveBayes.load_model2(model1_dir + "/" + model1_type + str(model1_version) + ".model")
     player1 = lambda m, t: select_move(model1, t, m)
 elif model1_type == "cb":
     model1 = cb.ClusteredBayes.load_model(model1_dir + "/" + model1_type + str(model1_version) + ".model")
@@ -87,7 +87,7 @@ elif model1_type == "knb":
 if model2_type == "rand":
     player2 = lambda m, t: rand.randrange(0, len(m))
 elif model2_type == "nb":
-    model2 = nb.CategoricalNaiveBayes.load_model(model2_dir + "/" + model2_type + str(model2_version) + ".model")
+    model2 = nb.CategoricalNaiveBayes.load_model2(model2_dir + "/" + model2_type + str(model2_version) + ".model")
     player2 = lambda m, t: select_move(model2, t, m)
 elif model2_type == "cb":
     model2 = cb.ClusteredBayes.load_model(model2_dir + "/" + model2_type + str(model2_version) + ".model")

@@ -15,9 +15,9 @@ class KNetworkBayes:
         self.layers = [[] for l in range(0, self.layer_num)]
         self.classifier = None
 
-    def train_batch(self, batch_data):
+    def train_batch(self, labels, batch_data):
         categories = self.categories
-        data = [d[1] for d in batch_data]
+        data = batch_data
         clustered_data = []
         clustered_categories = []
         clustered_categories += self.categories
@@ -48,14 +48,11 @@ class KNetworkBayes:
 
         self.classifier = cnb.CategoricalNaiveBayes(self.class_num, clustered_categories, self.alpha)
 
-        enriched_data = []
         for didx, d in enumerate(batch_data):
-            ndata = d[1]
             for cd in clustered_data:
-                ndata += cd[didx]
-            enriched_data.append((d[0], ndata))
+                d += cd[didx]
 
-        self.classifier.train_batch(enriched_data)
+        self.classifier.train_batch(labels, batch_data)
 
     def predict_class(self, data):
         enriched_data = data
