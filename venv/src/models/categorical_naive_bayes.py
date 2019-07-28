@@ -53,7 +53,7 @@ class CategoricalNaiveBayes:
         else:
             alphanum = self.alpha * 1000000
             alphadenom = 1000000
-        model_vals += [alphanum, alphadenom, len(self.categories)]
+        model_vals += [int(alphanum), alphadenom, len(self.categories)]
         model_vals += self.categories
         model_vals += self.class_totals
         for cl in range(0, len(self.classes)):

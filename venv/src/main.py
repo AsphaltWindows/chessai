@@ -4,6 +4,9 @@ import chess.game_state as gs
 import chess.chess_consts as cc
 import chess.move_strings as ms
 import chess.moves as m
+import models.cnb_c as cnbc
+
+classifier = cnbc.CNB_C(1, [1])
 
 
 game = cg.ChessGame()

@@ -1,4 +1,5 @@
 import models.categorical_naive_bayes as nb
+import models.cnb_c as nb_c
 import models.k_network_bayes as knb
 import models.clustered_bayes as cb
 import chess.categorical_input as ci
@@ -20,13 +21,13 @@ def select_position(positions, play_as):
         total = sum(pos)
         win_n = pos[play_as] / total
         draw_n = pos[cc.Draw] / total
-        weights.append((win_n + draw_n / 2)**3)
-        # weights.append((win_n + draw_n / 2))
-        if idx > 0:
-            weights[idx] += weights[idx - 1]
+        # weights.append((win_n + draw_n / 2)**3)
+        weights.append((win_n + draw_n / 2))
+        # if idx > 0:
+        #     weights[idx] += weights[idx - 1]
 
-    # return np.argmax(weights)
-    return rand.choices(range(0, len(positions)), cum_weights=weights)[0]
+    return np.argmax(weights)
+    # return rand.choices(range(0, len(positions)), cum_weights=weights)[0]
 
     # chance_to_win = False
     # best_idx = 0
@@ -75,7 +76,8 @@ player2 = None
 if model1_type == "rand":
     player1 = lambda m, t: rand.randrange(0, len(m))
 elif model1_type == "nb":
-    model1 = nb.CategoricalNaiveBayes.load_model2(model1_dir + "/" + model1_type + str(model1_version) + ".model")
+    model1 = nb_c.CNB_C.load_model2(model1_dir + "/" + model1_type + str(model1_version) + ".model")
+    # model1 = nb.CategoricalNaiveBayes.load_model2(model1_dir + "/" + model1_type + str(model1_version) + ".model")
     player1 = lambda m, t: select_move(model1, t, m)
 elif model1_type == "cb":
     model1 = cb.ClusteredBayes.load_model(model1_dir + "/" + model1_type + str(model1_version) + ".model")
@@ -87,7 +89,8 @@ elif model1_type == "knb":
 if model2_type == "rand":
     player2 = lambda m, t: rand.randrange(0, len(m))
 elif model2_type == "nb":
-    model2 = nb.CategoricalNaiveBayes.load_model2(model2_dir + "/" + model2_type + str(model2_version) + ".model")
+    model2 = nb_c.CNB_C.load_model2(model2_dir + "/" + model2_type + str(model2_version) + ".model")
+    # model2 = nb.CategoricalNaiveBayes.load_model2(model2_dir + "/" + model2_type + str(model2_version) + ".model")
     player2 = lambda m, t: select_move(model2, t, m)
 elif model2_type == "cb":
     model2 = cb.ClusteredBayes.load_model(model2_dir + "/" + model2_type + str(model2_version) + ".model")

@@ -97,12 +97,14 @@ void train_batch(cnb_clas_t *cnb, const uint8_t * const * data, const uint8_t * 
     for (unsigned int dn = 0; dn < dsize; ++dn) {
         cnb->class_totals[labels[dn]] += 1;
 
-        for (int cat = 0; cat < cnb->class_num; ++cat) {
+        for (int cat = 0; cat < cnb->cat_num; ++cat) {
             cnb->class_cat_totals[labels[dn] * cnb->total_cat_vals + cnb->class_cat_idx[cat] + data[dn][cat]] += 1;
         }
     }
 
     recalculate_probabilities(cnb);
+
+    printf("Categorical Naive Bayes trained on %zu data points\n", dsize);
 
     return;
 }
@@ -170,7 +172,7 @@ cnb_clas_t * cnb_model_from_vals(const uint32_t * values, size_t num_values) {
     size_t at = 0;
 
     if (num_values < 4) {
-        printf("Insufficient values given for a Categorical Naive Bayes model\n");
+        printf("Insufficient values given for a Categorical Naive Bayes model (less than %d, only %zu)\n", 4, num_values);
         return NULL;
     }
 
@@ -178,9 +180,11 @@ cnb_clas_t * cnb_model_from_vals(const uint32_t * values, size_t num_values) {
     alpha_num = values[at++];
     alpha_denom = values[at++];
     cat_num = (uint8_t) values[at++];
+
+    printf("Loading Categorical Naive Bayes Classifier with %hhu classes and %hhu categories\n", class_num, cat_num);
     
     if (num_values < at + cat_num) {
-        printf("Insufficient values given for a Categorical Naive Bayes model\n");
+        printf("Insufficient values given for a Categorical Naive Bayes model (less than %lu, only %zu)\n", at + cat_num, num_values);
         return NULL;
     }
 
@@ -190,7 +194,7 @@ cnb_clas_t * cnb_model_from_vals(const uint32_t * values, size_t num_values) {
     }
 
     for (int cat = 0; cat < cat_num; ++cat) {
-        categories[0] = (uint8_t)values[at++];
+        categories[cat] = (uint8_t)values[at++];
     }
 
     if (!(res = create_cnb_with_alpha(class_num, categories, (size_t) cat_num, (double)alpha_num / alpha_denom))) {
@@ -202,7 +206,7 @@ cnb_clas_t * cnb_model_from_vals(const uint32_t * values, size_t num_values) {
     free(categories);
 
     if (num_values < at + class_num) {
-        printf("Insufficient values given for a Categorical Naive Bayes model\n");
+        printf("Insufficient values given for a Categorical Naive Bayes model (less than %lu, only %zu)\n", at + class_num, num_values);
         free_cnb(res);
         return NULL;
     }
@@ -212,7 +216,7 @@ cnb_clas_t * cnb_model_from_vals(const uint32_t * values, size_t num_values) {
     }
 
     if (num_values < at + class_num * res->total_cat_vals) {
-        printf("Insufficient values given for a Categorical Naive Bayes model\n");
+        printf("Insufficient values given for a Categorical Naive Bayes model (less than %lu, only %zu)\n", at + class_num * res->total_cat_vals, num_values);
         free_cnb(res);
         return NULL;
     }

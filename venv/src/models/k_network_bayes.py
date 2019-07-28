@@ -80,9 +80,37 @@ class KNetworkBayes:
         model_str += self.classifier.model_to_string()
         return model_str
 
+    def model_to_vals(self):
+        if self.alpha >= 1000:
+            alphanum = self.alpha
+            alphadenom = 1
+        elif self.alpha > 1:
+            alphanum = self.alpha * 1000
+            alphadenom = 1000
+        else:
+            alphanum = self.alpha * 1000000
+            alphadenom = 1000000
+        model_vals = [self.class_num,
+                      len(self.categories),
+                      self.clusters_per_node,
+                      self.node_num,
+                      self.layer_num,
+                      alphadenom,
+                      alphanum]
+        for l in self.layers:
+            for n in l:
+                model_vals += n.model_to_vals()
+        model_vals += self.classifier.model_to_vals()
+        return model_vals
+
     def store_model(self, file_name):
         file = open(file_name, "w")
         file.write(self.model_to_string())
+        file.close()
+
+    def store_model2(self, file_name):
+        file = open(file_name, "w")
+        file.write("\n".join(map(str, self.model_to_vals())))
         file.close()
 
     @staticmethod

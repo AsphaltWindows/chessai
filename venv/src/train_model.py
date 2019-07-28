@@ -1,6 +1,7 @@
 import sys
 
 import models.categorical_naive_bayes as cnb
+import models.cnb_c as cnb_c
 import models.clustered_bayes as cb
 import models.k_network_bayes as knb
 import chess.categorical_input as ci
@@ -13,9 +14,9 @@ model_args = list(map(int, sys.argv[5].split(",")))
 
 if model_type == "nb":
     if model_version == 0:
-        model = cnb.CategoricalNaiveBayes(3, ci.game_classes())
+        model = cnb_c.CNB_C(3, ci.game_classes())
     else:
-        model = cnb.CategoricalNaiveBayes.load_model2(model_dir + "/nb" + str(model_version) + ".model")
+        model = cnb_c.CNB_C.load_model2(model_dir + "/nb" + str(model_version) + ".model")
 
     whitewinsfile = open(games_dir + "white_wins.games", "r")
     blackwinsfile = open(games_dir + "black_wins.games", "r")
@@ -55,7 +56,7 @@ elif model_type == "cb":
     whitewinsfile.close()
     blackwinsfile.close()
     drawsfile.close()
-    model.store_model(model_dir + "/cb" + str(model_version + 1) + ".model")
+    model.store_model2(model_dir + "/cb" + str(model_version + 1) + ".model")
 elif model_type == "knb":
     if model_version == 0:
         cluster_num = model_args[0]
