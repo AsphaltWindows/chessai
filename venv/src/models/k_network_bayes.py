@@ -12,7 +12,7 @@ class KNetworkBayes:
         self.node_num = node_num
         self.layer_num = layer_num
         self.alpha = alpha
-        self.layers = [[] for l in range(0, self.layer_num)]
+        self.layers = [[None for n in range(0, node_num)] for l in range(0, self.layer_num)]
         self.classifier = None
 
     def train_batch(self, labels, batch_data):
@@ -32,7 +32,7 @@ class KNetworkBayes:
                 initial_modes = modes[n * self.clusters_per_node: (n+1) * self.clusters_per_node]
                 node = km.KModes(categories)
                 node.train_batch(initial_modes, self.clusters_per_node, data)
-                l.append(node)
+                l[n] = node
             print("Generating labels from nodes of layer " + str(lidx))
             categories = [self.clusters_per_node for n in range(0, self.node_num)]
             clustered_categories += categories
@@ -95,8 +95,8 @@ class KNetworkBayes:
                       self.clusters_per_node,
                       self.node_num,
                       self.layer_num,
-                      alphadenom,
-                      alphanum]
+                      int(alphanum),
+                      alphadenom]
         for l in self.layers:
             for n in l:
                 model_vals += n.model_to_vals()
@@ -130,6 +130,36 @@ class KNetworkBayes:
                 at += lines_per_km
         model.classifier = cnb.CategoricalNaiveBayes.model_from_lines(model_lines[at:])
         return model
+
+    @staticmethod
+    def model_from_vals(model_vals):
+        class_num = model_vals[0]
+        cat_num = model_vals[1]
+        clusters_per_node = model_vals[2]
+        node_num = model_vals[3]
+        layer_num = model_vals[4]
+        alpha = float(model_vals[5])/model_vals[6]
+        categories = model_vals[7:7 + cat_num]
+        at = 7 + cat_num
+
+        model = KNetworkBayes(class_num, categories, clusters_per_node, node_num, layer_num, alpha)
+        vals_per_km = 2 + clusters_per_node * cat_num + cat_num
+        for l in range(0, layer_num):
+            for n in range(0, node_num):
+                model.layers[l][n] = km.KModes.model_from_lines(model_vals[at:at + vals_per_km])
+                at += vals_per_km
+        model.classifier = cnb.CategoricalNaiveBayes.model_from_lines(model_vals[at:])
+        return model
+
+    @staticmethod
+    def load_model2(file_name):
+        file = open(file_name, "r")
+        model_vals = list(map(int, file.readlines()))
+        model = KNetworkBayes.model_from_vals(model_vals)
+        file.close()
+        print("Loaded Categorical Bayes Classifier")
+        return model
+
 
     @staticmethod
     def load_model(file_name):

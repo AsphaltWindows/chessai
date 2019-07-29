@@ -99,9 +99,9 @@ class KModes:
 
     def model_to_vals(self):
         model_vals = [len(self.categories), self.cluster_num]
+        model_vals += self.categories
         for cl in self.cluster_modes:
-            for cat in self.categories:
-                model_vals.append(self.cluster_modes[cl][cat])
+            model_vals += cl
         return model_vals
 
     def store_model(self, file_name):

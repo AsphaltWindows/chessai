@@ -5,8 +5,18 @@ import chess.chess_consts as cc
 import chess.move_strings as ms
 import chess.moves as m
 import models.cnb_c as cnbc
+import models.km_c as kmc
+import models.k_network_bayes as knb
+import models.clustered_bayes as cb
 
 classifier = cnbc.CNB_C(1, [1])
+clustering = kmc.KM_C([], 1, [1])
+
+# knmodel = knb.KNetworkBayes.load_model("/home/iv/dev/chessai/models/k_network_bayes/knb1.model")
+# knmodel.store_model2("/home/iv/dev/chessai/models/k_network_bayes/knb2.model")
+
+cbmodel = cb.ClusteredBayes.load_model2("/home/iv/dev/chessai/models/clustered_bayes/cb4.model")
+cbmodel.store_model2("/home/iv/dev/chessai/models/clustered_bayes/cb5.model")
 
 
 game = cg.ChessGame()

@@ -9,7 +9,7 @@ class ClusteredBayes:
         self.categories = categories
         self.alpha = alpha
         self.clustering = km.KModes(start_modes, cluster_num, categories)
-        self.classifiers = []
+        self.classifiers = [None for cl in range(0, cluster_num)]
 
     def train_batch(self, labels, batch_data):
 
@@ -59,7 +59,8 @@ class ClusteredBayes:
         else:
             alphanum = self.alpha * 1000000
             alphadenom = 1000000
-        model_vals = [self.class_num, len(self.categories), self.cluster_num, alphanum, alphadenom]
+        model_vals = [self.class_num, len(self.categories), self.cluster_num, int(alphanum), alphadenom]
+        model_vals += self.categories
         model_vals += self.clustering.model_to_vals()
         for cl in self.classifiers:
             model_vals += cl.model_to_vals()
@@ -76,6 +77,24 @@ class ClusteredBayes:
         file.close()
 
     @staticmethod
+    def model_from_vals(model_vals):
+        class_num = model_vals[0]
+        cat_num = model_vals[1]
+        cluster_num = model_vals[2]
+        alpha = float(model_vals[3]) / model_vals[4]
+        categories = model_vals[5: 5 + cat_num]
+        at = 5 + cat_num
+        model = ClusteredBayes([], class_num, cluster_num, categories, alpha)
+        clustering = km.KModes.model_from_vals(model_vals[at: at + 2 + cat_num + cluster_num])
+        at += 2 + cat_num + cluster_num * cat_num
+        model.clustering = clustering
+        vals_per_classifier = 4 + cat_num + class_num + class_num * sum(categories)
+        for cl in range(0, cluster_num):
+            model.classifiers[cl] = cnb.CategoricalNaiveBayes.model_from_vals(model_vals[at:at + vals_per_classifier])
+            at += vals_per_classifier
+        return model
+
+    @staticmethod
     def model_from_lines(model_lines):
         class_num = int(model_lines[0])
         categories = list(map(int, model_lines[1].split(" ")))
@@ -86,9 +105,8 @@ class ClusteredBayes:
         model.clustering = clustering
         start_at = 5 + cluster_num
         for cl in range(0, cluster_num):
-            model.classifiers.append(cnb.CategoricalNaiveBayes.model_from_lines(model_lines[start_at:]))
+            model.classifiers[cl] = cnb.CategoricalNaiveBayes.model_from_lines(model_lines[start_at:])
             start_at += 5
-
         return model
 
     @staticmethod
@@ -96,6 +114,15 @@ class ClusteredBayes:
         file = open(file_name, "r")
         model_lines = file.readlines()
         model = ClusteredBayes.model_from_lines(model_lines)
+        file.close()
+        print("Loaded Clustered Bayes Classifier")
+        return model
+
+    @staticmethod
+    def load_model2(file_name):
+        file = open(file_name, "r")
+        model_vals = list(map(int, file.readlines()))
+        model = ClusteredBayes.model_from_vals(model_vals)
         file.close()
         print("Loaded Clustered Bayes Classifier")
         return model
