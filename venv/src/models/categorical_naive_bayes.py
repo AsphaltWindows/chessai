@@ -42,6 +42,9 @@ class CategoricalNaiveBayes:
 
         return probabilities
 
+    def model_val_num(self):
+        return 4 + len(self.categories) + len(self.classes) + (len(self.classes) * sum(self.categories))
+
     def model_to_vals(self):
         model_vals = [len(self.classes)]
         if self.alpha >= 1000:
@@ -60,6 +63,7 @@ class CategoricalNaiveBayes:
             for cat in range(0, len(self.categories)):
                 for val in range(0, self.categories[cat]):
                     model_vals.append(self.class_category_totals[cl][cat][val])
+
         return model_vals
 
     def model_to_string(self):
@@ -92,6 +96,7 @@ class CategoricalNaiveBayes:
         class_num = int(model_vals[0])
         alpha = float(model_vals[1])/ model_vals[2]
         cat_num = model_vals[3]
+        print(cat_num)
         cats = model_vals[4:4 + cat_num]
         model = CategoricalNaiveBayes(class_num, cats, alpha)
         class_totals = model_vals[4 + cat_num:4 + cat_num + class_num]

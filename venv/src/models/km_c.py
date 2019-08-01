@@ -1,26 +1,26 @@
 from ctypes import *
 
-lib = CDLL("models/libkmodes.so")
+kmlib = CDLL("models/libkmodes.so")
 
-create_kmodes = lib.create_kmodes
-create_kmodes.res_type = c_void_p
+create_kmodes = kmlib.create_kmodes
+create_kmodes.restype = c_void_p
 
-train_batch = lib.train_batch
-train_batch.restype = None
+km_train_batch = kmlib.train_batch
+km_train_batch.restype = None
 
-assign_cluster = lib.assign_cluster
+assign_cluster = kmlib.assign_cluster
 assign_cluster.restype = POINTER(c_uint8 * 2)
 
-kmodes_model_from_vals = lib.kmodes_model_from_vals
+kmodes_model_from_vals = kmlib.kmodes_model_from_vals
 
-kmodes_model_to_vals = lib.kmodes_model_to_vals
+kmodes_model_to_vals = kmlib.kmodes_model_to_vals
 kmodes_model_to_vals.argtypes = [c_void_p]
 
-free_kmodes = lib.free_kmodes
+free_kmodes = kmlib.free_kmodes
 free_kmodes.argtypes = [c_void_p]
 free_kmodes.restype = None
 
-free = lib.free
+free = kmlib.free
 free.argtypes = [c_void_p]
 free.restype = None
 
@@ -33,16 +33,18 @@ class KM_C:
         categories_param = CatArray(*categories)
         ModesArray = POINTER(c_uint8 * self.cat_num) * len(start_modes)
         mode_list = []
-        mode_pointer_type = POINTER(c_uint8 * len(start_modes))
+        mode_pointer_type = POINTER(c_uint8 * self.cat_num)
         for m in start_modes:
             ModeRow = c_uint8 * self.cat_num
             mode_param = mode_pointer_type(ModeRow(*m))
             mode_list.append(mode_param)
         modes_param = ModesArray(*mode_list)
-        create_kmodes.argtypes = [POINTER(CatArray), c_size_t, c_uint8, POINTER(ModesArray), c_size_t]
+        create_kmodes.argtypes = [POINTER(CatArray), c_size_t, c_uint8, ModesArray, c_size_t]
         self.kmodes = create_kmodes(categories_param, self.cat_num, cluster_num, modes_param, len(start_modes))
+        print("kmodes: " + str(self.kmodes))
 
     def train_batch(self, data):
+        print("training kmodes batch")
         DataArray = POINTER(c_uint8 * self.cat_num) * len(data)
         data_list = []
         data_row_pointer_type = POINTER(c_uint8 * self.cat_num)
@@ -51,8 +53,11 @@ class KM_C:
             row_param = data_row_pointer_type(DataRow(*d))
             data_list.append(row_param)
         data_param = DataArray(*data_list)
-        train_batch.argtypes = [c_void_p, POINTER(DataArray), c_size_t]
-        train_batch(self.kmodes, data_param, len(data))
+        km_train_batch.argtypes = [c_void_p, DataArray, c_size_t]
+        print("here we go")
+        print(km_train_batch)
+        print("kmodes: " + str(self.kmodes))
+        km_train_batch(self.kmodes, data_param, len(data))
 
     def assign_cluster(self, row):
         RowArray = c_uint8 * self.cat_num
@@ -63,9 +68,11 @@ class KM_C:
         free(c_res)
         return res
 
+    def model_val_num(self):
+        return 2 + self.cat_num + self.categories * self.cluster_num
+
     def model_to_vals(self):
-        expected_size = 2 + self.cat_num + self.cat_num * self.cluster_num
-        kmodes_model_to_vals.restype = POINTER(c_uint32 * expected_size)
+        kmodes_model_to_vals.restype = POINTER(c_uint32 * self.model_val_num())
         c_res = kmodes_model_to_vals(self.kmodes)
         res = [r for r in c_res.contents]
         free(c_res)
@@ -75,6 +82,9 @@ class KM_C:
         file = open(file_name, "w")
         file.write("\n".join(map(str, self.model_to_vals())))
         file.close()
+
+    def free_kmodes(self):
+        free_kmodes(self.kmodes)
 
     @staticmethod
     def model_from_vals(model_vals):
@@ -96,5 +106,4 @@ class KM_C:
         model_vals = list(map(int, file.readlines()))
         model = KM_C.model_from_vals(model_vals)
         file.close()
-        print("Loaded K-Modes Clustering")
         return model

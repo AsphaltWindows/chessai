@@ -1,23 +1,23 @@
 from ctypes import *
 
 
-lib = CDLL("models/libcnb.so")
+cnblib = CDLL("models/libcnb.so")
 
-create_cnb_with_alpha = lib.create_cnb_with_alpha
+create_cnb_with_alpha = cnblib.create_cnb_with_alpha
 
-train_batch = lib.train_batch
+cnb_train_batch = cnblib.train_batch
 
-predict_class = lib.predict_class
+predict_class = cnblib.predict_class
 
-cnb_model_from_vals = lib.cnb_model_from_vals
+cnb_model_from_vals = cnblib.cnb_model_from_vals
 
-cnb_model_to_vals = lib.cnb_model_to_vals
+cnb_model_to_vals = cnblib.cnb_model_to_vals
 
-free_cnb = lib.free_cnb
+free_cnb = cnblib.free_cnb
 free_cnb.argtypes = [c_void_p]
 free_cnb.restype = None
 
-free = lib.free
+free = cnblib.free
 free.argtypes = [c_void_p]
 free.restype = None
 
@@ -34,6 +34,8 @@ class CNB_C:
         self.cnb = create_cnb_with_alpha(class_num, categories_param, self.cat_num, alpha)
 
     def train_batch(self, labels, data):
+        print("labels: " + str(len(labels)))
+        print("data: " + str(len(data)))
         LabelsArray = c_uint8 * len(labels)
         labels_param = LabelsArray(*labels)
         DataArray = POINTER(c_uint8 * self.cat_num) * len(data)
@@ -44,9 +46,10 @@ class CNB_C:
             row_param = data_row_pointer_type(DataRow(*d))
             data_list.append(row_param)
         data_param = DataArray(*data_list)
-        train_batch.argtypes = [c_void_p, DataArray, POINTER(c_uint8 * len(labels)), c_size_t]
-        train_batch.restype = None
-        train_batch(self.cnb, data_param, labels_param, len(data))
+        cnb_train_batch.argtypes = [c_void_p, DataArray, POINTER(c_uint8 * len(labels)), c_size_t]
+        cnb_train_batch.restype = None
+        print(cnb_train_batch)
+        cnb_train_batch(self.cnb, data_param, labels_param, len(data))
 
     def predict_class(self, data):
         DataArray = c_uint8 * len(data)
@@ -58,10 +61,12 @@ class CNB_C:
         free(c_res)
         return res
 
+    def model_val_num(self):
+        return 4 + self.cat_num + self.class_num + (self.class_num * sum(self.categories))
+
     def model_to_vals(self):
-        expected_size = 4 + self.cat_num + self.class_num + (self.class_num * sum(self.categories))
         cnb_model_to_vals.argtypes = [c_void_p]
-        cnb_model_to_vals.restype = POINTER(c_uint32 * expected_size)
+        cnb_model_to_vals.restype = POINTER(c_uint32 * self.model_val_num())
         c_res = cnb_model_to_vals(self.cnb)
         res = [r for r in c_res.contents]
         free(c_res)

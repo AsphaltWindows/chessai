@@ -6,12 +6,12 @@
 
 typedef struct k_modes {
     uint8_t * categories;
+    uint8_t cluster_num;
+    uint8_t active_modes;
     uint8_t cat_num;
     uint32_t total_cat_val;
     uint32_t * cat_idx;
     uint8_t * cluster_modes;
-    uint8_t cluster_num;
-    uint8_t active_modes;
 } kmodes_clust_t;
 
 kmodes_clust_t * create_kmodes(const uint8_t * categories, size_t cat_num, uint8_t cluster_num, const uint8_t * const * start_modes, size_t smsize);

@@ -4,20 +4,58 @@ import chess.game_state as gs
 import chess.chess_consts as cc
 import chess.move_strings as ms
 import chess.moves as m
+import chess.categorical_input as ci
 import models.cnb_c as cnbc
 import models.km_c as kmc
+import models.k_modes as km
 import models.k_network_bayes as knb
 import models.clustered_bayes as cb
 
-classifier = cnbc.CNB_C(1, [1])
-clustering = kmc.KM_C([], 1, [1])
+
+games_dir = "/home/iv/dev/chessai/games/random_random/"
+
+whitewinsfile = open(games_dir + "white_wins.games", "r")
+# blackwinsfile = open(games_dir + "black_wins.games", "r")
+# drawsfile = open(games_dir + "draws.games", "r")
+
+whitewins = [list(map(int, line.split(" "))) for line in whitewinsfile.readlines()]
+# blackwins = [list(map(int, line.split(" "))) for line in blackwinsfile.readlines()]
+# draws = [list(map(int, line.split(" "))) for line in drawsfile.readlines()]
+
+clustering = kmc.KM_C([whitewins[0], whitewins[1], whitewins[2]], 3, ci.game_classes())
+classifier = cnbc.CNB_C(3, ci.game_classes())
+
+py_clust = km.KModes([whitewins[0], whitewins[1], whitewins[2]], 3, ci.game_classes())
+
+clustering.train_batch(whitewins[0:1000])
+py_clust.train_batch(whitewins[0:1000])
+
+# clustering = kmc.KM_C([[1, 1], [0, 0]], 2, [2,2])
+#
+# py_clust = km.KModes([[1, 1], [0, 0]], 2, [2,2])
+
+# print("about to start training classification")
+# classifier.train_batch([1 for w in whitewins], whitewins)
+# print("about to start training c clustering")
+# clustering.train_batch([[1,0],[1,0],[0,1],[0,1]])
+# print("about to start training python clustering")
+# py_clust.train_batch([[1,0],[1,0],[0,1],[0,1]])
+
+whitewinsfile.close()
+# blackwinsfile.close()
+# drawsfile.close()
 
 # knmodel = knb.KNetworkBayes.load_model("/home/iv/dev/chessai/models/k_network_bayes/knb1.model")
 # knmodel.store_model2("/home/iv/dev/chessai/models/k_network_bayes/knb2.model")
+#
+# knmodel = knb.KNetworkBayes.load_model2("/home/iv/dev/chessai/models/k_network_bayes/knb2.model")
+# knmodel.store_model2("/home/iv/dev/chessai/models/k_network_bayes/knb3.model")
 
-cbmodel = cb.ClusteredBayes.load_model2("/home/iv/dev/chessai/models/clustered_bayes/cb4.model")
-cbmodel.store_model2("/home/iv/dev/chessai/models/clustered_bayes/cb5.model")
-
+# cbmodel = cb.ClusteredBayes.load_model("/home/iv/dev/chessai/models/clustered_bayes/cb3.model")
+# cbmodel.store_model2("/home/iv/dev/chessai/models/clustered_bayes/cb4.model")
+#
+# cbmodel = cb.ClusteredBayes.load_model2("/home/iv/dev/chessai/models/clustered_bayes/cb4.model")
+# cbmodel.store_model2("/home/iv/dev/chessai/models/clustered_bayes/cb5.model")
 
 game = cg.ChessGame()
 

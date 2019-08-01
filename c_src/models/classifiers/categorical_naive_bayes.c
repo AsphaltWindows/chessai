@@ -94,6 +94,7 @@ cnb_clas_t * create_cnb(uint8_t class_num, const uint8_t * cats, size_t csize) {
 }
 
 void train_batch(cnb_clas_t *cnb, const uint8_t * const * data, const uint8_t * labels, size_t dsize) {
+
     for (unsigned int dn = 0; dn < dsize; ++dn) {
         cnb->class_totals[labels[dn]] += 1;
 

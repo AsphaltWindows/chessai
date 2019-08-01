@@ -40,7 +40,7 @@ class KNetworkBayes:
             for didx, d in enumerate(data):
                 new_data.append([])
                 for nidx, n in enumerate(l):
-                    value = rand.choice(n.assign_cluster(d)[0])
+                    value = n.assign_cluster(d)[0]
                     new_data[didx].append(value)
             clustered_data.append(new_data)
             data = new_data
@@ -60,7 +60,7 @@ class KNetworkBayes:
         for l in self.layers:
             new_for_layer = []
             for n in l:
-                value = rand.choice(n.assign_cluster(for_layer)[0])
+                value = n.assign_cluster(for_layer)[0]
                 new_for_layer.append(value)
             enriched_data += new_for_layer
             for_layer = new_for_layer
@@ -126,7 +126,7 @@ class KNetworkBayes:
         lines_per_km = 2 + clusters_per_node
         for l in range(0, layer_num):
             for n in range(0, node_num):
-                model.layers[l].append(km.KModes.model_from_lines(model_lines[at:]))
+                model.layers[l][n] = km.KModes.model_from_lines(model_lines[at:])
                 at += lines_per_km
         model.classifier = cnb.CategoricalNaiveBayes.model_from_lines(model_lines[at:])
         return model
@@ -143,12 +143,14 @@ class KNetworkBayes:
         at = 7 + cat_num
 
         model = KNetworkBayes(class_num, categories, clusters_per_node, node_num, layer_num, alpha)
-        vals_per_km = 2 + clusters_per_node * cat_num + cat_num
+        netcatnum = cat_num
         for l in range(0, layer_num):
+            vals_per_km = 2 + clusters_per_node * netcatnum + netcatnum
             for n in range(0, node_num):
-                model.layers[l][n] = km.KModes.model_from_lines(model_vals[at:at + vals_per_km])
+                model.layers[l][n] = km.KModes.model_from_vals(model_vals[at:at + vals_per_km])
                 at += vals_per_km
-        model.classifier = cnb.CategoricalNaiveBayes.model_from_lines(model_vals[at:])
+            netcatnum = node_num
+        model.classifier = cnb.CategoricalNaiveBayes.model_from_vals(model_vals[at:])
         return model
 
     @staticmethod
