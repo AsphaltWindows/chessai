@@ -133,7 +133,15 @@ void train_batch(kmodes_clust_t *kmodes, const uint8_t * const * data, size_t ds
         for (unsigned int didx = 0; didx < dsize; ++didx) {
             assign_cluster_with_mem((const kmodes_clust_t *)kmodes, data[didx], (uint8_t *) cc);
             cost += cc[1];
-            printf("c_cost:%u, cluster:%hhu\n", cc[1], cc[0]);
+//            printf("c_cost:%u, cluster_num:%hhu, cluster_mode:", cc[1], cc[0]);
+//            for (uint8_t cat = 0; cat < kmodes->cat_num; ++cat) {
+//                printf("%hhu", kmodes->cluster_modes[cc[0] * kmodes->cat_num + cat]);
+//            }
+//            printf(", data point:");
+//            for (uint8_t cat = 0; cat < kmodes->cat_num; ++cat) {
+//                printf("%hhu", data[didx][cat]);
+//            }
+//            printf("\n");
 
 //            printf("Vector: ");
 //            for (uint8_t c = 0; c < kmodes->cat_num; ++c) {
@@ -148,20 +156,34 @@ void train_batch(kmodes_clust_t *kmodes, const uint8_t * const * data, size_t ds
 //            printf("\n");
 //            printf("Cost: %hhu\n", cc[1]);
 
-            for (int cat = 0; cat < kmodes->cat_num; ++cat) {
+//            printf("c_cat_num: %hhu  total_cat_val: %u \n", kmodes->cat_num, kmodes->total_cat_val);
+            for (uint8_t cat = 0; cat < kmodes->cat_num; ++cat) {
+//                printf("c_catidx %d: %u\n", cat, kmodes->cat_idx[cat]);
+//                printf("c_incrementing freq at index: %u\n", cc[0] * kmodes->total_cat_val + kmodes->cat_idx[cat] + data[didx][cat]);
                 freqs[cc[0] * kmodes->total_cat_val + kmodes->cat_idx[cat] + data[didx][cat]] += 1;
             }
         }
 
         /** some debug **/
-        for (uint8_t m = 0; m < kmodes->cluster_num; ++m) {
-            printf("Mode %hhu: ", m);
-            for (uint8_t c = 0; c < kmodes->cat_num; ++c) {
-                printf("%hhu", kmodes->cluster_modes[m * kmodes->cat_num + c]);
-            }
-            printf("\n");
-        }
-        fflush(stdout);
+//        for (uint8_t m = 0; m < kmodes->cluster_num; ++m) {
+//            printf("Mode %hhu: ", m);
+//            for (uint8_t c = 0; c < kmodes->cat_num; ++c) {
+//                printf("%hhu", kmodes->cluster_modes[m * kmodes->cat_num + c]);
+//            }
+//            printf("\n");
+//        }
+//        fflush(stdout);
+
+//        printf("c_freqs:\n");
+//        for (uint8_t cl = 0; cl < kmodes->cluster_num; ++cl) {
+//            printf("c_freq %hhu: ", cl);
+//            for (uint8_t cat = 0; cat < kmodes->cat_num; cat++) {
+//                for (uint8_t val = 0; val < kmodes->categories[cat]; ++val) {
+//                    printf("%u", freqs[cl * kmodes->total_cat_val + kmodes->cat_idx[cat] + val]);
+//                }
+//            }
+//            printf("\n");
+//        }
 
         /** end debug **/
         if (iterations >= 1 && cost >= last_cost) {
@@ -176,7 +198,7 @@ void train_batch(kmodes_clust_t *kmodes, const uint8_t * const * data, size_t ds
 
         /** some debug **/
 //        for (uint8_t m = 0; m < kmodes->cluster_num; ++m) {
-//            printf("Mode %hhu: ", m);
+//            printf("c_mode %hhu: ", m);
 //            for (uint8_t c = 0; c < kmodes->cat_num; ++c) {
 //                printf("%hhu", kmodes->cluster_modes[m * kmodes->cat_num + c]);
 //            }
@@ -209,11 +231,23 @@ void train_batch(kmodes_clust_t *kmodes, const uint8_t * const * data, size_t ds
                 uint8_t mrandval = (uint8_t) random() % mfreq_count;
                 kmodes->cluster_modes[cl * kmodes->cat_num + cat] = mfreq_count > 1 ?
                     //mfreq_idx[0] :
-                    mfreq_idx[mrandval] :
+                    mfreq_idx[0] :
                     mfreq_idx[0];
 //                printf("Max frequency for cluster: %hhu, category: %hhu is %u, with value: %hhu\n", cl, cat, mfreq, mfreq_idx[mrandval]);
             }
         }
+
+        /** some debug **/
+//        for (uint8_t m = 0; m < kmodes->cluster_num; ++m) {
+//            printf("c_mode %hhu: ", m);
+//            for (uint8_t c = 0; c < kmodes->cat_num; ++c) {
+//                printf("%hhu", kmodes->cluster_modes[m * kmodes->cat_num + c]);
+//            }
+//            printf("\n");
+//        }
+//        fflush(stdout);
+
+        /** end debug **/
 
     }
 
@@ -342,6 +376,8 @@ kmodes_clust_t * kmodes_model_from_vals(const uint32_t * values, size_t num_valu
     }
 
     res->active_modes = cluster_num;
+    res->cat_num = cat_num;
+    res->cluster_num = cluster_num;
 
     return res;
 }

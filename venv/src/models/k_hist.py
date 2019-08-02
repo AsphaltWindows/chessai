@@ -4,12 +4,15 @@ import copy as cp
 
 
 class KModes:
-    def __init__(self, start_modes, cluster_num, categories):
+    def __init__(self, start_hists, cluster_num, categories):
         self.categories = categories
         self.cat_num = len(categories)
         self.cluster_num = cluster_num
-        self.active_modes = len(start_modes)
-        self.cluster_modes = cp.deepcopy(start_modes)
+        self.active_hists = len(start_hists)
+        self.histogram = [[[0 for val in catvals] for catvals in self.categories] for hist in self.active_hists]
+
+        for hist in start_hists:
+            for 
 
     def train_batch(self, batch_data):
 
@@ -34,10 +37,10 @@ class KModes:
 
                 # print("py_modes before beginning to calculate frequencies:")
                 # for midx, m in enumerate(self.cluster_modes):
-                    # printstr = "py_mode " + str(midx) + ": "
-                    # for val in m:
-                    #     printstr += str(val)
-                    # print(printstr)
+                # printstr = "py_mode " + str(midx) + ": "
+                # for val in m:
+                #     printstr += str(val)
+                # print(printstr)
 
                 for d in batch_data:
                     assignment = self.assign_cluster(d)
@@ -55,18 +58,18 @@ class KModes:
                         frequencies[assignment[0]][cat][val] += 1
 
                 # for midx, m in enumerate(self.cluster_modes):
-                    # printstr = "Mode " + str(midx) + ": "
-                    # for val in m:
-                    #     printstr += str(val)
-                    # print(printstr)
+                # printstr = "Mode " + str(midx) + ": "
+                # for val in m:
+                #     printstr += str(val)
+                # print(printstr)
 
                 # print("py_freqs:")
                 # for clidx, cl in enumerate(self.cluster_modes):
-                    # printstr = "py_freq " + str(clidx) + ": "
-                    # for cat in range(0, self.cat_num):
-                    #     for val in range(0, self.categories[cat]):
-                    #         printstr += str(frequencies[clidx][cat][val])
-                    # print(printstr)
+                # printstr = "py_freq " + str(clidx) + ": "
+                # for cat in range(0, self.cat_num):
+                #     for val in range(0, self.categories[cat]):
+                #         printstr += str(frequencies[clidx][cat][val])
+                # print(printstr)
 
                 if iterations >= 1 and cost >= last_cost:
                     print("Last cost: " + str(last_cost) + " cost: " + str(cost))
@@ -101,10 +104,10 @@ class KModes:
                             self.cluster_modes[clidx][catidx] = mfreq_idx[0]
 
                 # for midx, m in enumerate(self.cluster_modes):
-                    # printstr = "py_mode " + str(midx) + ": "
-                    # for val in m:
-                    #     printstr += str(val)
-                    # print(printstr)
+                # printstr = "py_mode " + str(midx) + ": "
+                # for val in m:
+                #     printstr += str(val)
+                # print(printstr)
 
             self.cluster_modes = tmp_modes
 
@@ -196,7 +199,7 @@ class KModes:
     @staticmethod
     def load_model2(file_name):
         file = open(file_name, "r")
-        model_vals = list(map(int, file.readlines())) 
+        model_vals = list(map(int, file.readlines()))
         model = KModes.model_from_vals(model_vals)
         file.close()
         return model

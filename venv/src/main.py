@@ -15,20 +15,20 @@ import models.clustered_bayes as cb
 games_dir = "/home/iv/dev/chessai/games/random_random/"
 
 whitewinsfile = open(games_dir + "white_wins.games", "r")
-# blackwinsfile = open(games_dir + "black_wins.games", "r")
-# drawsfile = open(games_dir + "draws.games", "r")
+blackwinsfile = open(games_dir + "black_wins.games", "r")
+drawsfile = open(games_dir + "draws.games", "r")
 
 whitewins = [list(map(int, line.split(" "))) for line in whitewinsfile.readlines()]
-# blackwins = [list(map(int, line.split(" "))) for line in blackwinsfile.readlines()]
-# draws = [list(map(int, line.split(" "))) for line in drawsfile.readlines()]
+blackwins = [list(map(int, line.split(" "))) for line in blackwinsfile.readlines()]
+draws = [list(map(int, line.split(" "))) for line in drawsfile.readlines()]
 
-clustering = kmc.KM_C([whitewins[0], whitewins[1], whitewins[2]], 3, ci.game_classes())
+clustering = kmc.KM_C([whitewins[0], blackwins[0], draws[0]], 3, ci.game_classes())
 classifier = cnbc.CNB_C(3, ci.game_classes())
 
-py_clust = km.KModes([whitewins[0], whitewins[1], whitewins[2]], 3, ci.game_classes())
+py_clust = km.KModes([whitewins[0], blackwins[0], draws[0]], 3, ci.game_classes())
 
-clustering.train_batch(whitewins[0:1000])
-py_clust.train_batch(whitewins[0:1000])
+clustering.train_batch(whitewins + blackwins + draws)
+py_clust.train_batch(whitewins + blackwins + draws)
 
 # clustering = kmc.KM_C([[1, 1], [0, 0]], 2, [2,2])
 #
@@ -42,8 +42,8 @@ py_clust.train_batch(whitewins[0:1000])
 # py_clust.train_batch([[1,0],[1,0],[0,1],[0,1]])
 
 whitewinsfile.close()
-# blackwinsfile.close()
-# drawsfile.close()
+blackwinsfile.close()
+drawsfile.close()
 
 # knmodel = knb.KNetworkBayes.load_model("/home/iv/dev/chessai/models/k_network_bayes/knb1.model")
 # knmodel.store_model2("/home/iv/dev/chessai/models/k_network_bayes/knb2.model")

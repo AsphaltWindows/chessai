@@ -80,10 +80,10 @@ elif model1_type == "nb":
     # model1 = nb.CategoricalNaiveBayes.load_model2(model1_dir + "/" + model1_type + str(model1_version) + ".model")
     player1 = lambda m, t: select_move(model1, t, m)
 elif model1_type == "cb":
-    model1 = cb.ClusteredBayes.load_model(model1_dir + "/" + model1_type + str(model1_version) + ".model")
+    model1 = cb.ClusteredBayes.load_model2(model1_dir + "/" + model1_type + str(model1_version) + ".model")
     player1 = lambda m, t: select_move(model1, t, m)
 elif model1_type == "knb":
-    model1 = knb.KNetworkBayes.load_model(model1_dir + "/" + model1_type + str(model1_version) + ".model")
+    model1 = knb.KNetworkBayes.load_model2(model1_dir + "/" + model1_type + str(model1_version) + ".model")
     player1 = lambda m, t: select_move(model1, t, m)
 
 if model2_type == "rand":

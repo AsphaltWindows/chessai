@@ -10,8 +10,8 @@ class ClusteredBayes:
         self.cluster_num = cluster_num
         self.categories = categories
         self.alpha = alpha
-        self.clustering = km.KModes(start_modes, cluster_num, categories)
-        # self.clustering = kmc.KM_C(start_modes, cluster_num, categories)
+        # self.clustering = km.KModes(start_modes, cluster_num, categories)
+        self.clustering = kmc.KM_C(start_modes, cluster_num, categories)
         self.classifiers = [None for cl in range(0, cluster_num)]
 
     def train_batch(self, labels, batch_data):
@@ -35,8 +35,10 @@ class ClusteredBayes:
 
     def predict_class(self, data):
         predictions = []
-        for cidx in self.clustering.assign_cluster(data)[0]:
-            predictions.append(self.classifiers[cidx].predict_class(data))
+        # for cidx in self.clustering.assign_cluster(data)[0]:
+        #     predictions.append(self.classifiers[cidx].predict_class(data))
+        clust = self.clustering.assign_cluster(data)[0]
+        predictions.append(self.classifiers[clust].predict_class(data))
         num_preds = len(predictions)
         normalized = [0 for n in range(0, self.class_num)]
         for pred in predictions:
@@ -97,9 +99,9 @@ class ClusteredBayes:
         categories = model_vals[5: 5 + cat_num]
         at = 5 + cat_num
         model = ClusteredBayes([], class_num, cluster_num, categories, alpha)
-        clustering = km.KModes.model_from_vals(model_vals[at: at + 2 + cat_num + cat_num * cluster_num])
-        # clustering = kmc.KM_C.model_from_vals(model_vals[at: at + 2 + cat_num + cat_num * cluster_num])
-        # model.clustering.free_kmodes()
+        # clustering = km.KModes.model_from_vals(model_vals[at: at + 2 + cat_num + cat_num * cluster_num])
+        clustering = kmc.KM_C.model_from_vals(model_vals[at: at + 2 + cat_num + cat_num * cluster_num])
+        model.clustering.free_kmodes()
         at += 2 + cat_num + cat_num * cluster_num
         model.clustering = clustering
         vals_per_classifier = 4 + cat_num + class_num + class_num * sum(categories)
@@ -114,8 +116,8 @@ class ClusteredBayes:
         class_num = int(model_lines[0])
         categories = list(map(int, model_lines[1].split(" ")))
         alpha = int(model_lines[2])
-        clustering = km.KModes.model_from_lines(model_lines[3:])
-        # clustering = kmc.KM_C.model_from_lines(model_lines[3:])
+        # clustering = km.KModes.model_from_lines(model_lines[3:])
+        clustering = kmc.KM_C.model_from_lines(model_lines[3:])
         cluster_num = clustering.cluster_num
         model = ClusteredBayes([], class_num, cluster_num, categories, alpha)
         model.clustering = clustering
