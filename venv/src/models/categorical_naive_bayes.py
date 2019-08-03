@@ -1,3 +1,5 @@
+import math
+
 class CategoricalNaiveBayes:
     def __init__(self, class_num, categories, alpha=1):
         self.classes = [c for c in range(0, class_num)]
@@ -22,23 +24,27 @@ class CategoricalNaiveBayes:
     def recalculate_probabilities(self):
         for idx, cl in enumerate(self.classes):
             if sum(self.class_totals) == 0:
-                self.class_probabilities[idx] = 1 / float(len(self.classes))
+                self.class_probabilities[idx] = -1 * math.log(float(len(self.classes)))
             else:
-                self.class_probabilities[idx] = self.class_totals[idx] / float(sum(self.class_totals))
+                self.class_probabilities[idx] = math.log(self.class_totals[idx]) - math.log(float(sum(self.class_totals)))
 
             for idx2 in range(0, len(self.class_category_totals[idx])):
                 for idx3 in range(0, len(self.class_category_totals[idx][idx2])):
-                    self.class_category_probabilities[idx][idx2][idx3] = (self.class_category_totals[idx][idx2][
-                                                                         idx3] + self.alpha) / float(
-                        sum(self.class_category_totals[idx][idx2]) +
-                        self.categories[idx2])
+                    self.class_category_probabilities[idx][idx2][idx3] = math.log(
+                        self.class_category_totals[idx][idx2][idx3] +
+                        self.alpha) -\
+                        math.log(
+                            float(
+                                sum(self.class_category_totals[idx][idx2]) +
+                                self.categories[idx2])
+                        )
 
     def predict_class(self, data):
         probabilities = [self.class_probabilities[i] for i in self.classes]
 
         for cl in self.classes:
             for idx, cat in enumerate(data):
-                probabilities[cl] *= self.class_category_probabilities[cl][idx][cat]
+                probabilities[cl] += self.class_category_probabilities[cl][idx][cat]
 
         return probabilities
 

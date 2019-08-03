@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 static void recalculate_probabilities(cnb_clas_t *cnb);
 
@@ -81,12 +82,38 @@ cnb_clas_t * create_cnb_with_alpha(uint8_t class_num, const uint8_t * cats, size
 }
 
 void free_cnb(cnb_clas_t *cnb) {
-    free(cnb->categories);
-    free(cnb->class_totals);
-    free(cnb->class_probs);
-    free(cnb->class_cat_idx);
-    free(cnb->class_cat_totals);
-    free(cnb->class_cat_probs);
+
+    if (cnb->categories) {
+        free(cnb->categories);
+        cnb->categories = NULL;
+    }
+
+    if (cnb->class_totals) {
+        free(cnb->class_totals);
+        cnb->class_totals = NULL;
+    }
+
+    if (cnb->class_probs) {
+        free(cnb->class_probs);
+        cnb->class_probs = NULL;
+    }
+
+    if (cnb->class_cat_idx) {
+        free(cnb->class_cat_idx);
+        cnb->class_cat_idx = NULL;
+    }
+
+    if (cnb->class_cat_totals) {
+        free(cnb->class_cat_totals);
+        cnb->class_cat_totals = NULL;
+    }
+
+    if (cnb->class_cat_probs) {
+        free(cnb->class_cat_probs);
+        cnb->class_cat_probs = NULL;
+    }
+
+    free(cnb);
 }
 
 cnb_clas_t * create_cnb(uint8_t class_num, const uint8_t * cats, size_t csize) {
@@ -120,10 +147,10 @@ static void recalculate_probabilities(cnb_clas_t *cnb) {
     for (int cl = 0; cl < cnb->class_num; ++cl) {
 
         if (!cur_total) {
-            cnb->class_probs[cl] = (double) 1 / cnb->class_num;
+            cnb->class_probs[cl] =  -1 * log((double)cnb->class_num);
         }
         else {
-            cnb->class_probs[cl] = (double) cnb->class_totals[cl] / cur_total;
+            cnb->class_probs[cl] = log((double) cnb->class_totals[cl]) - log((double) cur_total);
         }
 
         for (int cat = 0; cat < cnb->cat_num; ++cat) {
@@ -133,9 +160,9 @@ static void recalculate_probabilities(cnb_clas_t *cnb) {
             }
 
             for (int val = 0; val < cnb->categories[cat]; ++val) {
-                cnb->class_cat_probs[cl * cnb->total_cat_vals + cnb->class_cat_idx[cat] + val] = (double) (cnb->alpha +
-                    cnb->class_cat_totals[cl * cnb->total_cat_vals + cnb->class_cat_idx[cat] + val]) /
-                    (cur_total + cnb->categories[cat]);
+                cnb->class_cat_probs[cl * cnb->total_cat_vals + cnb->class_cat_idx[cat] + val] = log((double) (cnb->alpha +
+                    cnb->class_cat_totals[cl * cnb->total_cat_vals + cnb->class_cat_idx[cat] + val])) -
+                    log((double) (cur_total + cnb->categories[cat]));
             }
         }
     }
@@ -153,10 +180,10 @@ double * predict_class(const cnb_clas_t * cnb, const uint8_t * data) {
 
 
     for (int cl = 0; cl < cnb->class_num; ++cl) {
-        res[cl] = cnb->class_probs[cl];
+        res[cl] = log((double) cnb->class_probs[cl]);
 
         for (int cat = 0; cat < cnb->cat_num; ++cat) {
-            res[cl] *= cnb->class_cat_probs[cl * cnb->total_cat_vals + cnb->class_cat_idx[cat] + data[cat]];
+            res[cl] += log((double) cnb->class_cat_probs[cl * cnb->total_cat_vals + cnb->class_cat_idx[cat] + data[cat]]);
         }
     }
 

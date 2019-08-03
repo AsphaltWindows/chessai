@@ -69,7 +69,7 @@ class KM_C:
         return res
 
     def model_val_num(self):
-        return 2 + self.cat_num + self.categories * self.cluster_num
+        return 2 + self.cat_num + self.cat_num * self.cluster_num
 
     def model_to_vals(self):
         kmodes_model_to_vals.restype = POINTER(c_uint32 * self.model_val_num())

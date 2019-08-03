@@ -28,7 +28,7 @@ class ClusteredBayes:
         for didx, data in enumerate(batch_data):
             cluster = self.clustering.assign_cluster(data)[0]
             bucketed_data[cluster].append(data)
-            bucketed_labels[cluster].append(labels)
+            bucketed_labels[cluster].append(labels[didx])
 
         for cidx, bucket in enumerate(bucketed_data):
             self.classifiers[cidx].train_batch(bucketed_labels[cidx], bucket)

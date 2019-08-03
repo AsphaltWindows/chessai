@@ -40,8 +40,6 @@ elif model_type == "cb":
         model = cb.ClusteredBayes(init_modes, 3, cluster_num, ci.game_classes())
     else:
         model = cb.ClusteredBayes.load_model2(model_dir + "/cb" + str(model_version) + ".model")
-        cluster_num = model.clustering.cluster_num
-        init_modes = model.clustering.cluster_modes
 
     whitewinsfile = open(games_dir + "white_wins.games", "r")
     blackwinsfile = open(games_dir + "black_wins.games", "r")
