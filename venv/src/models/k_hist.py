@@ -3,130 +3,146 @@ import numpy as np
 import copy as cp
 
 
-class KModes:
+class KHist:
     def __init__(self, start_hists, cluster_num, categories):
         self.categories = categories
         self.cat_num = len(categories)
         self.cluster_num = cluster_num
         self.active_hists = len(start_hists)
-        self.histogram = [[[0 for val in catvals] for catvals in self.categories] for hist in self.active_hists]
+        self.cluster_hists = [[[0 for val in range(0, catvals)] for catvals in self.categories] for hist in range(0, self.cluster_num)]
+        self.cluster_totals = [0 for cl in range(0, self.cluster_num)]
 
-        for hist in start_hists:
-            for 
+        for active in range(0, self.active_hists):
+            self.cluster_totals[active] = 1
 
-    def train_batch(self, batch_data):
+        for hidx, hist in enumerate(start_hists):
+            for cat, val in enumerate(hist):
+                self.cluster_hists[hidx][cat][val] += 1
 
-        print("K-Modes-Python clustering training on " + str(len(batch_data)) + " data points")
+    def train_full(self, batch_data):
 
-        if len(batch_data) > self.cluster_num:
+        print("K-Histograms-Python clustering training on " + str(len(batch_data)) + " data points")
+
+        #debug
+        # printstr = ""
+        # for cl in range(0, self.cluster_num):
+        #     printstr += "Cluster " + str(cl) + ":\n"
+        #     for cat in range(0, self.cat_num):
+        #         printstr += "Category " + str(cat) + ": "
+        #         for val in range(0, self.categories[cat]):
+        #             printstr += str(self.cluster_hists[cl][cat][val])
+        #         printstr += "\n"
+        # print(printstr)
+
+        if len(batch_data) + self.active_hists > self.cluster_num:
             print("Clustering " + str(len(batch_data)) + " data points.")
 
-            while self.cluster_num > self.active_modes:
-                print("Selecting additional " + str(self.cluster_num - self.active_modes) + " initial modes")
-                self.cluster_modes.append(cp.deepcopy(batch_data[rand.randrange(0, len(batch_data))]))
-                self.active_modes += 1
+            print("Selecting additional " + str(self.cluster_num - self.active_hists) + " initial histograms")
+            while self.cluster_num > self.active_hists:
+                histogram = [[0 for val in range(0, catvals)] for catvals in self.categories]
+                rand_hist_centroid = batch_data[rand.randrange(0, len(batch_data))]
 
+                for cat, val in enumerate(rand_hist_centroid):
+                    self.cluster_hists[self.active_hists][cat][val] += 1
+
+                self.cluster_totals[self.active_hists] = 1
+                self.active_hists += 1
+
+            # #debug
+            # printstr = ""
+            # for cl in range(0, self.cluster_num):
+            #     printstr += "Cluster " + str(cl) + ":\n"
+            #     for cat in range(0, self.cat_num):
+            #         printstr += "Category " + str(cat) + ": "
+            #         for val in range(0, self.categories[cat]):
+            #             printstr += str(self.cluster_hists[cl][cat][val])
+            #         printstr += "\n"
+            # print(printstr)
+
+            dlabels = [-1 for d in batch_data]
             iterations = 0
-            recluster_num = 1
-            last_cost = 0
+            cost = 0.0
 
-            while True:
+            print("Performing initial K-Histograms-Python clustering")
+            for didx, data in enumerate(batch_data):
+                cc = self.assign_cluster(data)
+                dlabels[didx] = int(cc[0])
+                cost += cc[1]
+
+                # print(str(didx) + ", assigned label: " + str(cc[0]) + ", cost: " + str(cc[1]))
+
+                self.cluster_totals[int(cc[0])] += 1
+
+                for cat in range(0, self.cat_num):
+                    self.cluster_hists[int(cc[0])][cat][data[cat]] += 1
+
+            # #debug
+            # printstr = ""
+            # for cl in range(0, self.cluster_num):
+            #     printstr += "Cluster " + str(cl) + ":\n"
+            #     for cat in range(0, self.cat_num):
+            #         printstr += "Category " + str(cat) + ": "
+            #         for val in range(0, self.categories[cat]):
+            #             printstr += str(self.cluster_hists[cl][cat][val])
+            #         printstr += "\n"
+            # print(printstr)
+
+            print("Initial K-Histograms-Python clustering achieved with cost: " + str(cost))
+
+            reassigned_num = 1
+            while reassigned_num != 0:
+                reassigned_num = 0
                 cost = 0
 
-                frequencies = [[[0 for n in range(0, cat)] for cat in self.categories] for m in self.cluster_modes]
+                for didx, d in enumerate(batch_data):
+                    cc = self.assign_cluster(d)
+                    # print(str(didx) + ", assigned label: " + str(cc[0]) + ", cost: " + str(cc[1]))
+                    old_label = dlabels[didx]
+                    new_label = int(cc[0])
+                    cost += cc[1]
 
-                # print("py_modes before beginning to calculate frequencies:")
-                # for midx, m in enumerate(self.cluster_modes):
-                # printstr = "py_mode " + str(midx) + ": "
-                # for val in m:
-                #     printstr += str(val)
-                # print(printstr)
-
-                for d in batch_data:
-                    assignment = self.assign_cluster(d)
-                    cost += assignment[1]
-                    # print("py_cost:" +
-                    #       str(assignment[1]) +
-                    #       ", cluster_num:" +
-                    #       str(assignment[0]) +
-                    #       ", cluster_mode:" +
-                    #       str(self.cluster_modes[assignment[0]]).replace("[", "").replace("]", "").replace(",", "").replace(" ", "") +
-                    #       ", data point:" +
-                    #       str(d).replace("[", "").replace("]", "").replace(",", "").replace(" ", ""))
-
-                    for cat, val in enumerate(d):
-                        frequencies[assignment[0]][cat][val] += 1
-
-                # for midx, m in enumerate(self.cluster_modes):
-                # printstr = "Mode " + str(midx) + ": "
-                # for val in m:
-                #     printstr += str(val)
-                # print(printstr)
-
-                # print("py_freqs:")
-                # for clidx, cl in enumerate(self.cluster_modes):
-                # printstr = "py_freq " + str(clidx) + ": "
-                # for cat in range(0, self.cat_num):
-                #     for val in range(0, self.categories[cat]):
-                #         printstr += str(frequencies[clidx][cat][val])
-                # print(printstr)
-
-                if iterations >= 1 and cost >= last_cost:
-                    print("Last cost: " + str(last_cost) + " cost: " + str(cost))
-                    break
+                    if new_label != old_label:
+                        reassigned_num += 1
+                        dlabels[didx] = new_label
+                        self.cluster_totals[old_label] -= 1
+                        self.cluster_totals[new_label] += 1
+                        for cat, val in enumerate(d):
+                            self.cluster_hists[old_label][cat][val] -= 1
+                            self.cluster_hists[new_label][cat][val] += 1
 
                 iterations += 1
-                last_cost = cost
 
-                print("Finished clustering attempt number: " + str(iterations) + " cost: " + str(cost))
+                print("Completed K-Histograms-Python reclustering, " + str(reassigned_num) + " data points changed labels, total cost is " + str(cost))
 
-                tmp_modes = cp.deepcopy(self.cluster_modes)
+    def train_incremental(self, batch_data):
 
-                for clidx, cl in enumerate(self.cluster_modes):
-                    for catidx, valnum in enumerate(self.categories):
-                        mfreq = 0
-                        mfreq_idx = []
+        print("K-Histograms-Python incremental training on " + str(len(batch_data)) + "data points")
 
-                        for val in range(0, valnum):
-                            f = frequencies[clidx][catidx][val]
+        if self.active_hists != self.cluster_num:
+            print("K-Histograms-Python can not be trained incrementally, because not all histograms are initialzied")
 
-                            if f > mfreq or len(mfreq_idx) == 0:
-                                mfreq_idx = [val]
-                                mfreq = f
-                            elif f == mfreq:
-                                mfreq_idx.append(val)
+        cost = 0
 
-                        mrandval = rand.randrange(0, len(mfreq_idx))
-                        if len(mfreq_idx) == 1:
-                            self.cluster_modes[clidx][catidx] = mfreq_idx[0]
-                        else:
-                            #self.cluster_modes[clidx][catidx] = mfreq_idx[mrandval]
-                            self.cluster_modes[clidx][catidx] = mfreq_idx[0]
+        for didx, data in enumerate(batch_data):
+            cc = self.assign_cluster(data)
+            cost += cc[1]
 
-                # for midx, m in enumerate(self.cluster_modes):
-                # printstr = "py_mode " + str(midx) + ": "
-                # for val in m:
-                #     printstr += str(val)
-                # print(printstr)
+            for cat, val in enumerate(data):
+                self.cluster_hists[int(cc[0])][cat][val] += 1
 
-            self.cluster_modes = tmp_modes
-
-            for midx, m in enumerate(self.cluster_modes):
-                printstr = "py_mode " + str(midx) + ": "
-                for val in m:
-                    printstr += str(val)
-                print(printstr)
+        print("Completed K-Histograms-Python clustering for " + str(len(batch_data)) + " data points with cost: " + str(cost))
 
     def assign_cluster(self, data):
         mincost = 0
         mincost_indices = []
 
         for clidx in range(0, self.cluster_num):
-            cost = 0
+            diffs = 0
 
             for cat in range(0, self.cat_num):
-                if data[cat] != self.cluster_modes[clidx][cat]:
-                    cost += 1
+                diffs += (self.cluster_totals[clidx] - self.cluster_hists[clidx][cat][data[cat]])
+
+            cost = float(diffs) / float(self.cluster_totals[clidx])
 
             if cost < mincost or len(mincost_indices) == 0:
                 mincost = cost
@@ -135,31 +151,20 @@ class KModes:
                 mincost_indices.append(clidx)
 
         mrandval = rand.randrange(0, len(mincost_indices))
-        #return mincost_indices[mrandval], mincost
-        return mincost_indices[0], mincost
-
-    def model_to_string(self):
-        model_str = " ".join(map(str, self.categories)) + '\n'
-        model_str += (str(self.cluster_num) + '\n')
-        for m in self.cluster_modes:
-            model_str += " ".join(map(str, m)) + '\n'
-        return model_str
+        return mincost_indices[mrandval], mincost
+        # return mincost_indices[0], mincost
 
     def model_val_num(self):
-        return 2 + len(self.categories) + len(self.categories) * self.cluster_num
+        return 2 + len(self.categories) + len(self.cluster_num) + len(self.categories) * self.cluster_num
 
     def model_to_vals(self):
         model_vals = [len(self.categories), self.cluster_num]
         model_vals += self.categories
-        for cl in self.cluster_modes:
-            model_vals += cl
-
+        model_vals += self.cluster_totals
+        for cl in self.cluster_hists:
+            for catvals in cl: 
+                model_vals += catvals
         return model_vals
-
-    def store_model(self, file_name):
-        file = open(file_name, "w")
-        file.write(self.model_to_string())
-        file.close()
 
     def store_model2(self, file_name):
         file = open(file_name, "w")
@@ -172,34 +177,22 @@ class KModes:
         cluster_num = model_vals[1]
         cats = model_vals[2:cat_num + 2]
         at = cat_num + 2
-        model = KModes([], cluster_num, cats)
+        model = KHist([], cluster_num, cats)
 
-        for idx in range(0, cluster_num):
-            model.cluster_modes.append(model_vals[at:at + cat_num])
-            at += cat_num
-        return model
+        for cl in range(0, cluster_num):
+            model.cluster_totals[cl] = model_vals[at]
+            at += 1
 
-    @staticmethod
-    def model_from_lines(model_lines):
-        cats = list(map(int, model_lines[0].split(" ")))
-        cluster_num = int(model_lines[1])
-        model = KModes([], cluster_num, cats)
-        for idx in range(0, cluster_num):
-            model.cluster_modes.append(list(map(int, model_lines[idx + 2].split(" "))))
-        return model
-
-    @staticmethod
-    def load_model(file_name):
-        file = open(file_name, "r")
-        model_lines = file.readlines()
-        model = KModes.model_from_lines(model_lines)
-        file.close()
-        return model
+        for cl in range(0, cluster_num):
+            for cat in range(0, cat_num):
+                for val in range(0, cats[cat]):
+                    model.cluster_hists[cl][cat][val] = model_vals[at]
+                    at += 1
 
     @staticmethod
     def load_model2(file_name):
         file = open(file_name, "r")
         model_vals = list(map(int, file.readlines()))
-        model = KModes.model_from_vals(model_vals)
+        model = KHist.model_from_vals(model_vals)
         file.close()
         return model

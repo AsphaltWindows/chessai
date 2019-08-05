@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static void assign_cluster_with_mem(const khist_clust_t * khist, const uint8_t * data, uint8_t * res);
+static void assign_cluster_with_mem(const khist_clust_t * khist, const uint8_t * data, double * res);
 
 khist_clust_t * create_khist(const uint8_t * categories, size_t cat_num, uint8_t cluster_num, const uint8_t * const * start_hist, size_t smsize) {
     khist_clust_t * res;
@@ -59,15 +59,16 @@ khist_clust_t * create_khist(const uint8_t * categories, size_t cat_num, uint8_t
 
     memset(res->cluster_totals, 0, cluster_num * sizeof(uint32_t));
 
-    for (unsigned int h = 0; h < smsize; ++h) {
+    res->cat_num = cat_num;
+    res->cluster_num = cluster_num;
+
+    for (size_t h = 0; h < smsize; ++h) {
         for (uint8_t cat = 0; cat < res->cat_num; ++cat) {
             res->cluster_hists[h * res->total_cat_val + res->cat_idx[cat] + start_hist[h][cat]] = 1;
         }
         res->cluster_totals[h] = 1;
     }
 
-    res->cat_num = cat_num;
-    res->cluster_num = cluster_num;
     res->active_hists = (uint8_t) smsize;
 
     return res;
@@ -86,8 +87,8 @@ void free_khist(khist_clust_t *khist) {
     }
 
     if (khist->cluster_hists) {
-        free(khist->cluster_modes);
-        khist->cluster_modes = NULL;
+        free(khist->cluster_hists);
+        khist->cluster_hists = NULL;
     }
 
     if (khist->cluster_totals) {
@@ -103,9 +104,10 @@ void train_full(khist_clust_t *khist, const uint8_t * const * data, size_t dsize
     int iterations = 0;
     double cc[2];
     double cost;
-    uint32_t * dlabels;
+    uint8_t * dlabels;
 
     printf("K-Histograms clustering training on %zu data points\n", dsize);
+    fflush(stdout);
 
     if (khist->cluster_num - khist->active_hists > dsize) {
         printf("Insufficient amount of data provided for K-Histograms clustering\n");
@@ -113,20 +115,31 @@ void train_full(khist_clust_t *khist, const uint8_t * const * data, size_t dsize
     }
 
     for (int cl = khist->active_hists; cl < khist->cluster_num; ++cl) {
-        memcpy(khist->cluster_modes + cl * khist->cat_num * sizeof(uint8_t), data[(size_t) random() % dsize], khist->cat_num * sizeof(uint8_t));
+        size_t rand_hist_centroid_idx = (size_t) (random() % dsize);
+
+        for (uint8_t cat = 0; cat < khist->cat_num; ++cat) {
+            khist->cluster_hists[cl * khist->total_cat_val + khist->cat_idx[cat] + data[rand_hist_centroid_idx][cat]] += 1;
+        }
+
+        khist->cluster_totals[cl] = 1;
         khist->active_hists++;
     }
 
-    /** some debug **/
+//    /** some debug **/
 //    for (uint8_t m = 0; m < khist->cluster_num; ++m) {
-//        printf("Mode %hhu: ", m);
+//
+//        printf("Mode %hhu:\n", m);
 //        for (uint8_t c = 0; c < khist->cat_num; ++c) {
-// //            printf("%hhu", khist->cluster_hists[m * khist->cat_num + c]);
+//            printf("Category %hhu: ", c);
+//            for (uint8_t val = 0; val < khist->categories[c]; ++val) {
+//                printf("%u", khist->cluster_hists[m * khist->total_cat_val + khist->cat_idx[c] + val]);
+//            }
+//            printf("\n");
 //        }
 //        printf("\n");
 //    }
 //    fflush(stdout);
-//
+
     /** end debug **/
 
     /** original assignment **/
@@ -141,10 +154,13 @@ void train_full(khist_clust_t *khist, const uint8_t * const * data, size_t dsize
     printf("Performing initial K-Histogram clustering\n");
     /** initial labeling **/
     cost = 0.0;
-    for (size_t didx = 0; d < dsize; ++d) {
+    for (size_t didx = 0; didx < dsize; ++didx) {
         assign_cluster_with_mem((const khist_clust_t *)khist, data[didx], (double *) cc);
 
+//        printf("%zu, assigned label: %hhu, cost: %f\n", didx, (uint8_t) cc[0], cc[1]);
+
         dlabels[didx] = (uint8_t) cc[0];
+        khist->cluster_totals[(uint8_t) cc[0]] += 1;
         cost += cc[1];
 
         for (uint8_t cat = 0; cat < khist->cat_num; ++cat) {
@@ -152,25 +168,46 @@ void train_full(khist_clust_t *khist, const uint8_t * const * data, size_t dsize
         }
     }
 
+    /** some debug **/
+//    for (uint8_t m = 0; m < khist->cluster_num; ++m) {
+//
+//        printf("Mode %hhu:\n", m);
+//        for (uint8_t c = 0; c < khist->cat_num; ++c) {
+//            printf("Category %hhu: ", c);
+//            for (uint8_t val = 0; val < khist->categories[c]; ++val) {
+//                printf("%u", khist->cluster_hists[m * khist->total_cat_val + khist->cat_idx[c] + val]);
+//            }
+//            printf("\n");
+//        }
+//        printf("\n");
+//    }
+//    fflush(stdout);
+
+    /** end debug **/
     printf("Initial K-Histogram clustering achieved with cost: %f\n", cost);
 
     /** Relabeling until maximum fit **/
-    size_t reassigned_num = 0;
+    size_t reassigned_num = 1;
     iterations = 0;
-    while (!reassigned_num) {
+    while (reassigned_num) {
         reassigned_num = 0;
         cost = 0;
 
-        for (size_t didx = 0; d < dsize; ++d) {
+        for (size_t didx = 0; didx < dsize; ++didx) {
             assign_cluster_with_mem((const khist_clust_t *) khist, data[didx], (double *) cc);
 
             uint8_t old_label = dlabels[didx];
             uint8_t new_label = (uint8_t) cc[0];
             cost += cc[1];
 
+//            printf("%zu, old label: %hhu, new label: %hhu, cost: %f\n", didx, old_label, new_label, cc[1]);
+
             if (new_label != old_label) {
+//                printf("Reassigning data point from label: %hhu, to label: %hhu\n", old_label, new_label);
                 ++reassigned_num;
                 dlabels[didx] = new_label;
+                khist->cluster_totals[old_label] -= 1;
+                khist->cluster_totals[new_label] += 1;
 
                 for (uint8_t cat = 0; cat < khist->cat_num; ++cat) {
                     khist->cluster_hists[old_label * khist->total_cat_val + khist->cat_idx[cat] + data[didx][cat]] -= 1;
@@ -185,7 +222,41 @@ void train_full(khist_clust_t *khist, const uint8_t * const * data, size_t dsize
                reassigned_num,
                cost);
 
+//        /** some debug **/
+//        for (uint8_t m = 0; m < khist->cluster_num; ++m) {
+//
+//            printf("Mode %hhu:\n", m);
+//            for (uint8_t c = 0; c < khist->cat_num; ++c) {
+//                printf("Category %hhu: ", c);
+//                for (uint8_t val = 0; val < khist->categories[c]; ++val) {
+//                    printf("%u", khist->cluster_hists[m * khist->total_cat_val + khist->cat_idx[c] + val]);
+//                }
+//                printf("\n");
+//            }
+//            printf("\n");
+//        }
+//        fflush(stdout);
+
+        /** end debug **/
+
     }
+
+//    /** some debug **/
+//    for (uint8_t m = 0; m < khist->cluster_num; ++m) {
+//
+//        printf("Mode %hhu:\n", m);
+//        for (uint8_t c = 0; c < khist->cat_num; ++c) {
+//            printf("Category %hhu: ", c);
+//            for (uint8_t val = 0; val < khist->categories[c]; ++val) {
+//                printf("%u", khist->cluster_hists[m * khist->total_cat_val + khist->cat_idx[c] + val]);
+//            }
+//            printf("\n");
+//        }
+//        printf("\n");
+//    }
+//    fflush(stdout);
+//
+//    /** end debug **/
 
     free(dlabels);
     return;
@@ -198,18 +269,24 @@ void train_incremental(khist_clust_t *khist, const uint8_t * const * data, size_
 
     printf("K-Histograms incremental training on %zu data points\n", dsize);
 
+    if (khist->active_hists != khist->cluster_num) {
+        printf("K-Histograms can not be trained incrementally, because not all histograms are initialized.\n");
+        return;
+    }
+
     cost = 0.0;
-    for (size_t didx = 0; d < dsize; ++d) {
+    for (size_t didx = 0; didx < dsize; ++didx) {
         assign_cluster_with_mem((const khist_clust_t *)khist, data[didx], (double *) cc);
 
         cost += cc[1];
+        khist->cluster_totals[(uint8_t) cc[0]] += 1;
 
         for (uint8_t cat = 0; cat < khist->cat_num; ++cat) {
             khist->cluster_hists[((uint8_t)cc[0]) * khist->total_cat_val + khist->cat_idx[cat] + data[didx][cat]] += 1;
         }
     }
 
-    printf("Completed K-Histogram clustering achieved for %zu data points with cost: %f\n", dsize, cost);
+    printf("Completed K-Histogram clustering for %zu data points with cost: %f\n", dsize, cost);
 
     return;
 }
@@ -227,9 +304,7 @@ static void assign_cluster_with_mem(const khist_clust_t * khist, const uint8_t *
         cost = 0;
 
         for (int cat = 0; cat < khist->cat_num; ++cat) {
-            if (data[cat] != khist->cluster_modes[mod * khist->cat_num + cat]) {
-                cost += ((double) (khist->cluster_totals[hist]) - (double)(khist->cluster_hists[hist*khist->total_cat_val + khist->cat_idx[cat] + data[cat]]);
-            }
+            cost += ((double) (khist->cluster_totals[hist])) - ((double)(khist->cluster_hists[hist*khist->total_cat_val + khist->cat_idx[cat] + data[cat]]));
         }
 
         cost /= (double) (khist->cluster_totals[hist]);
@@ -237,18 +312,18 @@ static void assign_cluster_with_mem(const khist_clust_t * khist, const uint8_t *
         if (cost < mincost || !mincost_count) {
             mincost = cost;
             memset(mincost_idx, 0, sizeof(mincost_idx));
-            mincost_idx[0] = mod;
+            mincost_idx[0] = hist;
             mincost_count = 1;
         }
         else if (cost == mincost) {
-            mincost_idx[mincost_count++] = mod;
+            mincost_idx[mincost_count++] = hist;
         }
     }
 
     uint8_t mrandval = (uint8_t) random() % mincost_count;
     res[0] = (double) (mincost_count > 1 ?
-          mincost_idx[0] :
-//        mincost_idx[(uint8_t) random() % mincost_count] :
+//          mincost_idx[0] :
+        mincost_idx[mrandval] :
         mincost_idx[0]);
     res[1] = mincost;
 
@@ -256,7 +331,7 @@ static void assign_cluster_with_mem(const khist_clust_t * khist, const uint8_t *
 }
 
 double * assign_cluster(const khist_clust_t * khist, const uint8_t * data) {
-    uint8_t * res;
+    double * res;
 
     if (!(res = malloc(2 * sizeof(double)))) {
         printf("Failed to allocate memory for K-Histograms clustering cluster and index\n");
@@ -312,7 +387,7 @@ khist_clust_t * khist_model_from_vals(const uint32_t * values, size_t num_values
     }
 
     for (int cl = 0; cl < cluster_num; ++cl) {
-        res->cluster_totals[cl] == values[at++];
+        res->cluster_totals[cl] = values[at++];
     }
 
     if (num_values < at + cluster_num * res->total_cat_val) {
