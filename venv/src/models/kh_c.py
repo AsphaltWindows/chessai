@@ -47,6 +47,9 @@ class KH_C:
         khist_create.argtypes = [POINTER(CatArray), c_size_t, c_uint8, ModesArray, c_size_t]
         self.khist = khist_create(categories_param, self.cat_num, cluster_num, modes_param, len(start_modes))
 
+    def free_model(self):
+        khist_free(self.khist)
+
     def train_full(self, data):
         DataArray = POINTER(c_uint8 * self.cat_num) * len(data)
         data_list = []
@@ -113,7 +116,7 @@ class KH_C:
         return model
 
     @staticmethod
-    def load_model(file_name):
+    def load_model2(file_name):
         file = open(file_name, "r")
         model_vals = list(map(int, file.readlines()))
         model = KH_C.model_from_vals(model_vals)

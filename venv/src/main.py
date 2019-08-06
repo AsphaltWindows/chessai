@@ -27,12 +27,19 @@ draws = [list(map(int, line.split(" "))) for line in drawsfile.readlines()]
 # clustering = kmc.KM_C([whitewins[0], blackwins[0], draws[0]], 3, ci.game_classes())
 # py_clust = km.KModes([whitewins[0], blackwins[0], draws[0]], 3, ci.game_classes())
 
-clustering = khc.KH_C([whitewins[0], whitewins[1], whitewins[2]], 3, ci.game_classes())
-py_clust = kh.KHist([whitewins[0], whitewins[1], whitewins[2]], 3, ci.game_classes())
+clustering = khc.KH_C([], 3, ci.game_classes())
+py_clust = kh.KHist([], 3, ci.game_classes())
 
-# clustering.train_full(whitewins + blackwins + draws)
-py_clust.train_full(whitewins + blackwins + draws)
+clustering.train_full(whitewins)
+py_clust.train_full(whitewins)
+
+# clustering.store_model2("/home/iv/dev/chessai/models/tmp/c_khist_test.model")
+# py_clust.store_model2("/home/iv/dev/chessai/models/tmp/py_khist_test.model")
+
 clustering.free_khist()
+
+# clustering2 = khc.KH_C.load_model2("/home/iv/dev/chessai/models/tmp/c_khist_test.model")
+# py_clust2 = kh.KHist.load_model2("/home/iv/dev/chessai/models/tmp/py_khist_test.model")
 
 
 # clustering = kmc.KM_C([[1, 1], [0, 0]], 2, [2,2])

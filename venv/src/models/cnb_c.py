@@ -33,9 +33,10 @@ class CNB_C:
         create_cnb_with_alpha.restype = c_void_p
         self.cnb = create_cnb_with_alpha(class_num, categories_param, self.cat_num, alpha)
 
+    def free_model(self):
+        free_cnb(self.cnb)
+
     def train_batch(self, labels, data):
-        print("labels: " + str(len(labels)))
-        print("data: " + str(len(data)))
         LabelsArray = c_uint8 * len(labels)
         labels_param = LabelsArray(*labels)
         DataArray = POINTER(c_uint8 * self.cat_num) * len(data)
@@ -48,7 +49,6 @@ class CNB_C:
         data_param = DataArray(*data_list)
         cnb_train_batch.argtypes = [c_void_p, DataArray, POINTER(c_uint8 * len(labels)), c_size_t]
         cnb_train_batch.restype = None
-        print(cnb_train_batch)
         cnb_train_batch(self.cnb, data_param, labels_param, len(data))
 
     def predict_class(self, data):

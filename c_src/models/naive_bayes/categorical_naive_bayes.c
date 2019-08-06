@@ -180,10 +180,10 @@ double * predict_class(const cnb_clas_t * cnb, const uint8_t * data) {
 
 
     for (int cl = 0; cl < cnb->class_num; ++cl) {
-        res[cl] = log((double) cnb->class_probs[cl]);
+        res[cl] = (double) cnb->class_probs[cl];
 
         for (int cat = 0; cat < cnb->cat_num; ++cat) {
-            res[cl] += log((double) cnb->class_cat_probs[cl * cnb->total_cat_vals + cnb->class_cat_idx[cat] + data[cat]]);
+            res[cl] += (double) cnb->class_cat_probs[cl * cnb->total_cat_vals + cnb->class_cat_idx[cat] + data[cat]];
         }
     }
 

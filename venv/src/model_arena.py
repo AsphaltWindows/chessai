@@ -1,5 +1,6 @@
 import models.categorical_naive_bayes as nb
 import models.cnb_c as nb_c
+import models.hhcb as hhcb
 import models.k_network_bayes as knb
 import models.clustered_bayes as cb
 import chess.categorical_input as ci
@@ -18,11 +19,15 @@ def select_position(positions, play_as):
     weights = []
 
     for idx, pos in enumerate(positions):
-        total = sum(pos)
-        win_n = pos[play_as] / total
-        draw_n = pos[cc.Draw] / total
+        win_n = 2 ** pos[play_as]
+        draw_n = 2 ** pos[cc.Draw]
+
+        if play_as == cc.White:
+            loss_n = 2 ** pos[cc.Black]
+        else:
+            loss_n = 2 ** pos[cc.White]
         # weights.append((win_n + draw_n / 2)**3)
-        weights.append((win_n + draw_n / 2))
+        weights.append((win_n + (draw_n / 2)) / (win_n + loss_n + draw_n))
         # if idx > 0:
         #     weights[idx] += weights[idx - 1]
 
@@ -85,6 +90,9 @@ elif model1_type == "cb":
 elif model1_type == "knb":
     model1 = knb.KNetworkBayes.load_model2(model1_dir + "/" + model1_type + str(model1_version) + ".model")
     player1 = lambda m, t: select_move(model1, t, m)
+elif model1_type == "hhcb":
+    model1 = hhcb.HierarchicalHistogramClusteredBayes.load_model2(model1_dir + "/" + model1_type + str(model1_version) + ".model")
+    player1 = lambda m, t: select_move(model1, t, m)
 
 if model2_type == "rand":
     player2 = lambda m, t: rand.randrange(0, len(m))
@@ -97,6 +105,9 @@ elif model2_type == "cb":
     player2 = lambda m, t: select_move(model2, t, m)
 elif model2_type == "knb":
     model2 = knb.KNetworkBayes.load_model(model2_dir + "/" + model2_type + str(model2_version) + ".model")
+    player2 = lambda m, t: select_move(model2, t, m)
+elif model2_type == "hhcb":
+    model2 = hhcb.HierarchicalHistogramClusteredBayes.load_model2(model2_dir + "/" + model2_type + str(model2_version) + ".model")
     player2 = lambda m, t: select_move(model2, t, m)
 
 player1_side = cc.White
