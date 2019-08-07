@@ -5,6 +5,7 @@ import models.cnb_c as cnb_c
 import models.clustered_bayes as cb
 import models.k_network_bayes as knb
 import models.hhcb as hhcb
+import models.hhcbsl as hhcbsl
 import chess.categorical_input as ci
 
 model_type = sys.argv[1]
@@ -70,6 +71,20 @@ elif model_type == "hhcb":
         model.train_incremental([0 for i in whitewins] + [1 for i in blackwins] + [2 for i in draws], whitewins + blackwins + draws)
 
     model.store_model2(model_dir + "/hhcb" + str(model_version + 1) + ".model")
+elif model_type == "hhcbsl":
+    if model_version == 0:
+        cluster_num = model_args[0]
+        tree_depth = model_args[1]
+        alpha = model_args[2]
+        model = hhcbsl.HierarchicalHistogramClusteredBayesSizeLimited(ci.game_classes(), cluster_num, 3, tree_depth, alpha)
+
+        model.train_model([0 for i in whitewins] + [1 for i in blackwins] + [2 for i in draws], whitewins + blackwins + draws)
+    else:
+        model = hhcbsl.HierarchicalHistogramClusteredBayesSizeLimited.load_model2(model_dir + "/hhcbsl" + str(model_version) + ".model")
+
+        model.train_model([0 for i in whitewins] + [1 for i in blackwins] + [2 for i in draws], whitewins + blackwins + draws)
+
+    model.store_model2(model_dir + "/hhcbsl" + str(model_version + 1) + ".model")
 
 whitewinsfile.close()
 blackwinsfile.close()
