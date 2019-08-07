@@ -146,12 +146,7 @@ static void recalculate_probabilities(cnb_clas_t *cnb) {
 
     for (int cl = 0; cl < cnb->class_num; ++cl) {
 
-        if (!cur_total) {
-            cnb->class_probs[cl] =  -1 * log((double)cnb->class_num);
-        }
-        else {
-            cnb->class_probs[cl] = log((double) cnb->class_totals[cl]) - log((double) cur_total);
-        }
+        cnb->class_probs[cl] = log((double) cnb->class_totals[cl] + cnb->alpha) - log((double) cur_total + cnb->class_num * cnb->alpha);
 
         for (int cat = 0; cat < cnb->cat_num; ++cat) {
             cur_total = 0;
@@ -162,7 +157,8 @@ static void recalculate_probabilities(cnb_clas_t *cnb) {
             for (int val = 0; val < cnb->categories[cat]; ++val) {
                 cnb->class_cat_probs[cl * cnb->total_cat_vals + cnb->class_cat_idx[cat] + val] = log((double) (cnb->alpha +
                     cnb->class_cat_totals[cl * cnb->total_cat_vals + cnb->class_cat_idx[cat] + val])) -
-                    log((double) (cur_total + cnb->categories[cat]));
+                    log((double) (cur_total + cnb->categories[cat] * cnb->alpha));
+
             }
         }
     }
@@ -185,6 +181,7 @@ double * predict_class(const cnb_clas_t * cnb, const uint8_t * data) {
         for (int cat = 0; cat < cnb->cat_num; ++cat) {
             res[cl] += (double) cnb->class_cat_probs[cl * cnb->total_cat_vals + cnb->class_cat_idx[cat] + data[cat]];
         }
+
     }
 
     return res;

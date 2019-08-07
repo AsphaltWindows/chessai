@@ -99,7 +99,8 @@ class HHCB_Node:
 
     def predict_class(self, data):
         if self.node_type == 0:
-            return self.classifier.predict_class(data)
+            probs = self.classifier.predict_class(data)
+            return probs
         else:
             return self.children[self.cluster_model.assign_cluster(data)[0]].predict_class(data)
 
@@ -111,6 +112,7 @@ class HHCB_Node:
                 print("Leaf-Node is too big, forming a new branch")
                 self.classifier.free_model()
                 self.classifier = None
+                self.node_type = 1
                 self.children = [HHCB_Node(self.categories, self.cluster_num, self.class_num, self.hierarchy + [cl], self.limit, 0, 0, self.alpha) for cl in range(0, self.cluster_num)]
                 self.cluster_model = khc.KH_C([], self.cluster_num, self.categories)
                 self.num_trained = 0
@@ -172,7 +174,7 @@ class HHCB_Node:
         alpha = float(model_vals[6]) / model_vals[7]
         hierarchy_num = model_vals[8]
         hierarchy = model_vals[9: 9 + hierarchy_num]
-        categories = model_vals[9 + hierarchy_num: 7 + hierarchy_num + cat_num]
+        categories = model_vals[9 + hierarchy_num: 9 + hierarchy_num + cat_num]
         at = 9 + hierarchy_num + cat_num
 
         node = HHCB_Node(categories, cluster_num, class_num, hierarchy, limit, node_type, num_trained, alpha)

@@ -1,6 +1,7 @@
 import models.categorical_naive_bayes as nb
 import models.cnb_c as nb_c
 import models.hhcb as hhcb
+import models.hhcbsl as hhcbsl
 import models.k_network_bayes as knb
 import models.clustered_bayes as cb
 import chess.categorical_input as ci
@@ -19,6 +20,7 @@ def select_position(positions, play_as):
     weights = []
 
     for idx, pos in enumerate(positions):
+        # print(pos)
         win_n = 2 ** pos[play_as]
         draw_n = 2 ** pos[cc.Draw]
 
@@ -27,12 +29,12 @@ def select_position(positions, play_as):
         else:
             loss_n = 2 ** pos[cc.White]
         # weights.append((win_n + draw_n / 2)**3)
-        weights.append((win_n + (draw_n / 2)) / (win_n + loss_n + draw_n))
+        weights.append(((win_n + (draw_n / 2)) / (win_n + loss_n + draw_n)) ** 4)
         # if idx > 0:
         #     weights[idx] += weights[idx - 1]
 
-    return np.argmax(weights)
-    # return rand.choices(range(0, len(positions)), cum_weights=weights)[0]
+    # return np.argmax(weights)
+    return rand.choices(range(0, len(positions)), weights)[0]
 
     # chance_to_win = False
     # best_idx = 0
@@ -93,6 +95,9 @@ elif model1_type == "knb":
 elif model1_type == "hhcb":
     model1 = hhcb.HierarchicalHistogramClusteredBayes.load_model2(model1_dir + "/" + model1_type + str(model1_version) + ".model")
     player1 = lambda m, t: select_move(model1, t, m)
+elif model1_type == "hhcbsl":
+    model1 = hhcbsl.HierarchicalHistogramClusteredBayesSizeLimited.load_model2(model1_dir + "/" + model1_type + str(model1_version) + ".model")
+    player1 = lambda m, t: select_move(model1, t, m)
 
 if model2_type == "rand":
     player2 = lambda m, t: rand.randrange(0, len(m))
@@ -108,6 +113,9 @@ elif model2_type == "knb":
     player2 = lambda m, t: select_move(model2, t, m)
 elif model2_type == "hhcb":
     model2 = hhcb.HierarchicalHistogramClusteredBayes.load_model2(model2_dir + "/" + model2_type + str(model2_version) + ".model")
+    player2 = lambda m, t: select_move(model2, t, m)
+elif model2_type == "hhcbsl":
+    model2 = hhcbsl.HierarchicalHistogramClusteredBayesSizeLimited.load_model2(model2_dir + "/" + model2_type + str(model2_version) + ".model")
     player2 = lambda m, t: select_move(model2, t, m)
 
 player1_side = cc.White

@@ -74,9 +74,9 @@ elif model_type == "hhcb":
 elif model_type == "hhcbsl":
     if model_version == 0:
         cluster_num = model_args[0]
-        tree_depth = model_args[1]
+        limit = model_args[1]
         alpha = model_args[2]
-        model = hhcbsl.HierarchicalHistogramClusteredBayesSizeLimited(ci.game_classes(), cluster_num, 3, tree_depth, alpha)
+        model = hhcbsl.HierarchicalHistogramClusteredBayesSizeLimited(ci.game_classes(), cluster_num, 3, limit, alpha)
 
         model.train_model([0 for i in whitewins] + [1 for i in blackwins] + [2 for i in draws], whitewins + blackwins + draws)
     else:
