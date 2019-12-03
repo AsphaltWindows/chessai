@@ -5,8 +5,6 @@
 #include <string.h>
 #include <math.h>
 
-static void recalculate_probabilities(cnb_clas_t *cnb);
-
 cnb_clas_t * create_cnb_with_alpha(uint8_t class_num, const uint8_t * cats, size_t csize, double alpha) {
     cnb_clas_t *res;
     uint32_t total_cat_values = 0;
@@ -169,7 +167,7 @@ void train_batch_on_selected(
     return;
 }
 
-static void recalculate_probabilities(cnb_clas_t *cnb) {
+void recalculate_probabilities(cnb_clas_t *cnb) {
     uint32_t cur_total = 0;
 
     for (int cl = 0; cl < cnb->class_num; ++cl) {

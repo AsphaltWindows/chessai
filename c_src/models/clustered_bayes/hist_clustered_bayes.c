@@ -19,7 +19,8 @@ static hcb_node_t * create_hcb_node(
         double alpha,
         uint32_t limit,
         uint8_t forget_factor,
-        uint8_t node_type);
+        uint8_t node_type,
+        cnb_clas_t * parent_classifier);
 
 static void free_hcb_node(hcb_node_t *node);
 
@@ -27,7 +28,9 @@ static void train_model_node(
         hcb_node_t * node,
         const uint8_t * const * data,
         const uint8_t * labels,
-        size_t dsize);
+        size_t dsize,
+        const size_t * selected_indices,
+        size_t num_selected);
 
 hcb_clas_t * create_hcb(
         uint8_t class_num,
@@ -68,7 +71,8 @@ hcb_clas_t * create_hcb(
                     alpha,
                     limit,
                     forget_factor,
-                    LEAF))) {
+                    LEAF,
+                    NULL))) {
         printf("Failed to create root node for hcb classifier\n");
         free_hcb(res);
         return NULL;
@@ -77,18 +81,41 @@ hcb_clas_t * create_hcb(
     res->class_num = class_num;
     res->cat_num = cat_num;
     res->cluster_num = cluster_num;
-    res->alpha = alpha;
     res->limit = limit;
     res->forget_factor = forget_factor;
 
     return res;
 }
 
-void train_model(hcb_clas_t *hcb, const uint8_t * const * data, const uint8_t * labels, size_t dsize) {
-    train_model_node(hcb->root, data, labels, dsize);
+void train_model(
+        hcb_clas_t *hcb,
+        const uint8_t * const * data,
+        const uint8_t * labels,
+        size_t dsize)
+{
+    size_t * selected_dummy;
+
+    if (!(selected_dummy = malloc(dsize * sizeof(size_t)))) {
+        printf("Failed to allocate memory for array of dummy selected indices to begin initial model training\n");
+        return;
+    }
+
+    for (unsigned int i = 0; i < dsize; ++i) {
+        selected_dummy[i] = i;
+    }
+
+    train_model_node(
+            hcb->root,
+            data,
+            labels,
+            dsize,
+            (const size_t *) selected_dummy,
+            dsize);
+
+    free(selected_dummy);
 }
 
-double * predict_class(const hcb_clas_t * hcb, const uint8_t * data);
+double * hcb_predict_class(const hcb_clas_t * hcb, const uint8_t * data);
 
 hcb_clas_t * hcb_model_from_vals(const uint32_t * values, size_t num_values);
 
@@ -119,15 +146,21 @@ static hcb_node_t * create_hcb_node(
         size_t cat_num,
         uint8_t cluster_num,
         const uint8_t * parent_hierarchy,
-        uint32_t hierachy_size,
+        uint32_t hierarchy_size,
         uint8_t local_hierarchy,
         double alpha,
         uint32_t limit,
         uint8_t forget_factor,
-        uint8_t node_type)
+        uint8_t node_type,
+        cnb_clas_t * parent_classifier)
 {
 
     hcb_node_t * res;
+
+    if (parent_classifier && node_type != LEAF) {
+        printf("A parent classifier was passed to node creation, but the desired node_type is not LEAF\n");
+        return NULL;
+    }
 
     if (!(res = malloc(sizeof(hcb_node_t)))) {
         printf("Failed to allocate memory for hcb node\n");
@@ -138,7 +171,7 @@ static hcb_node_t * create_hcb_node(
 
     if (!(res->categories = malloc(cat_num * sizeof(uint8_t)))) {
         printf("Failed to allocate memory for hcb node categories\n");
-        free_hcb(res);
+        free_hcb_node(res);
         return NULL;
     }
 
@@ -148,7 +181,7 @@ static hcb_node_t * create_hcb_node(
 
     if (!(res->hierarchy = malloc((hierarchy_size + 1) * sizeof(uint8_t)))) {
         printf("Failed to allocate memory for hcb node hierarchy\n");
-        free_hcb(res);
+        free_hcb_node(res);
         return NULL;
     }
 
@@ -156,7 +189,7 @@ static hcb_node_t * create_hcb_node(
         memcpy(res->hierarchy, parent_hierarchy, (size_t) hierarchy_size * sizeof(uint8_t));
     }
 
-    res->hierarchy[hierarchy_size] = local_hierarachy;
+    res->hierarchy[hierarchy_size] = local_hierarchy;
     res->hierarchy_size = hierarchy_size + 1;
     res->class_num = class_num;
     res->cat_num = cat_num;
@@ -174,10 +207,34 @@ static hcb_node_t * create_hcb_node(
             return NULL;
         }
 
+        if (parent_classifier) {
+
+            for (unsigned int i = 0; i < class_num; ++i) {
+
+                res->classifier->class_totals[i] = parent_classifier->class_totals[i] / forget_factor;
+
+            }
+
+            for (unsigned int i = 0; i < cat_num; ++i) {
+
+                res->classifier->class_cat_idx[i] = parent_classifier->class_cat_idx[i] / forget_factor;
+                
+            }
+
+            for (unsigned int i = 0; i < (parent_classifier->total_cat_vals * class_num); ++i) {
+
+                res->classifier->class_cat_totals[i] = parent_classifier->class_cat_totals[i] / forget_factor;
+
+            }
+
+            recalculate_probabilities(res->classifier);
+
+        }
+
         res->clustering = NULL;
     }
 
-    else if(res->node_type = BRANCH) {
+    else if (res->node_type == BRANCH) {
 
         if (!(res->clustering = create_khist(cats, cat_num, cluster_num, NULL, 0))) {
             printf("Failed to create K-Histograms clustering for hcb classifier branch node\n");
@@ -205,7 +262,8 @@ static hcb_node_t * create_hcb_node(
                             alpha,
                             limit,
                             forget_factor,
-                            LEAF)))
+                            LEAF,
+                            NULL)))
             {
                 printf("Failed to create HCB leaf node for HCB branch node of HCB classifier\n");
                 free_hcb_node(res);
@@ -246,7 +304,7 @@ static void free_hcb_node(hcb_node_t *node) {
 
     if (node->children) {
 
-        for (uint8_t i = 0; i < cluster_num; ++i) {
+        for (uint8_t i = 0; i < node->cluster_num; ++i) {
             if (node->children[i]) {
                 free_hcb_node(node->children[i]);
                 node->children[i] = NULL;
@@ -266,14 +324,15 @@ static void train_model_node(
         const uint8_t * const * data,
         const uint8_t * labels,
         size_t dsize,
-        const uint8_t * selected_indices,
+        const size_t * selected_indices,
         size_t num_selected)
 {
     khist_clust_t * clustering;
     size_t * label_counts;
-    uint8_t tmp_label;
     size_t didx;
     size_t ** split_data_indices;
+    uint8_t tmp_label;
+    uint32_t class_total;
 
     if (dsize < num_selected) {
         printf("The data size (%zu) is lesser than the number of selected data points (%zu), so there must be an error\n", dsize, num_selected);
@@ -290,9 +349,67 @@ static void train_model_node(
                 selected_indices,
                 num_selected);
 
-        if (node->classifier->total_cat_vals > node->limit) {
-            // Here we split the node
+        class_total = 0;
+
+        for (uint8_t cidx = 0; cidx < node->class_num; ++cidx) {
+            class_total += node->classifier->class_totals[cidx];
         }
+
+        if (class_total > node->limit) {
+
+            if (!(node->clustering = create_khist(
+                           node->categories,
+                           node->cat_num,
+                           node->cluster_num,
+                           NULL,
+                           0))) {
+                printf("Failed to create new k-histograms clustering\n");
+                return;
+            }
+
+            node->node_type = BRANCH;
+
+            for (uint8_t cidx = 0; cidx < node->cluster_num; ++cidx) {
+                
+                if (!( node->children[cidx] = create_hcb_node(
+                    node->class_num,
+                    node->categories,
+                    node->cat_num,
+                    node->cluster_num,
+                    node->hierarchy,
+                    node->hierarchy_size,
+                    cidx,
+                    node->classifier->alpha,
+                    node->limit,
+                    node->forget_factor,
+                    LEAF,
+                    node->classifier))) {
+                    printf("Failed to create child node for new transformed BRANCH node\n");
+
+                    for (uint8_t cidx2 = 0; cidx2 < cidx; ++cidx2) {
+                        free_hcb_node(
+                                node->children[cidx2]);
+                        node->children[cidx2] = NULL;
+                    }
+
+                    return;
+                }
+
+            }
+
+            free_cnb(node->classifier);
+            node->classifier = NULL;
+
+            train_model_node(
+                node,
+                data,
+                labels,
+                dsize,
+                selected_indices,
+                num_selected);
+
+        }
+
     }
     else if (node->node_type == BRANCH) {
 

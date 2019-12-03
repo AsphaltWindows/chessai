@@ -54,6 +54,9 @@ cnb_clas_t * cnb_model_from_vals(
 uint32_t * cnb_model_to_vals(
         const cnb_clas_t * cnb);
 
+void recalculate_probabilities(
+        cnb_clas_t *cnb);
+
 void free_cnb(cnb_clas_t *cnb);
 
 #endif

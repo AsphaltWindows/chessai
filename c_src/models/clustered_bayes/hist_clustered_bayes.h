@@ -4,6 +4,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "../naive_bayes/categorical_naive_bayes.h"
+#include "../k_histograms/k_hist.h"
+
 #define LEAF 0
 #define BRANCH 1
 
@@ -17,7 +20,7 @@ typedef struct hist_clustered_bayes_node {
     uint8_t node_type;
     uint32_t num_trained;
     uint8_t *hierarchy;
-    uint32_t hierachy_size;
+    uint32_t hierarchy_size;
     khist_clust_t *clustering;
     cnb_clas_t *classifier;
     struct hist_clustered_bayes_node ** children;
@@ -39,7 +42,7 @@ void train_model(
         const uint8_t * labels,
         size_t dsize);
 
-double * predict_class(
+double * hcb_predict_class(
         const hcb_clas_t * hcb,
         const uint8_t * data);
 
