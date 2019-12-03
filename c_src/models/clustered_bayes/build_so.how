@@ -1,0 +1,2 @@
+gcc -fPIC -c -o categorical_naive_bayes.o categorical_naive_bayes.c 
+gcc -shared -o libcnb.so categorical_naive_bayes.o

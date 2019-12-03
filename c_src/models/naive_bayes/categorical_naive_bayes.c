@@ -19,7 +19,7 @@ cnb_clas_t * create_cnb_with_alpha(uint8_t class_num, const uint8_t * cats, size
     memset(res, 0, sizeof(cnb_clas_t));
 
     if (!(res->categories = malloc(csize * sizeof(uint8_t)))) {
-        printf("Failed to allocate memory cnb classifier categories\n");
+        printf("Failed to allocate memory for cnb classifier categories\n");
         return NULL;
     }
 
@@ -28,21 +28,21 @@ cnb_clas_t * create_cnb_with_alpha(uint8_t class_num, const uint8_t * cats, size
     }
 
     if (!(res->class_totals = malloc(class_num * sizeof(uint32_t)))) {
-        printf("Failed to allocate memory cnb classifier class totals\n");
+        printf("Failed to allocate memory for cnb classifier class totals\n");
         return NULL;
     }
 
     memset(res->class_totals, 0, class_num * sizeof(uint32_t));
 
     if (!(res->class_probs = malloc(class_num * sizeof(double)))) {
-        printf("Failed to allocate memory cnb classifier class probabilities\n");
+        printf("Failed to allocate memory for cnb classifier class probabilities\n");
         return NULL;
     }
 
     memset(res->class_probs, 0, class_num * sizeof(double));
 
     if (!(res->class_cat_idx = malloc(csize * sizeof(uint32_t)))) {
-        printf("Failed to allocate memory cnb classifier category indices\n");
+        printf("Failed to allocate memory for cnb classifier category indices\n");
         return NULL;
     }
 
@@ -133,6 +133,38 @@ void train_batch(cnb_clas_t *cnb, const uint8_t * const * data, const uint8_t * 
     recalculate_probabilities(cnb);
 
     printf("Categorical Naive Bayes trained on %zu data points\n", dsize);
+
+    return;
+}
+
+void train_batch_on_selected(
+        cnb_clas_t *cnb,
+        const uint8_t * const * data,
+        const uint8_t * labels,
+        size_t dsize,
+        const size_t * selected_indices,
+        size_t num_selected)
+{
+    unsigned int dn;
+
+    if (dsize < num_selected) {
+        printf("The data size (%zu) is lesser than the number of selected data points (%zu), so there must be an error\n", dsize, num_selected);
+        return;
+    }
+
+    for (unsigned int sel_idx = 0; sel_idx < num_selected; ++sel_idx) {
+        dn = selected_indices[sel_idx];
+        cnb->class_totals[labels[dn]] += 1;
+
+        for (int cat = 0; cat < cnb->cat_num; ++cat) {
+            cnb->class_cat_totals[labels[dn] * cnb->total_cat_vals + cnb->class_cat_idx[cat] + data[dn][cat]] += 1;
+        }
+
+    }
+
+    recalculate_probabilities(cnb);
+
+    printf("Categorical Naive Bayes trained on %zu data points\n", num_selected);
 
     return;
 }

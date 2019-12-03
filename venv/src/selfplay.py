@@ -1,4 +1,4 @@
-import sys
+ mport sys
 import os
 import numpy as np
 import random as rand
@@ -152,15 +152,22 @@ while at_round < round_num:
 
         data += position_inputs
 
+        printstr = "Round: " + str(at_round) + " Game: " + str(n) + " Result: "
+
         if state == cc.Draw:
             labels += [cc.Draw for pos in position_inputs]
             draw_num += 1
+            printstr += "Draw"
         elif state == cc.WhiteWin:
             labels += [cc.WhiteWin for pos in position_inputs]
             whitewin_num += 1
+            printstr += "White Win"
         else:
             labels += [cc.BlackWin for pos in position_inputs]
             blackwin_num += 1
+            printstr += "Black Win"
+
+        print(printstr)
 
     print("Training model on games of round " + str(at_round))
 
@@ -170,6 +177,7 @@ while at_round < round_num:
     )
 
     resultsFile.write("round " + str(at_round) + " white wins: " + str(whitewin_num) + " black wins: " + str(blackwin_num) + " draws : " + str(draw_num) + "\n")
+    resultsFile.flush()
 
     at_round += 1
 

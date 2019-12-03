@@ -28,13 +28,13 @@ def select_position(positions, play_as):
             loss_n = 2 ** pos[cc.Black]
         else:
             loss_n = 2 ** pos[cc.White]
-        # weights.append((win_n + draw_n / 2)**3)
-        weights.append(((win_n + (draw_n / 2)) / (win_n + loss_n + draw_n)) ** 4)
+        # weights.append(((win_n + (draw_n / 2)) / (win_n + loss_n + draw_n)) ** 4)
+        weights.append((win_n + (draw_n / 2)) / (win_n + loss_n + draw_n))
         # if idx > 0:
         #     weights[idx] += weights[idx - 1]
 
-    # return np.argmax(weights)
-    return rand.choices(range(0, len(positions)), weights)[0]
+    return np.argmax(weights)
+    # return rand.choices(range(0, len(positions)), weights)[0]
 
     # chance_to_win = False
     # best_idx = 0
