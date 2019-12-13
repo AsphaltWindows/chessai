@@ -1,7 +1,6 @@
 #include "categorical_naive_bayes.h"
 
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 #include <math.h>
 
@@ -252,7 +251,7 @@ cnb_clas_t * cnb_model_from_vals(const uint32_t * values, size_t num_values) {
         categories[cat] = (uint8_t)values[at++];
     }
 
-    if (!(res = create_cnb_with_alpha(class_num, categories, (size_t) cat_num, (double)alpha_num / alpha_denom))) {
+    if (!(res = create_cnb_with_alpha(class_num, categories, (size_t) cat_num, ((double)alpha_num) / alpha_denom))) {
         printf("Failed to create Categorical Naive Bayes classifier\n");
         free(categories);
         return NULL;
@@ -337,4 +336,105 @@ uint32_t * cnb_model_to_vals(const cnb_clas_t * cnb) {
     return res;
 }
 
+cnb_clas_t * cnb_from_file(
+        FILE * file)
+{
+
+    cnb_clas_t * res;
+    uint8_t class_num;
+    uint8_t cat_num;
+    uint32_t alpha_num;
+    uint32_t alpha_denom;
+    uint8_t * categories;
+
+    fscanf(file, "%hhu\n", &class_num);
+    fscanf(file, "%u\n", &alpha_num);
+    fscanf(file, "%u\n", &alpha_denom);
+
+    fscanf(file, "%hhu\n", &cat_num);
+
+    if (!(categories = malloc(cat_num * sizeof(uint8_t)))) {
+        printf("Failed to allocate memory for categories array for Naive Bayes Classifier.\n");
+        return NULL;
+    }
+
+    memset(categories, 0, cat_num * sizeof(uint8_t));
+
+
+    for (uint8_t cat = 0; cat < cat_num; ++cat) {
+        fscanf(file, "%hhu\n", &categories[cat]);
+    }
+
+    if (!(res = create_cnb_with_alpha(class_num, categories, (size_t) cat_num, ((double)alpha_num) / alpha_denom))) {
+        printf("Failed to create Categorical Naive Bayes classifier\n");
+        free(categories);
+        return NULL;
+    }
+
+    free(categories);
+
+    for (uint8_t class = 0; class < res->class_num; ++class) {
+        fscanf(file, "%u\n", &(res->class_totals[class]));
+    }
+
+    for (int cl = 0; cl < class_num; ++cl) {
+        for (int cat = 0; cat < cat_num; ++cat) {
+            for (int val = 0; val < res->categories[cat]; ++val) {
+                fscanf(
+                        file,
+                        "%u\n",
+                        &(res->class_cat_totals[cl * res->total_cat_vals + res->class_cat_idx[cat] + val]));
+            }
+        }
+    }
+
+    recalculate_probabilities(res);
+
+    return res;
+}
+
+void cnb_to_file(
+        const cnb_clas_t * cnb,
+        FILE * file)
+{
+    fprintf(file, "%hhu\n", cnb->class_num);
+
+    if (cnb->alpha >= 1000) {
+        fprintf(file, "%u\n", (uint32_t)cnb->alpha);
+        fprintf(file, "%u\n", 1);
+    }
+    else if (cnb->alpha > 1) {
+        fprintf(file, "%u\n", (uint32_t)(cnb->alpha * 1000));
+        fprintf(file, "%u\n", 1000);
+    }
+    else {
+        fprintf(file, "%u\n", (uint32_t)(cnb->alpha * 1000000));
+        fprintf(file, "%u\n", 1000000);
+    }
+
+    fprintf(file, "%hhu\n", cnb->cat_num);
+
+    for (int cat = 0; cat < cnb->cat_num; ++cat) {
+        fprintf(file, "%hhu\n", cnb->categories[cat]);
+    }
+
+    for (int cl = 0; cl < cnb->class_num; ++cl) {
+        fprintf(file, "%u\n", cnb->class_totals[cl]);
+    }
+
+    for (int cl = 0; cl < cnb->class_num; ++cl) {
+        for (int cat = 0; cat < cnb->cat_num; ++cat) {
+            for (int val = 0; val < cnb->categories[cat]; ++val) {
+                fprintf(
+                        file,
+                        "%u\n",
+                        cnb->class_cat_totals[cl * cnb->total_cat_vals + cnb->class_cat_idx[cat] + val]);
+            }
+        }
+    }
+
+    fflush(file);
+
+    return;
+}
 

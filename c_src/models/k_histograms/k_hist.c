@@ -1,7 +1,6 @@
 #include "k_hist.h"
 
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 
 static void assign_cluster_with_mem(const khist_clust_t * khist, const uint8_t * data, double * res);
@@ -705,3 +704,84 @@ uint32_t * khist_model_to_vals(const khist_clust_t * khist) {
 
     return res;
 }
+
+khist_clust_t * khist_from_file(
+        FILE * file)
+{
+    uint8_t cluster_num;
+    uint8_t cat_num;
+    uint8_t * categories;
+    khist_clust_t * res;
+
+    fscanf(file, "%hhu\n", &cat_num);
+    fscanf(file, "%hhu\n", &cluster_num);
+
+    printf("Loading K-Histograms Clustering with %hhu categories and %hhu clusters\n", cat_num, cluster_num);
+
+    if (!(categories = malloc(cat_num * sizeof(uint8_t)))) {
+        printf("Failed to allocate memory for K-Histograms clustering model categories\n");
+        return NULL;
+    }
+
+    for (int cat = 0; cat < cat_num; ++cat) {
+        fscanf(file, "%hhu\n", &(categories[cat]));
+    }
+
+    if (!(res = create_khist((const uint8_t *) categories, cat_num, cluster_num, NULL, 0))) {
+        printf("Failed to create K-Histograms clustering model\n");
+        free(categories);
+        return NULL;
+    }
+
+    free(categories);
+
+    for (int cl = 0; cl < cluster_num; ++cl) {
+        fscanf(file, "%u\n", &(res->cluster_totals[cl]));
+    }
+
+    for (int cl = 0; cl < cluster_num; ++cl) {
+        for(int cat = 0; cat < cat_num; ++cat) {
+            for (int val = 0; val < res->categories[cat]; ++val) {
+                fscanf(
+                        file,
+                        "%u\n",
+                        &(res->cluster_hists[cl * res->total_cat_val + res->cat_idx[cat] + val]));
+            }
+        }
+    }
+
+    return res;
+}
+
+void khist_to_file(
+        khist_clust_t *khist,
+        FILE * file)
+{
+
+    fprintf(file, "%hhu\n", khist->cat_num);
+    fprintf(file, "%hhu\n", khist->cluster_num);
+
+    for (int cat = 0; cat < khist->cat_num; ++cat) {
+        fprintf(file, "%hhu\n", khist->categories[cat]);
+    }
+
+    for (int cl = 0; cl < khist->cluster_num; ++cl) {
+        fprintf(file, "%u\n", khist->cluster_totals[cl]);
+    }
+
+    for (int cl = 0; cl < khist->cluster_num; ++cl) {
+        for (int cat = 0; cat < khist->cat_num; ++cat) {
+            for (int val = 0; val < khist->categories[cat]; ++val) {
+                fprintf(
+                        file,
+                        "%u\n",
+                        khist->cluster_hists[cl * khist->total_cat_val + khist->cat_idx[cat] + val]);
+            }
+        }
+    }
+
+    fflush(file);
+
+    return;
+}
+

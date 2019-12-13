@@ -12,27 +12,29 @@
 
 typedef struct hist_clustered_bayes_node {
     uint8_t class_num;
-    uint8_t * categories;
     uint8_t cat_num;
-    uint32_t limit;
-    uint8_t cluster_num;
-    uint8_t forget_factor;
-    uint8_t node_type;
-    uint32_t num_trained;
-    uint8_t *hierarchy;
+    uint8_t * categories;
     uint32_t hierarchy_size;
-    khist_clust_t *clustering;
+    uint8_t *hierarchy;
+    uint8_t node_type;
+    uint8_t alpha;
+    uint8_t forget_factor;
+    uint32_t limit;
+    uint32_t num_trained;
     cnb_clas_t *classifier;
+    uint8_t cluster_num;
+    khist_clust_t *clustering;
     struct hist_clustered_bayes_node ** children;
 } hcb_node_t;
 
 typedef struct hist_clustered_bayes {
     uint8_t class_num;
-    uint8_t * categories;
     uint8_t cat_num;
+    uint8_t * categories;
+    uint8_t alpha;
+    uint8_t forget_factor;
     uint32_t limit;
     uint8_t cluster_num;
-    uint8_t forget_factor;
     hcb_node_t * root;
 } hcb_clas_t;
 
@@ -55,12 +57,12 @@ hcb_clas_t * create_hcb(
         uint32_t limit,
         uint8_t forget_factor);
 
-hcb_clas_t * hcb_model_from_vals(
-        const uint32_t * values,
-        size_t num_values);
+hcb_clas_t * hcb_model_from_file(
+        const char * filename);
 
-uint32_t * hcb_model_to_vals(
-        const hcb_clas_t * hcb);
+void hcb_model_to_file(
+        const hcb_clas_t * hcb,
+        const char * filename);
 
 void free_hcb(
         hcb_clas_t *hcb);

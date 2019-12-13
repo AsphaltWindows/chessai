@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 typedef struct k_hists {
     uint8_t * categories;
@@ -62,5 +63,12 @@ double * assign_cluster(
 uint8_t assign_cluster_no_cost(
         const khist_clust_t * khist,
         const uint8_t * data);
+
+khist_clust_t * khist_from_file(
+        FILE * file);
+
+void khist_to_file(
+        khist_clust_t *khist,
+        FILE * file);
 
 #endif

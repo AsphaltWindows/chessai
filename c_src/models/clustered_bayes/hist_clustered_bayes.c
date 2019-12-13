@@ -22,7 +22,8 @@ static hcb_node_t * create_hcb_node(
         uint8_t node_type,
         cnb_clas_t * parent_classifier);
 
-static void free_hcb_node(hcb_node_t *node);
+static void free_hcb_node(
+        hcb_node_t *node);
 
 static void train_model_node(
         hcb_node_t * node,
@@ -31,6 +32,14 @@ static void train_model_node(
         size_t dsize,
         const size_t * selected_indices,
         size_t num_selected);
+
+static void hcb_node_to_file(
+        const hcb_node_t * node,
+        FILE * file);
+
+static hcb_node_t * hcb_node_from_file(
+        FILE * file);
+
 
 hcb_clas_t * create_hcb(
         uint8_t class_num,
@@ -81,6 +90,7 @@ hcb_clas_t * create_hcb(
     res->class_num = class_num;
     res->cat_num = cat_num;
     res->cluster_num = cluster_num;
+    res->alpha = alpha;
     res->limit = limit;
     res->forget_factor = forget_factor;
 
@@ -195,6 +205,7 @@ static hcb_node_t * create_hcb_node(
     res->cat_num = cat_num;
     res->cluster_num = cluster_num;
     res->limit = limit;
+    res->alpha = alpha;
     res->forget_factor = forget_factor;
     res->node_type = node_type;
     res->num_trained = 0;
@@ -332,7 +343,6 @@ static void train_model_node(
     size_t didx;
     size_t ** split_data_indices;
     uint8_t tmp_label;
-    uint32_t class_total;
 
     if (dsize < num_selected) {
         printf("The data size (%zu) is lesser than the number of selected data points (%zu), so there must be an error\n", dsize, num_selected);
@@ -349,13 +359,9 @@ static void train_model_node(
                 selected_indices,
                 num_selected);
 
-        class_total = 0;
+        node->num_trained += num_selected;
 
-        for (uint8_t cidx = 0; cidx < node->class_num; ++cidx) {
-            class_total += node->classifier->class_totals[cidx];
-        }
-
-        if (class_total > node->limit) {
+        if (node->num_trained > node->limit) {
 
             if (!(node->clustering = create_khist(
                            node->categories,
@@ -483,3 +489,222 @@ static void train_model_node(
 
     return;
 }
+
+void hcb_model_to_file(
+        const hcb_clas_t * hcb,
+        const char * filename)
+{
+    FILE * file;
+
+    if (!(file = fopen(filename, "w"))) {
+        printf("Failed to open file %s for writing Histogram Clustered Bayes model.\n", filename);
+        return;
+    }
+
+    fprintf(file, "%hhu\n", hcb->class_num);
+    fprintf(file, "%hhu\n", hcb->cat_num);
+
+    for (uint8_t cat = 0; cat < hcb->cat_num; ++cat) {
+        fprintf(file, "%hhu\n", hcb->categories[cat]);
+    }
+
+    fprintf(file, "%hhu\n", hcb->alpha);
+    fprintf(file, "%u\n", hcb->forget_factor);
+    fprintf(file, "%u\n", hcb->limit);
+    fprintf(file, "%hhu\n", hcb->cluster_num);
+
+    hcb_node_to_file(
+            hcb->root,
+            file);
+
+    fflush(file);
+    fclose(file);
+
+    return;
+}
+
+static void hcb_node_to_file(
+        const hcb_node_t * node,
+        FILE * file)
+{
+    fprintf(file, "%hhu\n", node->class_num);
+    fprintf(file, "%hhu\n", node->cat_num);
+
+    for (uint8_t cat = 0; cat < node->cat_num; ++cat) {
+        fprintf(file, "%hhu\n", node->categories[cat]);
+    }
+
+    fprintf(file, "%u\n", node->hierarchy_size);
+
+    for (uint8_t h = 0; h < node->hierarchy_size; ++h) {
+        fprintf(file, "%hhu\n", node->hierarchy[h]);
+    }
+
+    fprintf(file, "%hhu\n", node->node_type);
+    fprintf(file, "%hhu\n", node->alpha);
+    fprintf(file, "%hhu\n", node->forget_factor);
+    fprintf(file, "%u\n", node->limit);
+    fprintf(file, "%u\n", node->num_trained);
+
+    if (node->node_type == LEAF) {
+        cnb_to_file(
+                node->classifier,
+                file);
+    }
+
+    fprintf(file, "%hhu\n", node->cluster_num);
+
+    if (node->node_type == BRANCH) {
+        khist_to_file(
+                node->clustering,
+                file);
+
+        for (uint8_t clust = 0; clust < node->cluster_num; ++clust) {
+            hcb_node_to_file(
+                    node->children[clust],
+                    file);
+        }
+    }
+
+    fflush(file);
+
+    return;
+}
+
+hcb_clas_t * hcb_model_from_file(
+        const char * filename)
+{
+    FILE * file;
+    hcb_clas_t * res;
+
+    if (!(file = fopen(filename, "r"))) {
+        printf("Failed to open file %s for reading Histogram Clustered Bayes model.\n", filename);
+        return NULL;
+    }
+
+    if (!(res = malloc(sizeof(hcb_clas_t)))) {
+        printf("Failed to allocate memory for Histogram Clustered Bayes model.\n");
+        return NULL;
+    }
+
+    memset(res, 0, sizeof(hcb_clas_t));
+
+    fscanf(file, "%hhu\n", &(res->class_num));
+    fscanf(file, "%hhu\n", &(res->cat_num));
+
+    if (!(res->categories = malloc(sizeof(uint8_t) * res->cat_num))) {
+        printf("Failed to allocate memory for categories array of Histogram Clustered Bayes model.\n");
+        free_hcb(res);
+        return NULL;
+    }
+
+    for (uint8_t cat = 0; cat < res->cat_num; ++cat) {
+        fscanf(file, "%hhu\n", &(res->categories[cat]));
+    }
+
+    fscanf(file, "%hhu\n", &(res->alpha));
+    fscanf(file, "%hhu\n", &(res->forget_factor));
+    fscanf(file, "%u\n", &(res->limit));
+    fscanf(file, "%hhu\n", &(res->cluster_num));
+
+    if (!(res->root = hcb_node_from_file(
+                    file))) {
+        printf("Failed to deserialize Histogram Clustered Bayes root node.\n");
+        free_hcb(res);
+        return NULL;
+    }
+
+    fclose(file);
+
+    return res;
+}
+
+static hcb_node_t * hcb_node_from_file(
+        FILE * file)
+{
+
+    hcb_node_t * res;
+
+    if (!(res = malloc(sizeof(hcb_node_t)))) {
+        printf("Failed to allocate memory for Histogram Clustered Bayes node.\n");
+        return NULL;
+    }
+
+    memset(res, 0, sizeof(hcb_node_t));
+
+    fscanf(file, "%hhu\n", &(res->class_num));
+    fscanf(file, "%hhu\n", &(res->cat_num));
+
+    if (!(res->categories = malloc(sizeof(uint8_t) * res->cat_num))) {
+        printf("Failed to allocate memory for categories array of Histogram Clustered Bayes node.\n");
+        free_hcb_node(res);
+        return NULL;
+    }
+    
+    memset(res->categories, 0, sizeof(uint8_t) * res->cat_num);
+
+    for (uint8_t cat = 0; cat < res->cat_num; ++cat) {
+        fscanf(file, "%hhu\n", &(res->categories[cat]));
+    }
+
+    fscanf(file, "%u\n", &(res->hierarchy_size));
+
+    if (!(res->hierarchy = malloc(sizeof(uint8_t) * res->hierarchy_size))) {
+        printf("Failed to allocate memory for hierarchy array of Histogram Clustered Bayes node.\n");
+        free_hcb_node(res);
+        return NULL;
+    }
+    
+    memset(res->hierarchy, 0, sizeof(uint8_t) * res->hierarchy_size);
+
+    for (uint8_t h = 0; h < res->hierarchy_size; ++h) {
+        fscanf(file, "%hhu\n", &(res->hierarchy[h]));
+    }
+
+    fscanf(file, "%hhu\n", &(res->node_type));
+    fscanf(file, "%hhu\n", &(res->alpha));
+    fscanf(file, "%hhu\n", &(res->forget_factor));
+    fscanf(file, "%u\n", &(res->limit));
+    fscanf(file, "%u\n", &(res->num_trained));
+
+    if (res->node_type == LEAF) {
+        if (!(res->classifier = cnb_from_file(
+                        file))) {
+            printf("Failed to deserialize Categorical Naive Bayes classifier from file.\n");
+            free_hcb_node(res);
+            return NULL;
+        }
+    }
+
+    fscanf(file, "%hhu\n", &(res->cluster_num));
+    
+    if (res->node_type == BRANCH) {
+        if (!(res->clustering = khist_from_file(
+                        file))) {
+            printf("Failed to deserialize Histogram Clustering from file.\n");
+            free_hcb_node(res);
+            return NULL;
+        }
+
+        if (!(res->children = malloc(res->cluster_num * sizeof(hcb_node_t *)))) {
+            printf("Failed to allocate array for children nodes of Histogram Clustered Bayes node.\n");
+            free_hcb_node(res);
+            return NULL;
+        }
+
+        memset(res->children, 0, res->cluster_num * sizeof(hcb_node_t *));
+
+        for (uint8_t clust = 0; clust < res->cluster_num; ++clust) {
+
+            if (!(res->children[clust] = hcb_node_from_file(
+                            file))) {
+                printf("Failed to deserialize child Histogram Clustered Bayes node.\n");
+                free_hcb_node(res);
+                return NULL;
+            }
+        }
+    }
+
+    return res;
+}
+

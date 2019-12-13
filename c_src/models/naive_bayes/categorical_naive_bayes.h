@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-
+#include <stdio.h>
 
 typedef struct categorical_naive_bayes {
     uint8_t class_num;
@@ -53,6 +53,13 @@ cnb_clas_t * cnb_model_from_vals(
 
 uint32_t * cnb_model_to_vals(
         const cnb_clas_t * cnb);
+
+cnb_clas_t * cnb_from_file(
+        FILE * file);
+
+void cnb_to_file(
+        const cnb_clas_t * cnb,
+        FILE * file);
 
 void recalculate_probabilities(
         cnb_clas_t *cnb);
