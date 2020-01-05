@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <math.h>
+#include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
 
@@ -16,8 +17,8 @@ static bool is_prime(
 static uint64_t smallest_prime_greater_than(
         uint64_t num);
 static uint64_t hash_index(
-        chess_ctx_t * ctx,
-        position_t * pos_ptr);
+        const chess_ctx_t * const ctx,
+        const position_t * const pos_ptr);
 static void cleanup_context_cache(
         chess_ctx_t * ctx);
 static void cleanup_bucket(
@@ -36,7 +37,7 @@ chess_ctx_t * create_context(
     }
 
     memset(res, 0, sizeof(chess_ctx_t));
-    prime = smallest_prime_greater_than(num);
+    prime = smallest_prime_greater_than(pos_limit);
 
     res->pos_limit = pos_limit;
     res->prime = prime;
@@ -69,7 +70,7 @@ chess_ctx_t * create_context(
 static uint64_t smallest_prime_greater_than(
         uint64_t num)
 {
-    uint64_t at = at;
+    uint64_t at = num;
 
     while (!is_prime(at)) {
         ++at;
@@ -81,10 +82,9 @@ static uint64_t smallest_prime_greater_than(
 static bool is_prime(
         uint64_t num)
 {
-    uint32_t from;
     uint32_t upto;
+    uint32_t at = 2;
 
-    at = 2;
     upto = (uint32_t) (sqrt((double) num)) + 1;
 
     while (at < upto) {
@@ -119,20 +119,22 @@ node_t * position_node(
         position_t * pos_ptr,
         gid_t game_id)
 {
-    moves * moves;
+    move_t * moves;
     n_bucket_t * found_bucket, * new_bucket;
     size_t move_num;
 
-    uint64_t idx = hash_index(ctx,position)
+    uint64_t idx = hash_index(
+            ctx,
+            pos_ptr);
 
     found_bucket = ctx->node_hashtable[idx];
 
     while (found_bucket) {
 
-        if (!memcmp((const void *) found_bucket->node.pos, (const void *) pos_ptr, sizeof(position_t))) {
+        if (!memcmp((const void *) (&(found_bucket->node.pos)), (const void *) pos_ptr, sizeof(position_t))) {
             found_bucket->node.gid = game_id;
             found_bucket->node.hits_num++;
-            return found_bucket->node
+            return &(found_bucket->node);
         }
 
         found_bucket = found_bucket->next;
@@ -151,7 +153,7 @@ node_t * position_node(
     ctx->free_bucket = new_bucket->next;
     new_bucket->next = found_bucket;
 
-    memcpy(&(new_bucket->node.pos), &pos, sizeof(position_t));
+    memcpy(&(new_bucket->node.pos), pos_ptr, sizeof(position_t));
     new_bucket->node.hits_num = 1;
     new_bucket->node.moves = moves;
     new_bucket->node.move_num = move_num;
@@ -159,12 +161,12 @@ node_t * position_node(
     ctx->node_hashtable[idx] = new_bucket;
     ctx->num_pos++;
 
-    return new_bucket->node;
+    return &(new_bucket->node);
 }
 
 static uint64_t hash_index(
-        chess_ctx_t * ctx,
-        position_t * pos_ptr)
+        const chess_ctx_t * const ctx,
+        const position_t * const pos_ptr)
 {
     unsigned char hash[HASH_SIZE];
     MurmurHash3_x64_128(
@@ -196,7 +198,7 @@ static void cleanup_context_cache(
 
     average = total_num ? total_hits / total_num : 0;
 
-    for (uint64 at = 0; at < ctx->prime; ++at) {
+    for (uint64_t at = 0; at < ctx->prime; ++at) {
         bucket = ctx->node_hashtable[at];
         prev_bucket = NULL;
 
@@ -233,21 +235,16 @@ static void cleanup_bucket(
         n_bucket_t * bucket)
 {
     free(bucket->node.moves);
-    memset(bucket->node, 0, sizeof(node_t));
+    memset(&(bucket->node), 0, sizeof(node_t));
     bucket->next = ctx->free_bucket;
     ctx->free_bucket = bucket;
 }
 
 node_t * new_game(
         chess_ctx_t * ctx,
-        gid_t game_id) {
+        gid_t game_id)
+{
     position_t pos;
-    uint64_t idx;
-    move_t *moves;
-    size_t move_num;
-    n_bucket_t *found_bucket, *new_bucket;
-    node_t *node;
-
     starting_position(&pos);
 
     return position_node(
