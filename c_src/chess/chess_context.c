@@ -6,19 +6,13 @@
 
 #include "chess_context.h"
 
+#include "utils.h"
 #include "position.h"
-#include "murmur3.h"
-
-#define HASH_SIZE 16
-#define HASH_SEED 0
 
 static bool is_prime(
         uint64_t num);
 static uint64_t smallest_prime_greater_than(
         uint64_t num);
-static uint64_t hash_index(
-        const chess_ctx_t * const ctx,
-        const position_t * const pos_ptr);
 static void cleanup_context_cache(
         chess_ctx_t * ctx);
 static void cleanup_bucket(
@@ -103,6 +97,10 @@ void free_context(
         chess_ctx_t * ctx)
 {
 
+    if  (!ctx) {
+        return;
+    }
+
     if (ctx->node_hashtable) {
         free(ctx->node_hashtable);
     }
@@ -123,9 +121,9 @@ node_t * position_node(
     n_bucket_t * found_bucket, * new_bucket;
     size_t move_num;
 
-    uint64_t idx = hash_index(
-            ctx,
-            pos_ptr);
+    uint64_t idx = position_hash_index(
+            (const position_t *) pos_ptr,
+            ctx->prime);
 
     found_bucket = ctx->node_hashtable[idx];
 
@@ -162,20 +160,6 @@ node_t * position_node(
     ctx->num_pos++;
 
     return &(new_bucket->node);
-}
-
-static uint64_t hash_index(
-        const chess_ctx_t * const ctx,
-        const position_t * const pos_ptr)
-{
-    unsigned char hash[HASH_SIZE];
-    MurmurHash3_x64_128(
-            (const void *) pos_ptr,
-            sizeof(position_t),
-            HASH_SEED,
-            hash);
-
-    return (((uint64_t *)hash)[0] ^ ((uint64_t *)hash)[1]) % ctx->prime;
 }
 
 static void cleanup_context_cache(
