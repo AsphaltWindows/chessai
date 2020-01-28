@@ -5,20 +5,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define BITBOARD_NUM 14
-
-#define WHITE_WIN 0
-#define BLACK_WIN 1
-#define DRAW 2
-#define INCOMPLETE 3
-
-typedef int g_state_t;
-
-typedef uint32_t move_t;
-
-typedef struct chess_position {
-    uint64_t bb[BITBOARD_NUM];
-} position_t;
+#include "types.h"
+#include "constants.h"
+#include "move.h"
 
 void starting_position(
         position_t * to_change);
@@ -35,11 +24,55 @@ move_t * legal_moves(
 g_state_t position_state(
         const position_t * const pos);
 
-bool is_pawn_move(
-        move_t);
+inline piece_t piece_at(
+        position_t const * pos,
+        square_t s);
 
-bool is_capture(
-        move_t);
+inline void set_piece_at(
+        position_t * pos,
+        piece_t p,
+        square_t s);
+
+inline void disable_white_long_castle(
+        position_t * pos);
+
+inline void disable_white_short_castle(
+        position_t * pos);
+
+inline void disable_white_all_castle(
+        position_t *pos);
+
+inline void disable_black_long_castle(
+        position_t * pos);
+
+inline void disable_black_short_castle(
+        position_t * pos);
+
+inline void disable_black_all_castle(
+        position_t *pos);
+
+inline void change_turn(
+        position_t * pos);
+
+inline void set_enpassant(
+        position_t * pos,
+        file_t f);
+
+inline void reset_enpassant(
+        position_t * pos);
+
+inline int white_long_castle_flag(
+        position_t * pos);
+
+inline int white_short_castle_flag(
+        position_t * pos);
+
+inline int black_long_castle_flag(
+        position_t * pos);
+
+inline int black_short_castle_flag(
+        position_t * pos);
+
 
 #endif
 
