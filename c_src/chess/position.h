@@ -9,18 +9,6 @@
 #include "constants.h"
 #include "move.h"
 
-void starting_position(
-        position_t * to_change);
-
-void do_move(
-        position_t * from,
-        move_t move,
-        position_t * to);
-
-move_t * legal_moves(
-        position_t * pos_ptr,
-        size_t *outsize);
-
 g_state_t position_state(
         const position_t * const pos);
 

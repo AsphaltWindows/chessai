@@ -9,8 +9,8 @@
 #define RS_PIECE_REMOVED 20
 #define RS_FILE_FROM 17
 #define RS_RANK_FROM 14
-#define RS_FILE_FROM 11
-#define RS_RANK_FROM 8
+#define RS_FILE_TO 11
+#define RS_RANK_TO 8
 #define RS_EN_PASSANT 5
 #define RS_CASTLE 3
 
@@ -28,9 +28,21 @@
  * **/
 
 inline int is_pawn_move(
-        move_t);
+        move_t mov);
 
 inline int is_capture(
-        move_t);
+        move_t mov);
+
+inline int rank_from(
+        move_t mov);
+
+inline int file_from(
+        move_t mov);
+
+inline int rank_to(
+        move_t mov);
+
+inline int file_to(
+        move_t mov);
 
 #endif //MOVE_H
