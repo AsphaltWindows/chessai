@@ -6,16 +6,18 @@
 /** Right shift numbers**/
 #define RS_PIECE_TO_MOVE 28
 #define RS_PIECE_PLACED 24
-#define RS_FILE_FROM 21
-#define RS_RANK_FROM 18
-#define RS_FILE_FROM 15
-#define RS_RANK_FROM 12
-#define RS_EN_PASSANT 9
-#define RS_CASTLE 7
+#define RS_PIECE_REMOVED 20
+#define RS_FILE_FROM 17
+#define RS_RANK_FROM 14
+#define RS_FILE_FROM 11
+#define RS_RANK_FROM 8
+#define RS_EN_PASSANT 5
+#define RS_CASTLE 3
 
 /**
- * 4 bits Piece Type PIECE_TO_MOVE being moved (NONE if castle)
- * 4 bits Piece Type PIECE_PLACED at target location after move (same as Piece Type being moved unless promotion, NONE if castle)
+ * 4 bits Piece PIECE_TO_MOVE being moved (NONE if castle)
+ * 4 bits Piece PIECE_PLACED at target location after move (same as Piece Type being moved unless promotion, NONE if castle)
+ * 4 bits Piece PIECE_REMOVED at target location before the move (NONE if not a capture)
  * 3 bits File Type FILE_FROM
  * 3 bits Rank Type RANK_FROM
  * 3 bits File Type FILE_TO
@@ -25,10 +27,10 @@
  * 3 bits 000 empty 3 bits
  * **/
 
-int is_pawn_move(
+inline int is_pawn_move(
         move_t);
 
-int is_capture(
+inline int is_capture(
         move_t);
 
 #endif //MOVE_H
