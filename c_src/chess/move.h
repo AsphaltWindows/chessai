@@ -1,7 +1,8 @@
-#ifndef MOVE_H
-#define MOVE_H
+#ifndef CHESS_MOVE_H
+#define CHESS_MOVE_H
 
 #include <stdint.h>
+#include "types.h"
 
 /** Right shift numbers**/
 #define RS_PIECE_TO_MOVE 28
@@ -9,8 +10,10 @@
 #define RS_PIECE_REMOVED 20
 #define RS_FILE_FROM 17
 #define RS_RANK_FROM 14
+#define RS_SQUARE_FROM 14
 #define RS_FILE_TO 11
 #define RS_RANK_TO 8
+#define RS_SQUARE_TO 8
 #define RS_EN_PASSANT 5
 #define RS_CASTLE 3
 
@@ -27,22 +30,38 @@
  * 3 bits 000 empty 3 bits
  * **/
 
+/** 1 true 0 false **/
 inline int is_pawn_move(
         move_t mov);
 
+/** 1 true 0 false **/
+inline int is_pawn_double(
+        move_t mov);
+
+/** 1 true 0 false **/
 inline int is_capture(
         move_t mov);
 
-inline int rank_from(
+/** 1 true 0 false **/
+inline int is_castle(
         move_t mov);
 
-inline int file_from(
+inline rank_t rank_from(
         move_t mov);
 
-inline int rank_to(
+inline file_t file_from(
         move_t mov);
 
-inline int file_to(
+inline square_t square_from(
+        move_t mov);
+
+inline rank_t rank_to(
+        move_t mov);
+
+inline file_t file_to(
+        move_t mov);
+
+inline square_t square_to(
         move_t mov);
 
 #endif //MOVE_H

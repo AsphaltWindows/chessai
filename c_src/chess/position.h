@@ -1,5 +1,5 @@
-#ifndef POSITION_H
-#define POSITION_H
+#ifndef CHESS_POSITION_H
+#define CHESS_POSITION_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -8,6 +8,13 @@
 #include "types.h"
 #include "constants.h"
 #include "move.h"
+
+#define RS_WHITE_LONG_CASTLE 7
+#define RS_WHITE_SHORT_CASTLE 6
+#define RS_BLACK_LONG_CASTLE 5
+#define RS_BLACK_SHORT_CASTLE 4
+#define RS_CASTLE_FLAG 4
+#define RS_EN_PASSANT_FLAG 8
 
 g_state_t position_state(
         const position_t * const pos);
@@ -20,6 +27,16 @@ inline void set_piece_at(
         position_t * pos,
         piece_t p,
         square_t s);
+
+inline void remove_piece_at(
+        position_t * pos,
+        piece_t p,
+        square_t s);
+
+inline void apply_flag_mask(
+        position_t * pos,
+        int disable_castle,
+        int en_passant);
 
 inline void disable_white_long_castle(
         position_t * pos);

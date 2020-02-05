@@ -1,7 +1,9 @@
 #ifndef CHESS_TYPES_H
 #define CHESS_TYPES_H
 
-#define UINT32_BOARD_SIZE 9
+#define UINT32_BOARD_SIZE 10
+#define FLAGS_INDEX 8
+#define GARBAGE_INDEX 9
 #define SQUARE_NUM 64
 
 typedef enum FILE {
@@ -89,4 +91,4 @@ typedef struct chess_position {
 
 typedef int g_state_t;
 
-#endif //C_SRC_TYPES_H
+#endif //CHESS_TYPES_H

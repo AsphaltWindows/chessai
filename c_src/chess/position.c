@@ -18,8 +18,28 @@ inline void set_piece_at(
     file_t f = square_file(s);
     rank_t r = square_rank(s);
 
-    pos->bb[f] = pos->bb[r] | (15 << (f * 4)) & (p << (f * 4));
+    pos->bb[r] = (pos->bb[r] & (~ (15 << (f * 4)))) | (p << (f * 4));
     return;
+}
+
+inline void remove_piece_at(
+        position_t * pos,
+        piece_t p,
+        square_t s)
+{
+    file_t f = square_file(s);
+    rank_t r = square_rank(s);
+
+    pos->bb[r] = pos->bb[r] & (~ (15 << (f * 4)));
+    return;
+}
+
+inline void apply_flag_mask(
+        position_t * pos,
+        int disable_castle,
+        int en_passant)
+{
+    pos->bb[8] &= (0xFFFFF00F | (disable_castle << RS_CASTLE_FLAG) | (en_passant << RS_EN_PASSANT_FLAG));
 }
 
 inline void disable_white_long_castle(
@@ -69,13 +89,13 @@ inline void set_enpassant(
         position_t * pos,
         file_t f)
 {
-    pos->bb[8] = pos->bb[8] & 0xFFFFFFF1 | (f << 1);
+    pos->bb[8] &= (0xFFFFF8FF | (f << 8));
 }
 
 inline void reset_enpassant(
         position_t * pos)
 {
-    pos->bb[8] = pos->bb[8] & 0xFFFFFFF1;
+    pos->bb[8] &= 0xFFFFF0FF;
 }
 
 inline int white_long_castle_flag(
