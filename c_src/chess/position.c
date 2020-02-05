@@ -34,13 +34,13 @@ inline void remove_piece_at(
     return;
 }
 
-inline void apply_flag_mask(
-        position_t * pos,
-        int disable_castle,
-        int en_passant)
-{
-    pos->bb[8] &= (0xFFFFF00F | (disable_castle << RS_CASTLE_FLAG) | (en_passant << RS_EN_PASSANT_FLAG));
-}
+//inline void apply_flag_mask(
+//        position_t * pos,
+//        int disable_castle,
+//        int en_passant)
+//{
+//    pos->bb[8] &= (0xFFFFF00F | (disable_castle << RS_CASTLE_FLAG) | (en_passant << RS_EN_PASSANT_FLAG));
+//}
 
 inline void disable_white_long_castle(
         position_t * pos)

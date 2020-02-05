@@ -33,11 +33,11 @@ inline void remove_piece_at(
         piece_t p,
         square_t s);
 
-inline void apply_flag_mask(
-        position_t * pos,
-        int disable_castle,
-        int en_passant);
-
+//inline void apply_flag_mask(
+//        position_t * pos,
+//        int disable_castle,
+//        int en_passant);
+//
 inline void disable_white_long_castle(
         position_t * pos);
 

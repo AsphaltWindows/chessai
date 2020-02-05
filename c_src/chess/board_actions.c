@@ -3,36 +3,35 @@
 #include "utils.h"
 
 static uint32_t move_from_value(
-        position_t * pos,
+        position_t *pos,
         move_t mov);
 
 static uint32_t move_to_value(
-        position_t * pos,
+        position_t *pos,
         move_t mov);
 
 static uint32_t castle_value(
-        position_t * pos,
+        position_t *pos,
         move_t mov);
 
 static uint32_t flags_value(
-        position_t * pos,
+        position_t *pos,
         move_t mov);
 
 static void move_from_to_castle_index(
-        position_t * pos,
+        position_t *pos,
         move_t mov,
-        int * from_idx,
-        int * to_idx,
-        int * castle_idx);
+        int *from_idx,
+        int *to_idx,
+        int *castle_idx);
 
 void starting_position(
-        position_t * to_change);
+        position_t *to_change);
 
 void do_move(
-        position_t const * from,
+        position_t const *from,
         move_t move,
-        position_t * to)
-{
+        position_t *to) {
     memcpy(&(to->bb[0]), &(from->bb[0]), sizeof(position_t));
 
     int bb_from_idx;
@@ -84,46 +83,82 @@ void do_move(
 }
 
 static uint32_t move_from_value(
-        position_t * pos,
-        move_t mov)
-{
-    return NONE;
+        position_t *pos,
+        move_t mov) {
+    file_t f = file_to(mov);
+    rank_t r = rank_to(mov);
+
+    return pos->bb[r] & (~(15 << (f * 4)));
 }
 
 static uint32_t move_to_value(
-        position_t * pos,
-        move_t mov)
-{
-    return (move >> RS_PIECE_PLACED & 15);
+        position_t *pos,
+        move_t mov) {
+    piece_t p = (move >> RS_PIECE_PLACED & 15);
+    file_t f = file_to(mov);
+    rank_t r = rank_to(mov);
+
+    return (pos->bb[r] & (~(15 << (f * 4)))) | (p << (f * 4));
 }
 
 static uint32_t castle_value(
-        position_t * pos,
-        move_t mov)
-{
+        position_t *pos,
+        move_t mov) {
+    uint32_t castling = (mov >> RS_CASTLE) & 7;
+    uint32_t color = castling >> 2;
+    uint32_t idx_shift = color + (color << 1);
+    int idx = (1 << idx_shift) - 1;
+    uint32_t long_castle_fill = ~((uint32_t)((castling & 1) - 1));
+    uint32_t short_castle_fill = ~long_castle_fill;
+    uint32_t black_fill = ~(color - 1);
+    uint32_t white_fill = ~black_fill;
 
+    uint32_t blank_mask = (long_castle_fill & LONG_CASTLE_BLANK) |
+                          (short_castle_fill & SHORT_CASTLE_BLANK);
+    uint32_t blanked = pos->bb[idx] & blank_mask;
+    uint32_t fill_mask = (white_fill & long_castle_fill & WHITE_LONG_CASTLE_FILL) |
+                         (white_fill & short_castle_fill & WHITE_SHORT_CASTLE_FILL) |
+                         (black_fill & long_castle_fill & BLACK_LONG_CASTLE_FILL) |
+                         (black_fill & short_castle_fill & BLACK_SHORT_CASTLE_FILL);
+    return blanked & fill_mask;
 }
 
 static uint32_t flags_value(
-        position_t * pos,
-        move_t mov);
-
-static int move_from_to_castle_index(
-        position_t * pos,
-        move_t mov,
-        int * from_idx,
-        int * to_idx,
-        int * castle_idx);
+        position_t *pos,
+        move_t mov)
 {
 
-    int castle = is_castle(mov);
+//    int castling_mask;
+//    int enpassant_mask;
+//    int w_l_castle;
+//    int w_s_castle;
+//    int b_l_castle;
+//    int b_s_castle;
+//
+//    w_l_castle = ((to->bb[8] >> RS_WHITE_LONG_CASTLE) & 1) || is_castle(mov);
+//    w_s_castle = ((to->bb[8] >> RS_WHITE_SHORT_CASTLE) & 1) || is_castle(mov);
+//    b_l_castle = ((to->bb[8] >> RS_BLACK_LONG_CASTLE) & 1) || is_castle(mov);
+//    w_s_castle = ((to->bb[8] >> RS_BLACK_SHORT_CASTLE) & 1) || is_castle(mov);
 
-    int castle_mask = castle | (castle << 1) | (castle << 2) | (castle << 3);
+}
+
+static int move_from_to_castle_index(
+        position_t *pos,
+        move_t mov,
+        int *from_idx,
+        int *to_idx,
+        int *castle_idx);
+
+{
+
+int castle = is_castle(mov);
+
+int castle_mask = castle | (castle << 1) | (castle << 2) | (castle << 3);
 
 }
 
 
-move_t * legal_moves(
-        position_t * pos_ptr,
-        size_t * outsize);
+move_t *legal_moves(
+        position_t *pos_ptr,
+        size_t *outsize);
 
