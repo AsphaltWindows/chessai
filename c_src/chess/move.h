@@ -14,9 +14,11 @@
 #define RS_FILE_TO 11
 #define RS_RANK_TO 8
 #define RS_SQUARE_TO 8
-#define RS_EN_PASSANT 5
-#define RS_CASTLE_COLOR 4
-#define RS_CASTLE 3
+#define RS_EN_PASSANT 7
+#define RS_CASTLE_COLOR 6
+#define RS_CASTLE 4
+
+#define MASK_CASTLE 7
 
 /**
  * 4 bits Piece PIECE_TO_MOVE being moved (NONE if castle)
@@ -26,7 +28,8 @@
  * 3 bits Rank Type RANK_FROM
  * 3 bits File Type FILE_TO
  * 3 bits Rank Type RANK_TO
- * 3 bits EnPassant Type EN_PASSANT
+ * 1 bit  En Passant flag
+ * 1 bit  Castle color
  * 2 bits Castle Type CASTLE
  * 3 bits 000 empty 3 bits
  * **/

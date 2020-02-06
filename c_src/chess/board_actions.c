@@ -88,7 +88,7 @@ static uint32_t move_from_value(
     file_t f = file_to(mov);
     rank_t r = rank_to(mov);
 
-    return pos->bb[r] & (~(15 << (f * 4)));
+    return pos->bb[r] & (~(MASK_PIECE << (f * SIZE_PIECE)));
 }
 
 static uint32_t move_to_value(
@@ -98,16 +98,17 @@ static uint32_t move_to_value(
     file_t f = file_to(mov);
     rank_t r = rank_to(mov);
 
-    return (pos->bb[r] & (~(15 << (f * 4)))) | (p << (f * 4));
+    uint32_t is_en_passant = ((mov >> RS_EN_PASSANT) & 1);
+
+    return (pos->bb[r] & (~(MASK_PIECE << (f * SIZE_PIECE)))) | (p << (f * SIZE_PIECE));
 }
 
 static uint32_t castle_value(
         position_t *pos,
         move_t mov) {
-    uint32_t castling = (mov >> RS_CASTLE) & 7;
-    uint32_t color = castling >> 2;
-    uint32_t idx_shift = color + (color << 1);
-    int idx = (1 << idx_shift) - 1;
+    uint32_t castling = (mov >> RS_CASTLE) & MASK_CASTLE;
+    uint32_t color = (mov >> RS_CASTLE_COLOR) & 1;
+    uint32_t idx = (1 << (color + (color << 1))) - 1;
     uint32_t long_castle_fill = ~((uint32_t)((castling & 1) - 1));
     uint32_t short_castle_fill = ~long_castle_fill;
     uint32_t black_fill = ~(color - 1);
@@ -128,46 +129,32 @@ static uint32_t flags_value(
         move_t mov)
 {
     uint32_t current_value = pos->bb[FLAGS_INDEX] ^ 1;
-    uint32_t current_castle_flags = (current_value >> RS_CASTLE_FLAG) & 15;
+    uint32_t current_castle_flags = (current_value >> RS_CASTLE_FLAG) & MASK_CASTLE_FLAG;
 
     color_t side = move_side(mov);
     uint32_t castle_flags_shift = (!side) << 1;
-    uint32_t if_none_flags = (~(3 << castle_flags_shift)) & 15;
-    uint32_t if_nolong_flags = (~(2 << castle_flags_shift)) & 15;
-    uint32_t if_noshort_flags = (~(1 << castle_flags_shift)) & 15;
+    uint32_t if_none_flags = (~(3 << castle_flags_shift)) & MASK_CASTLE_FLAG;
+    uint32_t if_nolong_flags = (~(2 << castle_flags_shift)) & MASK_CASTLE_FLAG;
+    uint32_t if_noshort_flags = (~(1 << castle_flags_shift)) & MASK_CASTLE_FLAG;
 
     uint32_t s_from = square_from(mov);
     uint32_t s_to = square_to(mov);
     uint32_t rank = pos->bb[(1 << (side + (side << 1))) - 1];
 
     uint32_t king_move_flags = if_none_flags |
-            (~ ((uint32_t) (!(is_castle(mov) || s_from == square(E, rank)) - 1)) & 15);
+            (~ ((uint32_t) (!(is_castle(mov) || s_from == square(E, rank)) - 1)) & MASK_CASTLE_FLAG);
     uint32_t arook_move_flags = if_nolong_flags |
-            (~ ((uint32_t) (!(s_from == square(A, rank) || s_to == square(A, rank)) - 1)) & 15);
+            (~ ((uint32_t) (!(s_from == square(A, rank) || s_to == square(A, rank)) - 1)) & MASK_CASTLE_FLAG);
     uint32_t hrook_move_flags = if_noshort_flags |
-            (~ ((uint32_t) (!(s_from == square(H, rank) || s_to == square(H, rank)) - 1)) & 15);
+            (~ ((uint32_t) (!(s_from == square(H, rank) || s_to == square(H, rank)) - 1)) & MASK_CASTLE_FLAG);
 
-    uint32_t castle_flags_mask = king_move_flags &
+    uint32_t castle_flags_mask = 0xFFFFFFFF & ((king_move_flags &
             arook_move_flags &
-            hrook_move_flags;
+            hrook_move_flags) << RS_CASTLE_FLAG);
 
-    uint32_t trigger_enpassant = ((~ ((uint32_t) (is_pawn_double(mov) - 1))) & 15) & (8 | rank_from(mov));
+    uint32_t trigger_enpassant = ((~ ((uint32_t) (is_pawn_double(mov) - 1))) & MASK_EN_PASSANT_FLAG) & (8 | file_from(mov));
 
-    return
-
-
-//    int castling_mask;
-//    int enpassant_mask;
-//    int w_l_castle;
-//    int w_s_castle;
-//    int b_l_castle;
-//    int b_s_castle;
-//
-//    w_l_castle = ((to->bb[8] >> RS_WHITE_LONG_CASTLE) & 1) || is_castle(mov);
-//    w_s_castle = ((to->bb[8] >> RS_WHITE_SHORT_CASTLE) & 1) || is_castle(mov);
-//    b_l_castle = ((to->bb[8] >> RS_BLACK_LONG_CASTLE) & 1) || is_castle(mov);
-//    w_s_castle = ((to->bb[8] >> RS_BLACK_SHORT_CASTLE) & 1) || is_castle(mov);
-
+    return current_value & (~(MASK_EN_PASSANT_FLAG << RS_EN_PASSANT_FLAG)) | (trigger_enpassant << RS_EN_PASSANT_FLAG) & castle_flags_mask;
 }
 
 static int move_from_to_castle_index(
@@ -175,13 +162,9 @@ static int move_from_to_castle_index(
         move_t mov,
         int *from_idx,
         int *to_idx,
-        int *castle_idx);
-
+        int *castle_idx)
 {
 
-int castle = is_castle(mov);
-
-int castle_mask = castle | (castle << 1) | (castle << 2) | (castle << 3);
 
 }
 

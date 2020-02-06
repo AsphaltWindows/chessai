@@ -16,6 +16,12 @@
 #define RS_CASTLE_FLAG 4
 #define RS_EN_PASSANT_FLAG 8
 
+#define SIZE_CASTLE_FLAG 4
+#define SIZE_EN_PASSANT_FLAG 4
+
+#define MASK_CASTLE_FLAG 15
+#define MASK_EN_PASSANT_FLAG 15
+
 g_state_t position_state(
         const position_t * const pos);
 

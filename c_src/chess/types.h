@@ -8,6 +8,16 @@
 #define RS_PIECE_COLOR 3
 #define RS_SQUARE_FILE 3
 
+#define SIZE_SQUARE 6
+#define SIZE_FILE 3
+#define SIZE_RANK 3
+#define SIZE_PIECE_TYPE 3
+#define SIZE_PIECE 4
+#define SIZE_COLOR
+#define SIZE_CASTLE 3
+
+#define MASK_PIECE 15
+
 typedef enum FILE {
     A = 0,
     B = 1,
