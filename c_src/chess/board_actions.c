@@ -45,9 +45,9 @@ void do_move(
             &bb_to_idx,
             &bb_castle_idx);
 
-    to->bb[bb_from_idx] = move_from_index(to, move);
-    to->bb[bb_to_idx] = move_to_index(to, move);
-    to->bb[bb_castle_idx] = castle_index(to, move);
+    to->bb[bb_from_idx] = move_from_value(to, move);
+    to->bb[bb_to_idx] = move_to_value(to, move);
+    to->bb[bb_castle_idx] = castle_value(to, move);
     to->bb[FLAGS_INDEX] = flags_value(to, move);
 
     return;
@@ -127,6 +127,34 @@ static uint32_t flags_value(
         position_t *pos,
         move_t mov)
 {
+    uint32_t current_value = pos->bb[FLAGS_INDEX] ^ 1;
+    uint32_t current_castle_flags = (current_value >> RS_CASTLE_FLAG) & 15;
+
+    color_t side = move_side(mov);
+    uint32_t castle_flags_shift = (!side) << 1;
+    uint32_t if_none_flags = (~(3 << castle_flags_shift)) & 15;
+    uint32_t if_nolong_flags = (~(2 << castle_flags_shift)) & 15;
+    uint32_t if_noshort_flags = (~(1 << castle_flags_shift)) & 15;
+
+    uint32_t s_from = square_from(mov);
+    uint32_t s_to = square_to(mov);
+    uint32_t rank = pos->bb[(1 << (side + (side << 1))) - 1];
+
+    uint32_t king_move_flags = if_none_flags |
+            (~ ((uint32_t) (!(is_castle(mov) || s_from == square(E, rank)) - 1)) & 15);
+    uint32_t arook_move_flags = if_nolong_flags |
+            (~ ((uint32_t) (!(s_from == square(A, rank) || s_to == square(A, rank)) - 1)) & 15);
+    uint32_t hrook_move_flags = if_noshort_flags |
+            (~ ((uint32_t) (!(s_from == square(H, rank) || s_to == square(H, rank)) - 1)) & 15);
+
+    uint32_t castle_flags_mask = king_move_flags &
+            arook_move_flags &
+            hrook_move_flags;
+
+    uint32_t trigger_enpassant = ((~ ((uint32_t) (is_pawn_double(mov) - 1))) & 15) & (8 | rank_from(mov));
+
+    return
+
 
 //    int castling_mask;
 //    int enpassant_mask;

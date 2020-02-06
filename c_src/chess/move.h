@@ -15,6 +15,7 @@
 #define RS_RANK_TO 8
 #define RS_SQUARE_TO 8
 #define RS_EN_PASSANT 5
+#define RS_CASTLE_COLOR 4
 #define RS_CASTLE 3
 
 /**
@@ -29,6 +30,9 @@
  * 2 bits Castle Type CASTLE
  * 3 bits 000 empty 3 bits
  * **/
+
+inline color_t move_side(
+        move_t move);
 
 /** 1 true 0 false **/
 inline int is_pawn_move(

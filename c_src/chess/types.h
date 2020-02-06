@@ -5,6 +5,8 @@
 #define FLAGS_INDEX 8
 #define GARBAGE_INDEX 9
 #define SQUARE_NUM 64
+#define RS_PIECE_COLOR 3
+#define RS_SQUARE_FILE 3
 
 typedef enum FILE {
     A = 0,

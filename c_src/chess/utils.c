@@ -57,3 +57,9 @@ inline rank_t square_rank(
     return (rank_t) (s & 7);
 }
 
+inline piece_t piece_at_file_in_rank(
+        uint32_t rank_row,
+        file_t f)
+{
+    return (rank_row << (f * 4)) & 15;
+}

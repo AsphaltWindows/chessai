@@ -38,6 +38,8 @@ inline void remove_piece_at(
 //        int disable_castle,
 //        int en_passant);
 //
+
+
 inline void disable_white_long_castle(
         position_t * pos);
 

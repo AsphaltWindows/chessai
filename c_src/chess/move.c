@@ -1,9 +1,17 @@
 #include "move.h"
 
+#include "utils.h"
+
+inline color_t move_side(
+        move_t mov)
+{
+    return (color_t) (color_of_piece((mov >> RS_PIECE_TO_MOVE) & 15) | ((mov >> RS_CASTLE_COLOR) & 1));
+}
+
 inline int is_pawn_move(
         move_t mov)
 {
-    return mov >> (RS_PIECE_TO_MOVE + 1) == PAWN;
+    return ((mov >> RS_PIECE_TO_MOVE) & 7) == PAWN;
 }
 
 inline int is_pawn_double(
@@ -15,7 +23,7 @@ inline int is_pawn_double(
 inline int is_capture(
         move_t mov)
 {
-    return mov >> (RS_PIECE_REMOVED + 1) != 7;
+    return ((mov >> RS_PIECE_REMOVED) & 7) != NONE;
 }
 
 inline int is_castle(

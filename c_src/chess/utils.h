@@ -27,4 +27,8 @@ inline file_t square_file(
 inline rank_t square_rank(
         square_t s);
 
+inline piece_t piece_at_file_in_rank(
+        uint32_t rank_row,
+        file_t f);
+
 #endif //UTILS_H
