@@ -1,5 +1,5 @@
-#ifndef K_CNB_H_INCLUDED
-#define K_CNB_H_INCLUDED
+#ifndef CNB_H_INCLUDED
+#define CNB_H_INCLUDED
 
 #include <stddef.h>
 #include <stdint.h>
