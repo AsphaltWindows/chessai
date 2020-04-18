@@ -22,27 +22,29 @@
  *
  *** Classification ***
  *
- * During classification each branch node starting with the root attempts to
- * predict which of its children will provide the most accurate result and calls for that
- * child node to classify the data.
+ * During classification the root node attempts to classify the data.
+ * If the root node is a branch node it classifies the data to predict which of its children
+ * would perform best at classifying this data and calls on that node to classify recursively.
  *
- * When a leaf node is reached by these calls its result is
- * the result of the whole.
+ * When a leaf node is reached by these calls it classifies the data using its classifier
+ * and this result is passed up the call stack.
  *
  *** Training ***
  *
- * During training each branch node retrieves a classification for the input from each of its
- * children nodes, computes the error for each child, updates itself with that child node as
- * the correct label for the data and class on that child node to train itself on the data.
- * When a leaf node is reached by these calls it should have been passed along the desired
- * label for that data from the original training call and it trains itself accordingly.
+ * During the training the root nodes attempts to train first.
+ * If the root node is a branch node it first calls for all of its children to classify
+ * the data while withholding the label. It then calculates the error each of its children
+ * generated in comparison to the label. The branch node then trains its own classifier
+ * with the correct label for the data being the index of the child that had the least error.
+ * It then recursively calls on only that child to train on the original data and label.
  *
  *** Dynamic Expansion ***
  * Using a decision procedure local to the node, a leaf node can split into several leaf
- * nodes and a branch node, which remains the child of the leaf's parent. The split creates
- * leafs equal to the branch_factor which are identical in predictive behavior to the
- * original leaf, but may be modified to accelerate their future training. In the case
- * of the Naive Bayes Classifier nodes this can be done by scaling down the frequencies.
+ * nodes and a branch node, which remains the child of the original leaf's parent.
+ * The split creates branch_factor new leafs which are identical in predictive
+ * behavior to the original leaf, but may be modified to accelerate their future training.
+ * In the case of the Naive Bayes Classifier nodes this can be done by scaling down the
+ * frequencies.
  */
 
 typedef enum node_type {
