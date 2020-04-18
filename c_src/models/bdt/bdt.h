@@ -68,7 +68,7 @@ struct bayesian_delegation_tree {
     /** The struct members are rearranged pointers first in order to guarantee packing **/
     uint8_t * categories;
     bdt_node_t ** nodes;
-    uint8_t cat_num;
+    uint32_t cat_num;
     size_t nodes_num;
     uint8_t class_num;
     uint8_t branch_factor;
@@ -81,7 +81,7 @@ struct bayesian_delegation_tree {
 
 bdt_t * create_bdt(
         uint8_t * categories,
-        uint8_t cat_num,
+        size_t cat_num,
         uint8_t class_num,
         uint8_t branch_factor,
         uint32_t split_threshold,

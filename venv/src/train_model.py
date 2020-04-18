@@ -2,6 +2,7 @@ import sys
 
 import models.categorical_naive_bayes as cnb
 import models.cnb_c as cnb_c
+import models.bdt_c as bdt
 import models.clustered_bayes as cb
 import models.k_network_bayes as knb
 import models.hhcb as hhcb
@@ -85,6 +86,25 @@ elif model_type == "hhcbsl":
         model.train_model([0 for i in whitewins] + [1 for i in blackwins] + [2 for i in draws], whitewins + blackwins + draws)
 
     model.store_model2(model_dir + "/hhcbsl" + str(model_version + 1) + ".model")
+elif model_type == "bdt":
+    print("training bdt model")
+    if model_version == 0:
+        branch_factor = model_args[0]
+        split_threshold = model_args[1]
+        split_limit = model_args[2]
+        forget_factor = model_args[3]
+        alpha = model_args[4]
+        model = bdt.BDT_C(ci.game_classes(), 3, branch_factor, split_threshold, split_limit, alpha)
+
+        print("created model")
+        model.train_batch([[1,0,0] for i in whitewins] + [[0,1,0] for i in blackwins] + [[0,0,1] for i in draws], whitewins + blackwins + draws)
+    else:
+        model = bdt.model_from_file(model_dir + "/bdt" + str(model_version) + ".model")
+
+        model.train_batch([[1,0,0] for i in whitewins] + [[0,1,0] for i in blackwins] + [[0,0,1] for i in draws], whitewins + blackwins + draws)
+
+    model.model_to_file(model_dir + "/bdt" + str(model_version + 1) + ".model")
+
 
 whitewinsfile.close()
 blackwinsfile.close()

@@ -3,6 +3,7 @@ import models.cnb_c as nb_c
 import models.hhcb as hhcb
 import models.hhcbsl as hhcbsl
 import models.k_network_bayes as knb
+import models.bdt_c as bdt
 import models.clustered_bayes as cb
 import chess.categorical_input as ci
 import chess.chess_consts as cc
@@ -21,13 +22,13 @@ def select_position(positions, play_as):
 
     for idx, pos in enumerate(positions):
         # print(pos)
-        win_n = 2 ** pos[play_as]
-        draw_n = 2 ** pos[cc.Draw]
+        win_n = pos[play_as]
+        draw_n = pos[cc.Draw]
 
         if play_as == cc.White:
-            loss_n = 2 ** pos[cc.Black]
+            loss_n = pos[cc.Black]
         else:
-            loss_n = 2 ** pos[cc.White]
+            loss_n = pos[cc.White]
         # weights.append(((win_n + (draw_n / 2)) / (win_n + loss_n + draw_n)) ** 4)
         weights.append((win_n + (draw_n / 2)) / (win_n + loss_n + draw_n))
         # if idx > 0:
@@ -98,6 +99,9 @@ elif model1_type == "hhcb":
 elif model1_type == "hhcbsl":
     model1 = hhcbsl.HierarchicalHistogramClusteredBayesSizeLimited.load_model2(model1_dir + "/" + model1_type + str(model1_version) + ".model")
     player1 = lambda m, t: select_move(model1, t, m)
+elif model1_type == "bdt":
+    model1 = bdt.BDT_C.model_from_file(model1_dir + "/" + model1_type + str(model1_version) + ".model", ci.game_classes(), 3)
+    player1 = lambda m, t: select_move(model1, t, m)
 
 if model2_type == "rand":
     player2 = lambda m, t: rand.randrange(0, len(m))
@@ -116,6 +120,9 @@ elif model2_type == "hhcb":
     player2 = lambda m, t: select_move(model2, t, m)
 elif model2_type == "hhcbsl":
     model2 = hhcbsl.HierarchicalHistogramClusteredBayesSizeLimited.load_model2(model2_dir + "/" + model2_type + str(model2_version) + ".model")
+    player2 = lambda m, t: select_move(model2, t, m)
+elif model2_type == "bdt":
+    model2 = bdt.BDT_C.model_from_file(model2_dir + "/" + model2_type + str(model2_version) + ".model", ci.game_classes(), 3)
     player2 = lambda m, t: select_move(model2, t, m)
 
 player1_side = cc.White

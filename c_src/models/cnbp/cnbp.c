@@ -28,7 +28,7 @@ cnbp_t * create_cnbp_with_alpha(
         return NULL;
     }
 
-    for (unsigned int cn = 0; cn < cat_num; ++cn) {
+    for (uint32_t cn = 0; cn < cat_num; ++cn) {
         res->categories[cn] = cats[cn];
     }
 
@@ -80,7 +80,7 @@ cnbp_t * create_cnbp_with_alpha(
     memset(res->class_cat_probs, 0, (class_num * total_cat_values) * sizeof(double));
 
     res->class_num = class_num;
-    res->cat_num = cat_num;
+    res->cat_num = (uint32_t) cat_num;
     res->alpha = alpha;
     res->total_cat_vals = total_cat_values;
     res->is_fresh = 0;
@@ -121,7 +121,7 @@ void cnbp_train_single(
     for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
         cnbp->class_totals[cl] += label[cl];
 
-        for (uint8_t cat = 0; cat < cnbp->cat_num; ++cat) {
+        for (uint32_t cat = 0; cat < cnbp->cat_num; ++cat) {
             cnbp->class_cat_totals[cl * cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + data[cat]] += label[cl];
         }
     }
@@ -187,10 +187,10 @@ double * cnbp_predict_class(
     }
 
 /** This implementation stores probabilties as logs. **/
-    for (int cl = 0; cl < cnbp->class_num; ++cl) {
+    for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
         res[cl] = (double) cnbp->class_probs[cl];
 
-        for (int cat = 0; cat < cnbp->cat_num; ++cat) {
+        for (uint32_t cat = 0; cat < cnbp->cat_num; ++cat) {
             res[cl] += (double) cnbp->class_cat_probs[cl * cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + data[cat]];
         }
 
@@ -218,7 +218,7 @@ cnbp_t * cnbp_from_file_with_params(
 {
     cnbp_t * res;
 
-    if (!(res = create_cnbp_with_alpha(class_num, cats, (size_t) cat_num, alpha))) {
+    if (!(res = create_cnbp_with_alpha(class_num, cats, cat_num, alpha))) {
         printf("Failed to create cnbp classifier\n");
         return NULL;
     }
@@ -228,7 +228,7 @@ cnbp_t * cnbp_from_file_with_params(
     }
 
     for (uint8_t cl = 0; cl < class_num; ++cl) {
-        for (size_t cat = 0; cat < cat_num; ++cat) {
+        for (uint32_t cat = 0; cat < cat_num; ++cat) {
             for (uint8_t val = 0; val < res->categories[cat]; ++val) {
                 fscanf(
                         file,
@@ -248,13 +248,13 @@ cnbp_t * cnbp_from_file(
 {
     cnbp_t * res;
     uint8_t class_num;
-    uint8_t cat_num;
+    uint32_t cat_num;
     double alpha;
     uint8_t * categories;
 
     fscanf(file, "%hhu\n", &class_num);
     fscanf(file, "%lf\n", &alpha);
-    fscanf(file, "%hhu\n", &cat_num);
+    fscanf(file, "%u\n", &cat_num);
 
     if (!(categories = malloc(cat_num * sizeof(uint8_t)))) {
         printf("Failed to allocate memory for categories array for cnbp Classifier.\n");
@@ -264,7 +264,7 @@ cnbp_t * cnbp_from_file(
     memset(categories, 0, cat_num * sizeof(uint8_t));
 
 
-    for (uint8_t cat = 0; cat < cat_num; ++cat) {
+    for (uint32_t cat = 0; cat < cat_num; ++cat) {
         fscanf(file, "%hhu\n", &categories[cat]);
     }
 
@@ -283,19 +283,26 @@ cnbp_t * cnbp_from_file(
     return res;
 }
 
-void cnb_to_file_no_params(
+void cnbp_to_file_no_params(
         const cnbp_t * cnbp,
         FILE * file)
 {
+    printf("debug - does this get called cnbp to file\n");
+
     for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
         fprintf(file, "%lf\n", cnbp->class_totals[cl]);
+        printf("debug - class: %hhu\n", cl);
     }
+
+    printf("debug - cat_num: %u", cnbp->cat_num);
 
     for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
 
-        for (uint8_t cat = 0; cat < cnbp->cat_num; ++cat) {
+        for (uint32_t cat = 0; cat < cnbp->cat_num; ++cat) {
+            printf("debug - cat: %u\n", cat);
             for (uint8_t val = 0; val < cnbp->categories[cat]; ++val) {
                 fprintf(file, "%lf\n", cnbp->class_cat_totals[cl * cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + val]);
+                printf("debug - class: %hhu, category: %u, category value: %hhu\n", cl, cat, val);
             }
         }
     }
@@ -309,7 +316,7 @@ void cnbp_to_file(
 {
     fprintf(file, "%hhu\n", cnbp->class_num);
     fprintf(file, "%lf\n", cnbp->alpha);
-    fprintf(file, "%hhu\n", cnbp->cat_num);
+    fprintf(file, "%u\n", cnbp->cat_num);
 
     for (uint8_t cat = 0; cat < cnbp->cat_num; ++cat) {
         fprintf(file, "%hhu\n", cnbp->categories[cat]);
@@ -416,7 +423,7 @@ void recalculate_probabilities(cnbp_t *cnbp) {
 
         cnbp->class_probs[cl] = log2(cnbp->class_totals[cl] + cnbp->alpha) - log2(cur_total + cnbp->class_num * cnbp->alpha);
 
-        for (int cat = 0; cat < cnbp->cat_num; ++cat) {
+        for (uint32_t cat = 0; cat < cnbp->cat_num; ++cat) {
             cur_total = 0;
             for (int val = 0; val < cnbp->categories[cat]; ++val) {
                 cur_total += cnbp->class_cat_totals[cl * cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + val];

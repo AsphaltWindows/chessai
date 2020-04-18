@@ -1,4 +1,4 @@
- mport sys
+import sys
 import os
 import numpy as np
 import random as rand
@@ -13,6 +13,7 @@ import models.categorical_naive_bayes as cnb
 import models.cnb_c as cnb_c
 import models.clustered_bayes as cb
 import models.k_network_bayes as knb
+import models.bdt_c as bdt
 import models.hhcb as hhcb
 import models.hhcbsl as hhcbsl
 import chess.categorical_input as ci
@@ -64,6 +65,31 @@ elif model_type == "hhcbsl":
 
     train_model = model.train_model
     store_model = model.store_model2
+elif model_type == "bdt":
+    if model_version == 0:
+        branch_factor = model_args[0]
+        split_threshold = model_args[1]
+        split_limit = model_args[2]
+        forget_factor = model_args[3]
+        alpha = model_args[4]
+        model = bdt.BDT_C(ci.game_classes(), 3, branch_factor, split_threshold, split_limit, alpha)
+    else:
+        model = bdt.BDT_C.model_from_file(selfplay_dir + "/bdt" + str(model_version) + ".model")
+
+    train_model = lambda labels, data: model.train_batch(labels_to_array(labels), data)
+    store_model = model.model_from_file
+
+def labels_to_array(labels):
+    result = []
+
+    for l in labels:
+        if l == 0:
+            result.append([1.0,0.0,0.0])
+        elif l == 1:
+            result.append([0.0,1.0,0.0])
+        elif l == 2:
+            result.append([0.0,0.0,1.0])
+    return result
 
 
 def select_position(positions, play_as):
@@ -71,13 +97,13 @@ def select_position(positions, play_as):
 
     for idx, pos in enumerate(positions):
         # print(pos)
-        win_n = 2 ** pos[play_as]
-        draw_n = 2 ** pos[cc.Draw]
+        win_n = pos[play_as]
+        draw_n = pos[cc.Draw]
 
         if play_as == cc.White:
-            loss_n = 2 ** pos[cc.Black]
+            loss_n = pos[cc.Black]
         else:
-            loss_n = 2 ** pos[cc.White]
+            loss_n = pos[cc.White]
         # weights.append((win_n + draw_n / 2)**3)
         weights.append(((win_n + (draw_n / 2)) / (win_n + loss_n + draw_n)) ** 4)
         # if idx > 0:

@@ -44,7 +44,7 @@ typedef struct categorical_naive_bayes_partial {
     double * class_cat_probs;
     double alpha;
     uint32_t total_cat_vals;
-    uint8_t cat_num;
+    uint32_t cat_num;
     uint8_t class_num;
     uint8_t is_fresh;
 } cnbp_t;

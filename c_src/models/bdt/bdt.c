@@ -34,7 +34,7 @@ static void bdt_node_to_file(
 
 bdt_t * create_bdt(
         uint8_t * categories,
-        uint8_t cat_num,
+        size_t cat_num,
         uint8_t class_num,
         uint8_t branch_factor,
         uint32_t split_threshold,
@@ -42,6 +42,8 @@ bdt_t * create_bdt(
         double forget_factor,
         double nb_alpha)
 {
+
+    printf("debug -- creating model.\n");
     bdt_t * res;
 
     if (!(res = malloc(sizeof(bdt_t)))) {
@@ -57,12 +59,15 @@ bdt_t * create_bdt(
         return NULL;
     }
 
-    memset(res, 0, cat_num * sizeof(uint8_t));
+    memset(res->categories, 0, cat_num * sizeof(uint8_t));
 
+    printf("debug -create 2.\n");
     for (uint8_t cat = 0; cat < cat_num; ++cat) {
         res->categories[cat] = categories[cat];
     }
+    printf("debug -create 3.\n");
 
+    res->cat_num = (uint32_t) cat_num;
     res->class_num = class_num;
     res->branch_factor = branch_factor;
     res->split_threshold = split_threshold;
@@ -71,11 +76,14 @@ bdt_t * create_bdt(
     res->forget_factor = forget_factor;
     res->nb_alpha = nb_alpha;
 
+    printf("debug -create 4.\n");
+
     if (!(res->nodes = malloc(1 * sizeof(bdt_node_t *)))) {
         printf("Failed to allocate memory for bdt nodes array.\n");
         free_bdt(res);
         return NULL;
     }
+    printf("debug -create 5.\n");
 
     memset(res->nodes, 0, 1 * sizeof(bdt_node_t *));
 
@@ -110,6 +118,7 @@ void train_batch(
         const double * const * labels,
         size_t dsize)
 {
+    printf("BDT training batch on %zu data points.\n", dsize);
     for (size_t d = 0; d < dsize; ++d) {
         train_single(
                 bdt,
@@ -160,7 +169,7 @@ bdt_t * bdt_from_file(
 {
     bdt_t * res;
     uint8_t * categories;
-    uint8_t cat_num;
+    uint32_t cat_num;
     uint8_t class_num;
     uint8_t branch_factor;
     uint32_t split_threshold;
@@ -170,14 +179,14 @@ bdt_t * bdt_from_file(
     double forget_factor;
     double nb_alpha;
 
-    fscanf(file, "%hhu\n", &cat_num);
+    fscanf(file, "%u\n", &cat_num);
 
     if (!(categories = malloc(cat_num * sizeof(uint8_t)))) {
         printf("Failed to allocate memory for categories of bdt classifier being read fromo file.\n");
         return NULL;
     }
 
-    for (uint8_t cat = 0; cat < cat_num; ++cat) {
+    for (uint32_t cat = 0; cat < cat_num; ++cat) {
         fscanf(file, "%hhu\n", &(categories[cat]));
     }
 
@@ -255,9 +264,9 @@ void bdt_to_file(
         const bdt_t * bdt,
         FILE * file)
 {
-    fprintf(file, "%hhu\n", bdt->cat_num);
+    fprintf(file, "%u\n", bdt->cat_num);
 
-    for (uint8_t cat = 0; cat < bdt->cat_num; ++cat) {
+    for (uint32_t cat = 0; cat < bdt->cat_num; ++cat) {
         fprintf(file, "%hhu\n", bdt->categories[cat]);
     }
 
