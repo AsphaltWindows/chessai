@@ -102,7 +102,7 @@ cnbp_t * create_cnbp(
             1.0);
 }
 
-void train_single(
+void cnbp_train_single(
         cnbp_t * cnbp,
         const uint8_t * data,
         const double * label)
@@ -130,7 +130,7 @@ void train_single(
     return;
 }
 
-void train_batch(
+void cnbp_train_batch(
         cnbp_t * cnbp,
         const uint8_t * const * datas,
         const double * const * labels,
@@ -138,7 +138,7 @@ void train_batch(
 {
     for (size_t d = 0; d < dsize; ++d) {
 
-        train_single(
+        cnbp_train_single(
                 cnbp,
                 datas[d],
                 labels[d]);
@@ -148,7 +148,7 @@ void train_batch(
     return;
 }
 
-void train_batch_on_selected(
+void cnbp_train_batch_on_selected(
         cnbp_t * cnbp,
         const uint8_t * const * datas,
         const double * const * labels,
@@ -162,7 +162,7 @@ void train_batch_on_selected(
     }
 
     for (size_t s = 0; s < num_selected; ++s) {
-        train_single(
+        cnbp_train_single(
                 cnbp,
                 datas[selected_indices[s]],
                 labels[selected_indices[s]]);
@@ -171,7 +171,7 @@ void train_batch_on_selected(
     return;
 }
 
-double * predict_class(
+double * cnbp_predict_class(
         const cnbp_t * cnbp,
         const uint8_t * data)
 {
@@ -322,7 +322,7 @@ void cnbp_to_file(
     return;
 }
 
-void forget(
+void cnbp_forget(
         cnbp_t * cnbp,
         double factor)
 {
@@ -337,6 +337,31 @@ void forget(
     recalculate_probabilities(cnbp);
 
     return;
+}
+
+cnbp_t * copy_cnbp(const cnbp_t * cnbp) {
+    cnbp_t * res;
+
+    if (!(res = create_cnbp_with_alpha(
+            cnbp->class_num,
+            cnbp->categories,
+            cnbp->cat_num,
+            cnbp->alpha)))
+    {
+        printf("Failed to create new cnbp classifier to make a copy\n");
+        return NULL;
+    }
+
+    for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
+        res->class_totals[cl] = cnbp->class_totals[cl];
+    }
+
+    for (uint32_t catval = 0; catval < (cnbp->class_num * cnbp->total_cat_vals); ++catval) {
+        res->class_cat_totals[catval] = cnbp->class_cat_totals[catval];
+    }
+
+    recalculate_probabilities(res);
+    return res;
 }
 
 void free_cnbp(cnbp_t * cnbp) {

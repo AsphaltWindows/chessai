@@ -60,18 +60,18 @@ cnbp_t * create_cnbp(
         const uint8_t * cats,
         size_t cat_num);
 
-void train_single(
+void cnbp_train_single(
         cnbp_t * cnbp,
         const uint8_t * data,
         const double * label);
 
-void train_batch(
+void cnbp_train_batch(
         cnbp_t * cnbp,
         const uint8_t * const * datas,
         const double * const * labels,
         size_t dsize);
 
-void train_batch_on_selected(
+void cnbp_train_batch_on_selected(
         cnbp_t * cnbp,
         const uint8_t * const * datas,
         const double * const * labels,
@@ -79,15 +79,17 @@ void train_batch_on_selected(
         const size_t * selected_indices,
         size_t num_selected);
 
-double * predict_class(
+double * cnbp_predict_class(
         const cnbp_t * cnbp,
         const uint8_t * data);
 
-void forget(
+void cnbp_forget(
         cnbp_t * cnbp,
         double factor);
 
 void free_cnbp(cnbp_t * cnbp);
+
+cnbp_t * copy_cnbp(const cnbp_t * cnbp);
 
 cnbp_t * cnbp_from_file_with_params(
         FILE * file,
