@@ -110,9 +110,15 @@ void free_bdt(
 bdt_t * bdt_from_file(
         FILE * file);
 
+bdt_t * bdt_from_file_with_name(
+        const char * filename);
+
 void bdt_to_file(
         const bdt_t * bdt,
         FILE * file);
 
+void bdt_to_file_with_name(
+        const bdt_t * bdt,
+        const char * filename);
 
 #endif

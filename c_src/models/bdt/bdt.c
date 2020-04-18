@@ -229,6 +229,28 @@ bdt_t * bdt_from_file(
     return res;
 }
 
+
+bdt_t * bdt_from_file_with_name(
+        const char * filename)
+{
+    FILE * file;
+    bdt_t * res;
+
+    if (!(file = fopen(filename, "r"))) {
+        printf("Failed to open file %s for reading bdt model.\n", filename);
+        return NULL;
+    }
+
+    if (!(res = bdt_from_file(file))) {
+        printf("Failed to read bdt from file: %s.\n", filename);
+        fclose(file);
+        return NULL;
+    }
+
+    fclose(file);
+    return res;
+}
+
 void bdt_to_file(
         const bdt_t * bdt,
         FILE * file)
@@ -254,6 +276,23 @@ void bdt_to_file(
                 file);
     }
 
+    return;
+}
+
+void bdt_to_file_with_name(
+        const bdt_t * bdt,
+        const char * filename)
+{
+    FILE * file;
+
+    if (!(file = fopen(filename, "w"))) {
+        printf("Failed to open file %s for writing bdt model.\n", filename);
+        return;
+    }
+
+    bdt_to_file(
+            bdt,
+            file);
     return;
 }
 
