@@ -159,7 +159,6 @@ void bdt_predict_class(
         const uint8_t * data,
         double * labels)
 {
-    printf("entered prediction\n");
     return node_predict_class(
             bdt,
             bdt->nodes[0],
