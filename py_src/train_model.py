@@ -94,12 +94,12 @@ elif model_type == "bdt":
         split_limit = int(model_args[2])
         forget_factor = model_args[3]
         alpha = model_args[4]
-        model = bdt.BDT_C(ci.game_classes(), 3, branch_factor, split_threshold, split_limit, forget_factor, alpha)
+        model = bdt.BDT_C(ci.game_classes(), 3, branch_factor, split_threshold, split_limit, forget_factor, alpha, 0)
 
         print("created model")
         model.train_batch([[1,0,0] for i in whitewins] + [[0,1,0] for i in blackwins] + [[0,0,1] for i in draws], whitewins + blackwins + draws)
     else:
-        model = bdt.BDT_C.model_from_file(model_dir + "/bdt" + str(model_version) + ".model", ci.game_classes(), 3)
+        model = bdt.BDT_C.model_from_file(model_dir + "/bdt" + str(model_version) + ".model", ci.game_classes(), 3, 0)
 
         model.train_batch([[1,0,0] for i in whitewins] + [[0,1,0] for i in blackwins] + [[0,0,1] for i in draws], whitewins + blackwins + draws)
 

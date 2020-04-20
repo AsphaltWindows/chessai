@@ -10,7 +10,8 @@ cnbp_t * create_cnbp_with_alpha(
         uint8_t class_num,
         const uint8_t * cats,
         size_t cat_num,
-        double alpha)
+        double alpha,
+        uint8_t use_probs)
 {
     cnbp_t *res;
     uint32_t total_cat_values = 0;
@@ -38,17 +39,19 @@ cnbp_t * create_cnbp_with_alpha(
         return NULL;
     }
 
-    for (uint8_t count = 0; count < class_num; ++count) {
-        res->class_totals[count] = 0.0;
-    }
+    memset(res->class_totals, 0, class_num * sizeof(double));
 
-    if (!(res->class_probs = malloc(class_num * sizeof(double)))) {
-        printf("Failed to allocate memory for cnbp classifier class probabilities\n");
-        free_cnbp(res);
-        return NULL;
-    }
+    if (use_probs) {
 
-    memset(res->class_probs, 0, class_num * sizeof(double));
+        if (!(res->class_probs = malloc(class_num * sizeof(double)))) {
+            printf("Failed to allocate memory for cnbp classifier class probabilities\n");
+            free_cnbp(res);
+            return NULL;
+        }
+
+        memset(res->class_probs, 0, class_num * sizeof(double));
+
+    }
 
     if (!(res->class_cat_idx = malloc(cat_num * sizeof(uint32_t)))) {
         printf("Failed to allocate memory for cnbp classifier category indices\n");
@@ -72,26 +75,28 @@ cnbp_t * create_cnbp_with_alpha(
         return NULL;
     }
 
-    for (uint32_t count = 0; count < class_num; ++count) {
-        res->class_cat_totals[count] = 0.0;
+    memset(res->class_cat_totals, 0, class_num * total_cat_values * sizeof(double));
+
+    if (use_probs) {
+
+        if (!(res->class_cat_probs = malloc((class_num * total_cat_values) * sizeof(double)))) {
+            printf("Failed to allocate memory cnbp classifier class-wise category probabilities\n");
+            return NULL;
+        }
+
+        memset(res->class_cat_probs, 0, (class_num * total_cat_values) * sizeof(double));
     }
-
-    memset(res->class_cat_totals, 0, (class_num * total_cat_values) * sizeof(double));
-
-    if (!(res->class_cat_probs = malloc((class_num * total_cat_values) * sizeof(double)))) {
-        printf("Failed to allocate memory cnbp classifier class-wise category probabilities\n");
-        return NULL;
-    }
-
-    memset(res->class_cat_probs, 0, (class_num * total_cat_values) * sizeof(double));
 
     res->class_num = class_num;
     res->cat_num = (uint32_t) cat_num;
     res->alpha = alpha;
     res->total_cat_vals = total_cat_values;
     res->is_fresh = 0;
+    res->use_probs = use_probs;
 
-    recalculate_probabilities(res);
+    if (use_probs) {
+        recalculate_probabilities(res);
+    }
 
     return res;
 }
@@ -99,13 +104,15 @@ cnbp_t * create_cnbp_with_alpha(
 cnbp_t * create_cnbp(
         uint8_t class_num,
         const uint8_t * cats,
-        size_t cat_num)
+        size_t cat_num,
+        uint8_t use_probs)
 {
     return create_cnbp_with_alpha(
             class_num,
             cats,
             cat_num,
-            1.0);
+            1.0,
+            use_probs);
 }
 
 void cnbp_train_single(
@@ -177,92 +184,90 @@ void cnbp_train_batch_on_selected(
     return;
 }
 
-double * cnbp_predict_class(
+void cnbp_predict_class(
         const cnbp_t * cnbp,
-        const uint8_t * data)
+        const uint8_t * data,
+        double * labels)
 {
-    double * res;
     double total = 0;
     double class_total = 0;
 
-    if (!cnbp->is_fresh) {
+    if (!cnbp->is_fresh && cnbp->use_probs) {
         recalculate_probabilities((cnbp_t *) cnbp);
     }
 
-    if (!(res = malloc(cnbp->class_num * sizeof(double)))) {
-        printf("Failed to allocate memory for cnbp classifier prediction\n");
-        return NULL;
-    }
-
-/** This implementation stores probabilties as logs. **/
-//    for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
-//        res[cl] = (double) cnbp->class_probs[cl];
-//
-//        for (uint32_t cat = 0; cat < cnbp->cat_num; ++cat) {
-//            res[cl] += (double) cnbp->class_cat_probs[cl * cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + data[cat]];
-//        }
-//
-//        res[cl] = pow(10, res[cl]);
-//
-//        total += res[cl];
-//    }
-//
 /** Alternatively we can avoid this and simply do the multiplication on doubles **/
-//    for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
-//        res[cl] = (double) cnbp->class_probs[cl];
-//
-//        for (uint32_t cat = 0; cat < cnbp->cat_num; ++cat) {
-//            res[cl] *= (double) cnbp->class_cat_probs[cl * cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + data[cat]];
-//        }
-//
-//        total += res[cl];
-//    }
+    if (cnbp->use_probs) {
+        for (uint8_t cl = 0; cl < cnbp-> class_num; ++cl) {
+            labels[cl] = (double) cnbp->class_probs[cl];
 
-/**
- * Additional alternative is to not keep track of probabilities,
- * but just do all the division every time this function is called
- */
+            for (uint32_t cat = 0; cat < cnbp->cat_num; ++cat) {
+                labels[cl] *= (double) cnbp->class_cat_probs[
+                cl *cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + data[cat]];
+            }
 
-    for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
-        class_total += cnbp->class_totals[cl];
-    }
-
-    for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
-        res[cl] = (cnbp->class_totals[cl] + cnbp->alpha)/(class_total + (cnbp->class_num * cnbp->alpha));
-
-        for (uint32_t cat = 0; cat < cnbp->cat_num; ++cat) {
-            res[cl] *= ((cnbp->class_cat_totals[cl * cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + data[cat]] + cnbp->alpha) /
-                    (cnbp->class_totals[cl] + (cnbp->categories[cat] * cnbp->alpha)));
+            total += labels[cl];
         }
 
-        total += res[cl];
+    }
+    else {
+        for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
+            class_total += cnbp->class_totals[cl];
+        }
+
+        for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
+            labels[cl] = (cnbp->class_totals[cl] + cnbp->alpha)/(class_total + (cnbp->class_num * cnbp->alpha));
+
+            for (uint32_t cat = 0; cat < cnbp->cat_num; ++cat) {
+                labels[cl] *= ((cnbp->class_cat_totals[cl *cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + data[cat]] + cnbp->alpha) /
+                    (cnbp->class_totals[cl] + (cnbp->categories[cat] * cnbp->alpha)));
+            }
+
+            total += labels[cl];
+        }
     }
 
+
 /**
- * Another alternative is to use logs but to not rely on the probability tables
+ * This implementation assumes probabilties are stored as logs.
  */
-//    for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
-//        class_total += cnbp->class_totals[cl];
+//    if (use_probs) {
+//
+//        for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
+//            labels[cl] = (double) cnbp->class_probs[cl];
+//
+//            for (uint32_t cat = 0; cat < cnbp->cat_num; ++cat) {
+//                labels[cl] += (double) cnbp->class_cat_probs[cl * cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + data[cat]];
+//            }
+//
+//            labels[cl] = pow(10, labels[cl]);
+//            total += labels[cl];
+//        }
 //    }
+//    else {
 //
-//    for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
-//        res[cl] = log10(cnbp->class_totals[cl] + cnbp->alpha) - log10(class_total + cnbp->class_num * cnbp->alpha);
-//
-//        for (uint32_t cat = 0; cat < cnbp->cat_num; ++cat) {
-//            res[cl] += (log10(cnbp->class_cat_totals[cl * cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + data[cat]] + cnbp->alpha) -
-//                    log10(cnbp->class_totals[cl] + cnbp->categories[cat] * cnbp->alpha));
+//        for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
+//            class_total += cnbp->class_totals[cl];
 //        }
 //
-//        res[cl] = pow(10, res[cl]);
-//        total += res[cl];
+//        for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
+//            labels[cl] = log10(cnbp->class_totals[cl] + cnbp->alpha) - log10(class_total + cnbp->class_num * cnbp->alpha);
+//
+//            for (uint32_t cat = 0; cat < cnbp->cat_num; ++cat) {
+//                labels[cl] += (log10(cnbp->class_cat_totals[cl * cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + data[cat]] + cnbp->alpha) -
+//                        log10(cnbp->class_totals[cl] + cnbp->categories[cat] * cnbp->alpha));
+//            }
+//
+//            labels[cl] = pow(10, labels[cl]);
+//            total += labels[cl];
+//        }
 //    }
-//
+
     for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
-        res[cl] /= total;
+        labels[cl] /= total;
     }
-//
-//
-    return res;
+
+    return;
 }
 
 cnbp_t * cnbp_from_file_with_params(
@@ -270,11 +275,12 @@ cnbp_t * cnbp_from_file_with_params(
         uint8_t class_num,
         const uint8_t * cats,
         size_t cat_num,
-        double alpha)
+        double alpha,
+        uint8_t use_probs)
 {
     cnbp_t * res;
 
-    if (!(res = create_cnbp_with_alpha(class_num, cats, cat_num, alpha))) {
+    if (!(res = create_cnbp_with_alpha(class_num, cats, cat_num, alpha, use_probs))) {
         printf("Failed to create cnbp classifier\n");
         return NULL;
     }
@@ -294,13 +300,16 @@ cnbp_t * cnbp_from_file_with_params(
         }
     }
 
-    recalculate_probabilities(res);
+    if (use_probs) {
+        recalculate_probabilities(res);
+    }
 
     return res;
 }
 
 cnbp_t * cnbp_from_file(
-        FILE * file)
+        FILE * file,
+        uint8_t use_probs)
 {
     cnbp_t * res;
     uint8_t class_num;
@@ -329,13 +338,39 @@ cnbp_t * cnbp_from_file(
             class_num,
             categories,
             cat_num,
-            alpha))) {
+            alpha,
+            use_probs))) {
         printf("Failed read cnbp values from file.\n");
         free(categories);
         return NULL;
     }
 
     free(categories);
+    return res;
+}
+
+cnbp_t * cnbp_from_file_with_name(
+        const char * filename,
+        uint8_t use_probs)
+{
+    FILE * file;
+    cnbp_t * res;
+
+    if (!(file = fopen(filename, "r"))) {
+        printf("Failed to open file %s for reading cnbp model.\n", filename);
+        return NULL;
+    }
+
+    if (!(res = cnbp_from_file(
+            file,
+            use_probs)))
+    {
+        printf("Failed to read cnbp from file: %s.\n", filename);
+        fclose(file);
+        return NULL;
+    }
+
+    fclose(file);
     return res;
 }
 
@@ -379,6 +414,24 @@ void cnbp_to_file(
     return;
 }
 
+
+void cnbp_to_file_with_name(
+        const cnbp_t * cnbp,
+        const char * filename)
+{
+    FILE * file;
+
+    if (!(file = fopen(filename, "w"))) {
+        printf("Failed to open file %s for writing cnbp model.\n", filename);
+        return;
+    }
+
+    cnbp_to_file(
+            cnbp,
+            file);
+    return;
+}
+
 void cnbp_forget(
         cnbp_t * cnbp,
         double factor)
@@ -391,7 +444,9 @@ void cnbp_forget(
         cnbp->class_cat_totals[catval] /= factor;
     }
 
-    recalculate_probabilities(cnbp);
+    if (cnbp->use_probs) {
+        recalculate_probabilities(cnbp);
+    }
 
     return;
 }
@@ -403,7 +458,8 @@ cnbp_t * copy_cnbp(const cnbp_t * cnbp) {
             cnbp->class_num,
             cnbp->categories,
             cnbp->cat_num,
-            cnbp->alpha)))
+            cnbp->alpha,
+            cnbp->use_probs)))
     {
         printf("Failed to create new cnbp classifier to make a copy\n");
         return NULL;
@@ -417,7 +473,10 @@ cnbp_t * copy_cnbp(const cnbp_t * cnbp) {
         res->class_cat_totals[catval] = cnbp->class_cat_totals[catval];
     }
 
-    recalculate_probabilities(res);
+    if (cnbp->use_probs) {
+        recalculate_probabilities(res);
+    }
+
     return res;
 }
 
@@ -462,12 +521,12 @@ void free_cnbp(cnbp_t * cnbp) {
 }
 
 void recalculate_probabilities(cnbp_t *cnbp) {
-//    double cur_total = 0;
-//
-//    for (int cl = 0; cl < cnbp->class_num; ++cl) {
-//        cur_total += cnbp->class_totals[cl];
-//    }
-//
+    double cur_total = 0;
+
+    for (int cl = 0; cl < cnbp->class_num; ++cl) {
+        cur_total += cnbp->class_totals[cl];
+    }
+
 /** The following implementation is for the solution using logs to store probabilities **/
 //    for (int cl = 0; cl < cnbp->class_num; ++cl) {
 //
@@ -484,25 +543,22 @@ void recalculate_probabilities(cnbp_t *cnbp) {
 //
 //        }
 //    }
-//
+
 /** Alternative solution which stores exact probabilities rather than their logs **/
-//    for (int cl = 0; cl < cnbp->class_num; ++cl) {
-//
-//        cnbp->class_probs[cl] = (cnbp->class_totals[cl] + cnbp->alpha) / (cur_total + cnbp->class_num * cnbp->alpha);
-//
-//        for (int cat = 0; cat < cnbp->cat_num; ++cat) {
-//            for (int val = 0; val < cnbp->categories[cat]; ++val) {
-//                cur_total *= cnbp->class_cat_totals[cl * cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + val];
-//            }
-//
-//            for (int val = 0; val < cnbp->categories[cat]; ++val) {
-//                cnbp->class_cat_probs[cl * cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + val] = (cnbp->alpha +
-//                      cnbp->class_cat_totals[cl * cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + val]) /
-//                      (cnbp->class_totals[cl] + cnbp->categories[cat] * cnbp->alpha);
-//
-//            }
-//        }
-//    }
+    for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
+
+        cnbp->class_probs[cl] = (cnbp->class_totals[cl] + cnbp->alpha) / (cur_total + cnbp->class_num * cnbp->alpha);
+
+        for (uint8_t cat = 0; cat < cnbp->cat_num; ++cat) {
+
+            for (uint8_t val = 0; val < cnbp->categories[cat]; ++val) {
+                cnbp->class_cat_probs[cl * cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + val] = (cnbp->alpha +
+                      cnbp->class_cat_totals[cl * cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + val]) /
+                      (cnbp->class_totals[cl] + cnbp->categories[cat] * cnbp->alpha);
+
+            }
+        }
+    }
 
     cnbp->is_fresh = 1;
     return;

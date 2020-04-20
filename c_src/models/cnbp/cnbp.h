@@ -5,9 +5,6 @@
 #include <stdint.h>
 #include <stdio.h>
 
-// 4 decimal place precision for now
-#define PRECISION 4
-
 /**
  * Categorical Naive Bayes with Partial Classification training data
  *
@@ -37,6 +34,7 @@ typedef struct categorical_naive_bayes_partial {
      * class_cat_totals Array of totals for each category per class
      * class_cat_probs  Array of probabilities of each category per class
      * is_fresh         1 if probabilities are fresh 0 if recalculation is needed.
+     * use_probs        mode of operation 1 probabilities are used, 0 probabilities aren't used.
     **/
     uint8_t * categories;
     double * class_totals;
@@ -49,18 +47,21 @@ typedef struct categorical_naive_bayes_partial {
     uint32_t cat_num;
     uint8_t class_num;
     uint8_t is_fresh;
+    uint8_t use_probs;
 } cnbp_t;
 
 cnbp_t * create_cnbp_with_alpha(
         uint8_t class_num,
         const uint8_t * cats,
         size_t cat_num,
-        double alpha);
+        double alpha,
+        uint8_t use_probs);
 
 cnbp_t * create_cnbp(
         uint8_t class_num,
         const uint8_t * cats,
-        size_t cat_num);
+        size_t cat_num,
+        uint8_t use_probs);
 
 void cnbp_train_single(
         cnbp_t * cnbp,
@@ -81,9 +82,10 @@ void cnbp_train_batch_on_selected(
         const size_t * selected_indices,
         size_t num_selected);
 
-double * cnbp_predict_class(
+void cnbp_predict_class(
         const cnbp_t * cnbp,
-        const uint8_t * data);
+        const uint8_t * data,
+        double * labels);
 
 void cnbp_forget(
         cnbp_t * cnbp,
@@ -98,10 +100,16 @@ cnbp_t * cnbp_from_file_with_params(
         uint8_t class_num,
         const uint8_t * cats,
         size_t cat_num,
-        double alpha);
+        double alpha,
+        uint8_t use_probs);
 
 cnbp_t * cnbp_from_file(
-        FILE * file);
+        FILE * file,
+        uint8_t use_probs);
+
+cnbp_t * cnbp_from_file_with_name(
+        const char * filename,
+        uint8_t use_probs);
 
 void cnbp_to_file_no_params(
         const cnbp_t * cnbp,
@@ -110,5 +118,9 @@ void cnbp_to_file_no_params(
 void cnbp_to_file(
         const cnbp_t * cnbp,
         FILE * file);
+
+void cnbp_to_file_with_name(
+        const cnbp_t * cnbp,
+        const char * filename);
 
 #endif

@@ -5,12 +5,12 @@ bdtlib = CDLL("models/libbdt.so")
 
 create_bdt = bdtlib.create_bdt
 
-bdt_train_batch = bdtlib.train_batch
+bdt_train_batch = bdtlib.bdt_train_batch
 
-predict_class = bdtlib.predict_class
+bdt_predict_class = bdtlib.bdt_predict_class
 
 bdt_from_file_with_name = bdtlib.bdt_from_file_with_name
-bdt_from_file_with_name.argtypes = [c_char_p]
+bdt_from_file_with_name.argtypes = [c_char_p, c_uint8]
 bdt_from_file_with_name.restype = c_void_p
 
 bdt_to_file_with_name = bdtlib.bdt_to_file_with_name
@@ -26,7 +26,7 @@ free.restype = None
 
 
 class BDT_C:
-    def __init__(self, categories, class_num, branch_factor, split_threshold, split_limit, forget_factor, alpha = 1):
+    def __init__(self, categories, class_num, branch_factor, split_threshold, split_limit, forget_factor, alpha, use_probs):
         self.class_num = class_num
         self.cat_num = len(categories)
         self.categories = categories
@@ -40,7 +40,8 @@ class BDT_C:
             c_uint32,
             c_uint32,
             c_double,
-            c_double]
+            c_double,
+            c_uint8]
         create_bdt.restype = c_void_p
         self.bdt = create_bdt(
             categories_param,
@@ -50,7 +51,8 @@ class BDT_C:
             split_threshold,
             split_limit,
             forget_factor,
-            alpha)
+            alpha,
+            use_probs)
 
     def free_model(self):
         free_bdt(self.bdt)
@@ -83,22 +85,24 @@ class BDT_C:
 
     def predict_class(self, data):
         DataArray = c_uint8 * len(data)
+        labels_uncasted = (c_double * self.class_num)()
         data_param = DataArray(*data)
-        predict_class.argtypes = [c_void_p, POINTER(c_uint8 * self.cat_num)]
-        predict_class.restype = POINTER(c_double * self.class_num)
-        c_res = predict_class(self.bdt, data_param)
-        res = [r for r in c_res.contents]
-        free(c_res)
+        # bdt_predict_class.argtypes = [c_void_p, c_uint8 * self.cat_num, c_double * self.class_num]
+        print("about to make call")
+        bdt_predict_class(self.bdt, data_param, cast(labels_uncasted, POINTER(c_double)))
+        print("exited call")
+        res = [r for r in labels_uncasted]
+        print(res)
         return res
 
     def model_to_file(self, filename):
         bdt_to_file_with_name(self.bdt, c_char_p(bytes(filename, 'utf-8')))
 
     @staticmethod
-    def model_from_file(filename, categories, class_num):
-        model = BDT_C(categories, class_num, 0, 0, 0, 0, 0)
+    def model_from_file(filename, categories, class_num, use_probs):
+        model = BDT_C(categories, class_num, 0, 0, 0, 0, 0, 1)
         free_bdt(model.bdt)
-        model.bdt = bdt_from_file_with_name(c_char_p(bytes(filename, 'utf-8')))
+        model.bdt = bdt_from_file_with_name(c_char_p(bytes(filename, 'utf-8')), use_probs)
         return model
 
 

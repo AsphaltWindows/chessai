@@ -70,6 +70,8 @@ struct bayesian_delegation_tree {
     /** The struct members are rearranged pointers first in order to guarantee packing **/
     uint8_t * categories;
     bdt_node_t ** nodes;
+    double * class_scratch_space;
+    double * branch_scratch_space;
     uint32_t cat_num;
     size_t nodes_num;
     uint8_t class_num;
@@ -79,6 +81,7 @@ struct bayesian_delegation_tree {
     uint32_t split_number;
     double forget_factor;
     double nb_alpha;
+    uint8_t use_probs;
 };
 
 bdt_t * create_bdt(
@@ -89,31 +92,35 @@ bdt_t * create_bdt(
         uint32_t split_threshold,
         uint32_t split_limit,
         double forget_factor,
-        double nb_alpha);
+        double nb_alpha,
+        uint8_t use_probs);
 
-void train_single(
+void bdt_train_single(
         bdt_t * bdt,
         const uint8_t * data,
         const double * label);
 
-void train_batch(
+void bdt_train_batch(
         bdt_t * bdt,
         const uint8_t * const * datas,
         const double * const * labels,
         size_t dsize);
 
-double * predict_class(
+void bdt_predict_class(
         const bdt_t * bdt,
-        const uint8_t * data);
+        const uint8_t * data,
+        double * labels);
 
 void free_bdt(
         bdt_t * bdt);
 
 bdt_t * bdt_from_file(
-        FILE * file);
+        FILE * file,
+        uint8_t use_probs);
 
 bdt_t * bdt_from_file_with_name(
-        const char * filename);
+        const char * filename,
+        uint8_t use_probs);
 
 void bdt_to_file(
         const bdt_t * bdt,

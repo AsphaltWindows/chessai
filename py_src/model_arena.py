@@ -100,7 +100,7 @@ elif model1_type == "hhcbsl":
     model1 = hhcbsl.HierarchicalHistogramClusteredBayesSizeLimited.load_model2(model1_dir + "/" + model1_type + str(model1_version) + ".model")
     player1 = lambda m, t: select_move(model1, t, m)
 elif model1_type == "bdt":
-    model1 = bdt.BDT_C.model_from_file(model1_dir + "/" + model1_type + str(model1_version) + ".model", ci.game_classes(), 3)
+    model1 = bdt.BDT_C.model_from_file(model1_dir + "/" + model1_type + str(model1_version) + ".model", ci.game_classes(), 3, 1)
     player1 = lambda m, t: select_move(model1, t, m)
 
 if model2_type == "rand":
@@ -122,7 +122,7 @@ elif model2_type == "hhcbsl":
     model2 = hhcbsl.HierarchicalHistogramClusteredBayesSizeLimited.load_model2(model2_dir + "/" + model2_type + str(model2_version) + ".model")
     player2 = lambda m, t: select_move(model2, t, m)
 elif model2_type == "bdt":
-    model2 = bdt.BDT_C.model_from_file(model2_dir + "/" + model2_type + str(model2_version) + ".model", ci.game_classes(), 3)
+    model2 = bdt.BDT_C.model_from_file(model2_dir + "/" + model2_type + str(model2_version) + ".model", ci.game_classes(), 3, 1)
     player2 = lambda m, t: select_move(model2, t, m)
 
 player1_side = cc.White
