@@ -1,3 +1,6 @@
-c_src/.idea/workspace.xml
+c_src/.idea
+py_src/.idea
+cpp_src/.idea
 *.so
 *.model
+*.games
