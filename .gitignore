@@ -4,3 +4,6 @@ cpp_src/.idea
 *.so
 *.model
 *.games
+games/**
+models/**
+selfplay/**
