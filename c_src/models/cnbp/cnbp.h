@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
+// 4 decimal place precision for now
+#define PRECISION 4
 
 /**
  * Categorical Naive Bayes with Partial Classification training data

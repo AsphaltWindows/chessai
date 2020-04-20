@@ -23,7 +23,7 @@ selfplay_dir = sys.argv[2]
 model_version = int(sys.argv[3])
 game_num = int(sys.argv[4])
 round_num = int(sys.argv[5])
-model_args = list(map(int, sys.argv[6].split(",")))
+model_args = list(map(float, sys.argv[6].split(",")))
 
 if model_type == "nb":
     if model_version == 0:
@@ -35,7 +35,7 @@ if model_type == "nb":
 
 elif model_type == "cb":
     if model_version == 0:
-        cluster_num = model_args[0]
+        cluster_num = int(model_args[0])
         init_modes = []
         model = cb.ClusteredBayes(init_modes, 3, cluster_num, ci.game_classes())
     else:
@@ -45,9 +45,9 @@ elif model_type == "cb":
 
 elif model_type == "knb":
     if model_version == 0:
-        cluster_num = model_args[0]
-        node_num = model_args[1]
-        layer_num = model_args[2]
+        cluster_num = int(model_args[0])
+        node_num = int(model_args[1])
+        layer_num = int(model_args[2])
         model = knb.KNetworkBayes(3, ci.game_classes(), cluster_num, node_num, layer_num)
     else:
         model = knb.KNetworkBayes.load_model(selfplay_dir + "/knb" + str(model_version) + ".model")
@@ -56,8 +56,8 @@ elif model_type == "knb":
 
 elif model_type == "hhcbsl":
     if model_version == 0:
-        cluster_num = model_args[0]
-        limit = model_args[1]
+        cluster_num = int(model_args[0])
+        limit = int(model_args[1])
         alpha = model_args[2]
         model = hhcbsl.HierarchicalHistogramClusteredBayesSizeLimited(ci.game_classes(), cluster_num, 3, limit, alpha)
     else:
@@ -67,17 +67,17 @@ elif model_type == "hhcbsl":
     store_model = model.store_model2
 elif model_type == "bdt":
     if model_version == 0:
-        branch_factor = model_args[0]
-        split_threshold = model_args[1]
-        split_limit = model_args[2]
+        branch_factor = int(model_args[0])
+        split_threshold = int(model_args[1])
+        split_limit = int(model_args[2])
         forget_factor = model_args[3]
         alpha = model_args[4]
-        model = bdt.BDT_C(ci.game_classes(), 3, branch_factor, split_threshold, split_limit, alpha)
+        model = bdt.BDT_C(ci.game_classes(), 3, branch_factor, split_threshold, split_limit, forget_factor, alpha)
     else:
-        model = bdt.BDT_C.model_from_file(selfplay_dir + "/bdt" + str(model_version) + ".model")
+        model = bdt.BDT_C.model_from_file(selfplay_dir + "/bdt" + str(model_version) + ".model", ci.game_classes(), 3)
 
     train_model = lambda labels, data: model.train_batch(labels_to_array(labels), data)
-    store_model = model.model_from_file
+    store_model = model.model_to_file
 
 def labels_to_array(labels):
     result = []

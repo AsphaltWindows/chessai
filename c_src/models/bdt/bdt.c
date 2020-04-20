@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 
 static bdt_node_t * create_bdt_node_shell(
         const bdt_t * bdt);
@@ -43,7 +44,6 @@ bdt_t * create_bdt(
         double nb_alpha)
 {
 
-    printf("debug -- creating model.\n");
     bdt_t * res;
 
     if (!(res = malloc(sizeof(bdt_t)))) {
@@ -61,11 +61,9 @@ bdt_t * create_bdt(
 
     memset(res->categories, 0, cat_num * sizeof(uint8_t));
 
-    printf("debug -create 2.\n");
     for (uint8_t cat = 0; cat < cat_num; ++cat) {
         res->categories[cat] = categories[cat];
     }
-    printf("debug -create 3.\n");
 
     res->cat_num = (uint32_t) cat_num;
     res->class_num = class_num;
@@ -76,14 +74,12 @@ bdt_t * create_bdt(
     res->forget_factor = forget_factor;
     res->nb_alpha = nb_alpha;
 
-    printf("debug -create 4.\n");
 
     if (!(res->nodes = malloc(1 * sizeof(bdt_node_t *)))) {
         printf("Failed to allocate memory for bdt nodes array.\n");
         free_bdt(res);
         return NULL;
     }
-    printf("debug -create 5.\n");
 
     memset(res->nodes, 0, 1 * sizeof(bdt_node_t *));
 
@@ -93,6 +89,7 @@ bdt_t * create_bdt(
         return NULL;
     }
 
+    res->nodes[0]->node_id = 0;
     res->nodes_num = 1;
 
     return res;
@@ -118,13 +115,22 @@ void train_batch(
         const double * const * labels,
         size_t dsize)
 {
+    uint64_t start_time;
+    uint64_t end_time;
+
     printf("BDT training batch on %zu data points.\n", dsize);
+    start_time = time(NULL);
+
     for (size_t d = 0; d < dsize; ++d) {
         train_single(
                 bdt,
                 datas[d],
                 labels[d]);
     }
+
+    end_time = time(NULL);
+
+    printf("Time spent training: %lu\n", end_time - start_time);
 
     return;
 }
@@ -182,7 +188,7 @@ bdt_t * bdt_from_file(
     fscanf(file, "%u\n", &cat_num);
 
     if (!(categories = malloc(cat_num * sizeof(uint8_t)))) {
-        printf("Failed to allocate memory for categories of bdt classifier being read fromo file.\n");
+        printf("Failed to allocate memory for categories of bdt classifier being read from file.\n");
         return NULL;
     }
 
@@ -365,6 +371,8 @@ static void node_train_single(
 
         if (node->num_trained >= bdt->split_threshold && bdt->split_number < bdt->split_limit) {
 
+            printf("Splitting Node with node_id: %u.\n", node->node_id);
+
             if (!(node->children = malloc(bdt->branch_factor * sizeof(uint32_t)))) {
                 printf("Failed to allocate array for children indices.\n");
                 return;
@@ -386,6 +394,7 @@ static void node_train_single(
                     return;
                 }
 
+                bdt->nodes[bdt->nodes_num + child]->node_id = bdt->nodes_num + child;
                 bdt->nodes[bdt->nodes_num + child]->type = LEAF;
 
                 if (!(bdt->nodes[bdt->nodes_num + child]->classifier = copy_cnbp(node->classifier))) {
@@ -413,6 +422,7 @@ static void node_train_single(
             node->type = BRANCH;
             node->num_trained = 0;
             bdt->nodes_num += bdt->branch_factor;
+            bdt->split_number++;
 
             node_train_single(
                     bdt,
@@ -421,20 +431,23 @@ static void node_train_single(
                     label);
         }
         else {
-            return cnbp_train_single(
+            cnbp_train_single(
                     node->classifier,
                     data,
                     label);
             node->num_trained++;
+            return;
         }
     }
     else if (node->type == BRANCH) {
 
-        for (uint8_t b = 0; b < bdt->branch_factor; ++b) {
+//        printf("Training Branch Node, node_id: %u\n", node->node_id);
+
+        for (uint8_t child = 0; child < bdt->branch_factor; ++child) {
 
             if (!(expected = node_predict_class(
                     bdt,
-                    node,
+                    bdt->nodes[node->children[child]],
                     data)))
             {
                 printf("bdt node failed to return array of class predictions.\n");
@@ -443,19 +456,26 @@ static void node_train_single(
 
             child_error = 0.0;
 
+//            printf("Child: %hhu ", child);
             for (uint8_t cl = 0; cl < bdt->class_num; ++cl) {
+//                printf("prob%hhu: %lf", cl, expected[cl]);
                 child_error += fabs(expected[cl] - label[cl]);
             }
+//            printf("\n");
 
             child_error /= 2;
 
-            if (!b || child_error < min_error) {
+//            printf("Child: %hhu, error: %lf ", child, child_error);
+
+            if (!child || child_error < min_error) {
                 min_error = child_error;
-                min_error_index = b;
+                min_error_index = child;
             }
 
             free(expected);
         }
+
+//        printf("\n");
 
         if (!(branch_labels = malloc(bdt->branch_factor * sizeof(double)))) {
             printf("Failed to allocate array for branch labels during training.\n");
@@ -482,6 +502,7 @@ static void node_train_single(
                 label);
 
         node->num_trained++;
+        return;
     }
 
     return;
@@ -502,6 +523,8 @@ static double * node_predict_class(
                 data);
     }
     else if (node->type == BRANCH) {
+
+//        printf("Classifying as branch node, node_id: %u\n", node->node_id);
 
         if (!(branch_expected = cnbp_predict_class(
                 node->classifier,
@@ -564,6 +587,7 @@ static bdt_node_t * bdt_node_from_file(
     }
 
     fscanf(file, "%u\n", &(res->type));
+    fscanf(file, "%u\n", &(res->node_id));
     fscanf(file, "%u\n", &(res->num_trained));
 
     if (res->type == BRANCH) {
@@ -601,6 +625,7 @@ static void bdt_node_to_file(
         FILE * file)
 {
     fprintf(file, "%u\n", (uint32_t) node->type);
+    fprintf(file, "%u\n", node->node_id);
     fprintf(file, "%u\n", node->num_trained);
 
     if (node->type == BRANCH) {

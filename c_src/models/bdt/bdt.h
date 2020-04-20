@@ -7,6 +7,7 @@
 
 #include "../cnbp/cnbp.h"
 
+
 /**
  * Bayesian Delegation Tree Classification model
  *
@@ -61,6 +62,7 @@ struct bdt_node {
     cnbp_t * classifier;
     uint32_t * children;
     ntype_t type;
+    uint32_t node_id;
     uint32_t num_trained;
 };
 
