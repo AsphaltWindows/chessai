@@ -12,5 +12,5 @@ done
 
 for library in $(find ./c_src/models -name "*.so"); do
     name=`basename $library`
-    cp "$library" "../py_src/models/$name"
+    cp "$library" "./py_src/models/$name"
 done
