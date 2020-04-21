@@ -1,7 +1,6 @@
 #include "model.h"
 
-#include "../models/naive_bayes/categorical_naive_bayes.h"
-#include "../models/clustered_bayes/hist_clustered_bayes.h"
+#include "../models/cnbp/cnbp.h"
 #include "../models/bdt/bdt.h"
 
 #include <string.h>
@@ -112,7 +111,7 @@ em_t * create_model(
     }
     else {
         printf("Unrecognized evaluation model type.\n");
-        free(res);
+        free_model(res);
         return NULL;
     }
 

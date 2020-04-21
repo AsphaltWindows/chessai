@@ -11,7 +11,6 @@
 #define NB      "nb"
 #define BDT     "bdt"
 
-
 em_t * create_model(
         const char * model_type);
 

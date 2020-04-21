@@ -19,11 +19,17 @@ typedef struct evaluation_model {
     free_model_t free_model;
 } em_t;
 
-typedef void * (*select_move_t)(const uint8_t * const *, size_t, double *);
+typedef int (*compare_moves_t)(const double *, const double *);
+
+typedef enum player_color {
+    WHITE = 0,
+    BLACK = 1
+} color_t;
 
 typedef struct player {
     em_t * eval_model;
-    select_move_t select_move;
+    compare_moves_t compare_moves;
+    color_t color;
 } player_t;
 
 #endif //C_SRC_TYPES_H
