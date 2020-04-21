@@ -22,4 +22,8 @@ em_t * load_model(
         const char * directory,
         const char ** args);
 
+void train_model(
+        em_t * model,
+        const char * directory);
+
 #endif

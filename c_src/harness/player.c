@@ -5,11 +5,11 @@
 #include <stdlib.h>
 
 /** We select the move that gives the highest expected score (win = 1 loss = 0, draw = 1)**/
-static int wld_score_compare(const double * first, const double * second);
+static int wld_score_compare(color_t color, const double * first, const double * second);
 /** If positions is available with higher win % than loss % we select that of those positions where win % is the highest
  * If there are no positions such that win % > loss % we select the position with the highest draw %.
  **/
-static int wld_win_draw_compare(const double * first, const double * second);
+static int wld_win_draw_compare(color_t color, const double * first, const double * second);
 
 player_t * create_player(
         em_t * eval_model,
@@ -24,17 +24,17 @@ player_t * create_player(
     }
 
     res->eval_model = eval_model;
-    res->player_color = player_color;
+    res->color = color;
 
     if (!strcmp(compare_type, WLD_SCORE)) {
         res->compare_moves = &wld_score_compare;
     }
     else if (!strcmp(compare_type, WLD_WIN_DRAW)) {
-        res->eval_model = &wld_win_draw_compare;
+        res->compare_moves = &wld_win_draw_compare;
     }
     else {
-        printf("Invalid move comparison type provided: %s.\n");
-        free_player(player);
+        printf("Invalid move comparison type provided: %s.\n", compare_type);
+        free_player(res);
         return NULL;
     }
 
@@ -72,12 +72,16 @@ uint32_t select_move(
     while (at < pos_num) {
         player->eval_model->run_model(player->eval_model->model, positions[at], (double *) next);
 
-        if (!at || ((comp_res = player->compare_moves(best, next)) == -1) {
-            uint32_t num_candidates = 1;
+        if (!at || ((comp_res = player->compare_moves(
+                player->color,
+                best,
+                next)) == -1))
+        {
+            num_candidates = 1;
             candidate_indices[0] = at;
             memcpy(best, next, 3 * sizeof(double));
         }
-        elif (comp_res == 0) {
+        else if (comp_res == 0) {
             candidate_indices[num_candidates] = at;
             ++num_candidates;
         }
@@ -97,10 +101,14 @@ uint32_t select_move(
 void switch_color(
         player_t * player) {
     player->color = player->color == WHITE ? BLACK : WHITE;
+    return;
 }
 
-static int wld_score_compare(const double * first, const double * second) {
-    int w_idx = player->color == WHITE ? 0 : 1;
+static int wld_score_compare(
+        color_t color,
+        const double * first,
+        const double * second) {
+    int w_idx = color == WHITE ? 0 : 1;
     int d_idx = 2;
     double score_first = first[w_idx] + (first[d_idx] / 2);
     double score_second = second[w_idx] + (second[d_idx] / 2);
@@ -108,7 +116,7 @@ static int wld_score_compare(const double * first, const double * second) {
     if (score_first == score_second) {
         return 0;
     }
-    elif (score_first < score_second) {
+    else if (score_first < score_second) {
         return -1;
     }
     else {
@@ -116,9 +124,12 @@ static int wld_score_compare(const double * first, const double * second) {
     }
 }
 
-static int wld_win_draw_compare(const double * first, const double * second) {
-    int w_idx = player->color == WHITE ? 0 : 1;
-    int l_idx = player->color == WHITE ? 1 : 0;
+static int wld_win_draw_compare(
+        color_t color,
+        const double * first,
+        const double * second) {
+    int w_idx = color == WHITE ? 0 : 1;
+    int l_idx = color == WHITE ? 1 : 0;
     int d_idx = 2;
 
     if (first[w_idx] > first[l_idx]) {
@@ -141,7 +152,7 @@ static int wld_win_draw_compare(const double * first, const double * second) {
             return -1;
         }
         else if (first[d_idx] > second[d_idx]) {
-            return 1
+            return 1;
         }
         else if (first[d_idx] == second[d_idx]) {
             return 0;

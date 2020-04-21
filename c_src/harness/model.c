@@ -6,6 +6,9 @@
 #include <string.h>
 #include <stdlib.h>
 
+#define POS_CHAR_BUFSIZE 512
+#define POS_UINT8_BUFSIZE 128
+
 /** RANDOM model callbacks **/
 typedef struct random_eval_model {
     uint8_t class_num;
@@ -17,14 +20,14 @@ static void * random_read_model(
         const char * filename,
         const char ** args);
 static void random_write_model(
-        void * model,
+        const void * model,
         const char * filename);
 static void random_train_model(
         void * model,
         const uint8_t * data,
         const double * labels);
 static void random_run_model(
-        void * model,
+        const void * model,
         const uint8_t * data,
         double * labels);
 static void random_free_model(
@@ -37,14 +40,14 @@ static void * nb_read_model(
         const char * filename,
         const char ** args);
 static void nb_write_model(
-        void * model,
+        const void * model,
         const char * filename);
 static void nb_train_model(
         void * model,
         const uint8_t * data,
         const double * labels);
 static void nb_run_model(
-        void * model,
+        const void * model,
         const uint8_t * data,
         double * labels);
 static void nb_free_model(
@@ -57,18 +60,23 @@ static void * bdt_read_model(
         const char * filename,
         const char ** args);
 static void bdt_write_model(
-        void * model,
+        const void * model,
         const char * filename);
 static void bdt_train_model(
         void * model,
         const uint8_t * data,
         const double * labels);
 static void bdt_run_model(
-        void * model,
+        const void * model,
         const uint8_t * data,
         double * labels);
 static void bdt_free_model(
         void * model);
+
+static void train_model_on_file(
+        em_t * model,
+        const char * filename,
+        const double * labels);
 
 
 em_t * create_model(
@@ -173,6 +181,77 @@ em_t * load_model(
     return res;
 }
 
+void train_model(
+        em_t * model,
+        const char * directory)
+{
+    char * filename;
+    size_t fsize;
+    double labels[3];
+
+    fsize = snprintf(NULL, 0, "%s/white_wins.games", directory) + 1;
+
+    if (!(filename = malloc(fsize * sizeof(char)))) {
+        printf("Failed to allocate memory for filename with white wins.\n");
+        return;
+    }
+
+    memset(filename, 0, fsize * sizeof(char));
+    snprintf(filename, fsize, "%s/white_wins.games", directory);
+    labels[0] = 1.0;
+    labels[1] = 0.0;
+    labels[2] = 0.0;
+
+    train_model_on_file(
+            model,
+            filename,
+            labels);
+
+    free(filename);
+
+    fsize = snprintf(NULL, 0, "%s/black_wins.games", directory) + 1;
+
+    if (!(filename = malloc(fsize * sizeof(char)))) {
+        printf("Failed to allocate memory for filename with black wins.\n");
+        return;
+    }
+
+    memset(filename, 0, fsize * sizeof(char));
+    snprintf(filename, fsize, "%s/black_wins.games", directory);
+    labels[0] = 0.0;
+    labels[1] = 1.0;
+    labels[2] = 0.0;
+
+    train_model_on_file(
+            model,
+            filename,
+            labels);
+
+    free(filename);
+
+    fsize = snprintf(NULL, 0, "%s/black_wins.games", directory) + 1;
+
+    if (!(filename = malloc(fsize * sizeof(char)))) {
+        printf("Failed to allocate memory for filename with black wins.\n");
+        return;
+    }
+
+    memset(filename, 0, fsize * sizeof(char));
+    snprintf(filename, fsize, "%s/black_wins.games", directory);
+    labels[0] = 0.0;
+    labels[1] = 0.0;
+    labels[2] = 1.0;
+
+    train_model_on_file(
+            model,
+            filename,
+            labels);
+
+    free(filename);
+
+}
+
+
 static void * random_new_model(
         const char ** args) {
     rand_t * res;
@@ -193,13 +272,14 @@ static void * random_new_model(
 }
 
 static void * random_read_model(
-        const char * filename) {
+        const char * filename,
+        const char ** args) {
     printf("Cannot read random evaluation model from file: %s (or any file for that matter)\n.", filename);
     return NULL;
 }
 
 static void random_write_model(
-        void * model,
+        const void * model,
         const char * filename) {
     printf("Cannot write random evaluation model to file: %s (or any file for that matter)\n.", filename);
     return;
@@ -214,7 +294,7 @@ static void random_train_model(
 }
 
 static void random_run_model(
-        void * model,
+        const void * model,
         const uint8_t * data,
         double * labels)
 {
@@ -350,7 +430,7 @@ static void * nb_read_model(
 }
 
 static void nb_write_model(
-        void * model,
+        const void * model,
         const char * filename)
 {
     return cnbp_to_file_with_name(
@@ -370,7 +450,7 @@ static void nb_train_model(
 }
 
 static void nb_run_model(
-        void * model,
+        const void * model,
         const uint8_t * data,
         double * labels)
 {
@@ -383,14 +463,14 @@ static void nb_run_model(
 static void nb_free_model(
         void * model)
 {
-    return cnbp_free((cnbp_t *) model);
+    return free_cnbp((cnbp_t *) model);
 }
 
 
 static void * bdt_new_model(
         const char ** args)
 {
-    cnbp_t * res;
+    bdt_t * res;
     uint8_t class_num;
     uint8_t cat_num;
     uint8_t *categories;
@@ -506,9 +586,9 @@ static void * bdt_new_model(
     }
 
     if (!(res = create_bdt(
-            class_num,
             categories,
             (size_t) cat_num,
+            class_num,
             branch_factor,
             split_threshold,
             split_limit,
@@ -551,7 +631,7 @@ static void * bdt_read_model(
 }
 
 static void bdt_write_model(
-        void * model,
+        const void * model,
         const char * filename)
 {
     return bdt_to_file_with_name(
@@ -571,7 +651,7 @@ static void bdt_train_model(
 }
 
 static void bdt_run_model(
-        void * model,
+        const void * model,
         const uint8_t * data,
         double * labels)
 {
@@ -588,3 +668,40 @@ static void bdt_free_model(
             (bdt_t *) model);
 }
 
+static void train_model_on_file(
+        em_t * model,
+        const char * filename,
+        const double * labels)
+{
+    FILE * file;
+    uint8_t data_array[POS_UINT8_BUFSIZE];
+    char position_string[POS_CHAR_BUFSIZE];
+    char * strval;
+    size_t at = 0;
+
+    if (!(file = fopen(filename, "r"))) {
+        printf("Failed to open file: %s\n", filename);
+        return;
+    }
+
+    while (fgets(position_string, POS_CHAR_BUFSIZE, file)) {
+        at = 0;
+
+        if ((strval = strtok(position_string, " "))) {
+            data_array[at] = (uint8_t) atoi(strval);
+            ++at;
+        }
+        while ((strval = strtok(NULL , " "))) {
+            data_array[at] = (uint8_t) atoi(strval);
+            ++at;
+        }
+
+        model->train_model(
+                model->model,
+                data_array,
+                labels);
+    }
+
+    fclose(file);
+
+}

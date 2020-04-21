@@ -19,7 +19,7 @@ void free_player(
 
 uint32_t select_move(
         const player_t * player,
-        const double * const * move_scores,
+        const uint8_t * const * positions,
         size_t score_num);
 
 void switch_color(
