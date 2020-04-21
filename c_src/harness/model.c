@@ -73,13 +73,13 @@ static void bdt_run_model(
 static void bdt_free_model(
         void * model);
 
-static void train_model_on_file(
+static uint32_t train_model_on_file(
         em_t * model,
         const char * filename,
         const double * labels);
 
 
-em_t * create_model(
+em_t * model(
         const char *model_type)
 {
     em_t * res;
@@ -126,6 +126,17 @@ em_t * create_model(
     return res;
 }
 
+void new_model(
+        em_t * model,
+        const char ** args)
+{
+    if (!(model->model = model->new_model(args))) {
+        printf("Failed to create new model.\n");
+        return;
+    }
+
+    return;
+}
 
 void free_model(em_t * model) {
     if (model->model) {
@@ -145,7 +156,7 @@ em_t * load_model(
     char * filename;
     size_t filename_size;
 
-    if (!(res = create_model(
+    if (!(res = model(
             model_type)))
     {
         printf("Failed to create model of type: %s\n", model_type);
@@ -181,6 +192,35 @@ em_t * load_model(
     return res;
 }
 
+void store_model(
+        em_t * model,
+        const char * model_type,
+        uint32_t model_version,
+        const char * directory)
+{
+    size_t filename_size;
+    char * filename;
+
+    if (!model->model) {
+        printf("Attempting to store model, but pointer to model struct is NULL.\n");
+        return;
+    }
+
+    filename_size = snprintf(NULL, 0, "%s/%s%u.model", directory, model_type, model_version) + 1;
+
+    if (!(filename = malloc(filename_size * sizeof(char)))) {
+        printf("Failed to allocate memory for model filename.\n");
+        return;
+    }
+
+    memset(filename, 0, filename_size * sizeof(char));
+    snprintf(filename, filename_size, "%s/%s%u.model", directory, model_type, model_version);
+
+    model->write_model(
+            model->model,
+            filename);
+}
+
 void train_model(
         em_t * model,
         const char * directory)
@@ -188,6 +228,8 @@ void train_model(
     char * filename;
     size_t fsize;
     double labels[3];
+    uint32_t num_trained = 0;
+    uint32_t total_trained = 0;
 
     fsize = snprintf(NULL, 0, "%s/white_wins.games", directory) + 1;
 
@@ -202,10 +244,13 @@ void train_model(
     labels[1] = 0.0;
     labels[2] = 0.0;
 
-    train_model_on_file(
+    num_trained = train_model_on_file(
             model,
             filename,
             labels);
+
+    printf("Model trained on %u White Wins.\n", num_trained);
+    total_trained += num_trained;
 
     free(filename);
 
@@ -222,14 +267,17 @@ void train_model(
     labels[1] = 1.0;
     labels[2] = 0.0;
 
-    train_model_on_file(
+    num_trained = train_model_on_file(
             model,
             filename,
             labels);
 
+    printf("Model trained on %u Black Wins.\n", num_trained);
+    total_trained += num_trained;
+
     free(filename);
 
-    fsize = snprintf(NULL, 0, "%s/black_wins.games", directory) + 1;
+    fsize = snprintf(NULL, 0, "%s/draws.games", directory) + 1;
 
     if (!(filename = malloc(fsize * sizeof(char)))) {
         printf("Failed to allocate memory for filename with black wins.\n");
@@ -237,15 +285,19 @@ void train_model(
     }
 
     memset(filename, 0, fsize * sizeof(char));
-    snprintf(filename, fsize, "%s/black_wins.games", directory);
+    snprintf(filename, fsize, "%s/draws.games", directory);
     labels[0] = 0.0;
     labels[1] = 0.0;
     labels[2] = 1.0;
 
-    train_model_on_file(
+    num_trained = train_model_on_file(
             model,
             filename,
             labels);
+
+    printf("Model trained on %u Draws.\n", num_trained);
+    total_trained += num_trained;
+    printf("Total training data points: %u.\n", total_trained);
 
     free(filename);
 
@@ -530,15 +582,6 @@ static void * bdt_new_model(
     }
 
     if (!args[at]) {
-        printf("BDT model missing branch_factor parameter.\n");
-        return NULL;
-    }
-    else {
-        branch_factor = (uint8_t) atoi(args[at]);
-        ++at;
-    }
-
-    if (!args[at]) {
         printf("BDT model missing split_threshold parameter.\n");
         return NULL;
     }
@@ -668,7 +711,7 @@ static void bdt_free_model(
             (bdt_t *) model);
 }
 
-static void train_model_on_file(
+static uint32_t train_model_on_file(
         em_t * model,
         const char * filename,
         const double * labels)
@@ -678,19 +721,24 @@ static void train_model_on_file(
     char position_string[POS_CHAR_BUFSIZE];
     char * strval;
     size_t at = 0;
+    uint32_t lines = 0;
+
+    memset(position_string, 0, sizeof(position_string));
 
     if (!(file = fopen(filename, "r"))) {
         printf("Failed to open file: %s\n", filename);
-        return;
+        return 0;
     }
 
-    while (fgets(position_string, POS_CHAR_BUFSIZE, file)) {
+    while (fgets((char *)position_string, POS_CHAR_BUFSIZE, file)) {
+
         at = 0;
 
-        if ((strval = strtok(position_string, " "))) {
+        if ((strval = strtok((char *)position_string, " "))) {
             data_array[at] = (uint8_t) atoi(strval);
             ++at;
         }
+
         while ((strval = strtok(NULL , " "))) {
             data_array[at] = (uint8_t) atoi(strval);
             ++at;
@@ -698,10 +746,13 @@ static void train_model_on_file(
 
         model->train_model(
                 model->model,
-                data_array,
-                labels);
+                (const uint8_t *) data_array,
+                (const double *) labels);
+
+        ++lines;
     }
 
     fclose(file);
 
+    return lines;
 }

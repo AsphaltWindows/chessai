@@ -198,6 +198,7 @@ void cnbp_predict_class(
 
 /** Alternatively we can avoid this and simply do the multiplication on doubles **/
     if (cnbp->use_probs) {
+
         for (uint8_t cl = 0; cl < cnbp-> class_num; ++cl) {
             labels[cl] = (double) cnbp->class_probs[cl];
 
@@ -211,20 +212,24 @@ void cnbp_predict_class(
 
     }
     else {
+
         for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
             class_total += cnbp->class_totals[cl];
         }
 
         for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
+
             labels[cl] = (cnbp->class_totals[cl] + cnbp->alpha)/(class_total + (cnbp->class_num * cnbp->alpha));
 
             for (uint32_t cat = 0; cat < cnbp->cat_num; ++cat) {
+
                 labels[cl] *= ((cnbp->class_cat_totals[cl *cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + data[cat]] + cnbp->alpha) /
                     (cnbp->class_totals[cl] + (cnbp->categories[cat] * cnbp->alpha)));
             }
 
             total += labels[cl];
         }
+
     }
 
 

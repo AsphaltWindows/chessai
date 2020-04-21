@@ -237,25 +237,26 @@ bdt_t * bdt_from_file(
     fscanf(file, "%lf\n", &forget_factor);
     fscanf(file, "%lf\n", &nb_alpha);
 
-    if (!(res = malloc(sizeof(bdt_t)))) {
+    if (!(res = create_bdt(
+            categories,
+            cat_num,
+            class_num,
+            branch_factor,
+            split_threshold,
+            split_limit,
+            forget_factor,
+            nb_alpha,
+            use_probs)))
+    {
         printf("Failed to allocate memory for bdt classifier being read from file.\n");
         free(categories);
         return NULL;
     }
 
-    memset(res, 0, sizeof(bdt_t));
+    free_bdt_node(res->nodes[0]);
+    free(res->nodes);
 
-    res->categories = categories;
-    res->cat_num = cat_num;
     res->nodes_num = nodes_num;
-    res->class_num = class_num;
-    res->branch_factor = branch_factor;
-    res->split_threshold = split_threshold;
-    res->split_limit = split_limit;
-    res->split_number = split_number;
-    res->forget_factor = forget_factor;
-    res->nb_alpha = nb_alpha;
-    res->use_probs = use_probs;
 
     if (!(res->nodes = malloc(nodes_num * sizeof(bdt_node_t *)))) {
         printf("Failed to allocate memory for bdt node array while reading bdt classifier from file.\n");
@@ -403,7 +404,6 @@ static void node_train_single(
     double min_error;
     uint8_t min_error_index;
     double * expected;
-    double * branch_labels;
 
     if (node->type == LEAF) {
 
@@ -480,8 +480,6 @@ static void node_train_single(
     }
     else if (node->type == BRANCH) {
 
-//        printf("Training Branch Node, node_id: %u\n", node->node_id);
-
         for (uint8_t child = 0; child < bdt->branch_factor; ++child) {
 
             node_predict_class(
@@ -505,23 +503,16 @@ static void node_train_single(
 
         }
 
-        if (!(branch_labels = malloc(bdt->branch_factor * sizeof(double)))) {
-            printf("Failed to allocate array for branch labels during training.\n");
-            return;
-        }
-
         for (uint8_t b = 0; b < bdt->branch_factor; ++b) {
-            branch_labels[b] = 0.0;
+            bdt->branch_scratch_space[b] = 0.0;
         }
 
-        branch_labels[min_error_index] = 1.0;
+        bdt->branch_scratch_space[min_error_index] = 1.0;
 
         cnbp_train_single(
                 node->classifier,
                 data,
-                branch_labels);
-
-        free(branch_labels);
+                bdt->branch_scratch_space);
 
         node_train_single(
                 bdt,
@@ -547,6 +538,7 @@ static void node_predict_class(
     uint8_t max_index;
 
     if (node->type == LEAF) {
+
         cnbp_predict_class(
                 node->classifier,
                 data,

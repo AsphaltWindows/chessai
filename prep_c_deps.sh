@@ -14,3 +14,9 @@ for library in $(find ./c_src/models -name "*.so"); do
     name=`basename $library`
     cp "$library" "./py_src/models/$name"
 done
+
+
+for library in $(find ./c_src/harness -name "*.so"); do
+    name=`basename $library`
+    cp "$library" "./py_src/harness/$name"
+done
