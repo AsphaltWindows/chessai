@@ -11,7 +11,7 @@ static int wld_score_compare(color_t color, const double * first, const double *
  **/
 static int wld_win_draw_compare(color_t color, const double * first, const double * second);
 
-player_t * create_player(
+player_t * player(
         em_t * eval_model,
         const char * compare_type,
         color_t color)

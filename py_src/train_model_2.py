@@ -16,7 +16,7 @@ print("Loading Model")
 print("Model type: " + model_type)
 print("Model version: " + str(model_version))
 print("Model directory: " + model_dir)
-print(str(model_args))
+print("Model args: " + str(model_args))
 
 model_object = m.model_c.load_model(
     model_type,

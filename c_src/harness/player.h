@@ -9,7 +9,7 @@
 #define WLD_SCORE "wld_score"
 #define WLD_WIN_DRAW "wld_wd"
 
-player_t * create_player(
+player_t * player(
         em_t * eval_model,
         const char * compare_type,
         color_t player_color);
