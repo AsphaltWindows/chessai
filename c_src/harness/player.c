@@ -4,12 +4,24 @@
 #include <string.h>
 #include <stdlib.h>
 
-/** We select the move that gives the highest expected score (win = 1 loss = 0, draw = 1)**/
+/**
+ * We select the move that gives the highest expected score (win = 1 loss = 0, draw = 1)
+ **/
 static int wld_score_compare(color_t color, const double * first, const double * second);
-/** If positions is available with higher win % than loss % we select that of those positions where win % is the highest
+/**
+ * If positions is available with higher win % than loss % we select that of those positions where win % is the highest
  * If there are no positions such that win % > loss % we select the position with the highest draw %.
  **/
 static int wld_win_draw_compare(color_t color, const double * first, const double * second);
+/**
+ * Uses wld_score metric, but adds a +/- 10% random jitter to score to avoid fully deterministic comparisons.
+ */
+static int wld_score_jitter10_compare(color_t color, const double * first, const double * second);
+
+/**
+ * wld_score metric with custom jitter %
+ */
+static int wld_score_jitter_compare(color_t color, const double * first, const double * second, double jitter);
 
 player_t * player(
         em_t * eval_model,
@@ -31,6 +43,9 @@ player_t * player(
     }
     else if (!strcmp(compare_type, WLD_WIN_DRAW)) {
         res->compare_moves = &wld_win_draw_compare;
+    }
+    else if (!strcmp(compare_type, WLD_SCORE_JITTER_10)) {
+        res->compare_moves = &wld_score_jitter10_compare;
     }
     else {
         printf("Invalid move comparison type provided: %s.\n", compare_type);
@@ -162,4 +177,36 @@ static int wld_win_draw_compare(
         }
     }
 
+}
+
+static int wld_score_jitter10_compare(
+        color_t color,
+        const double * first,
+        const double * second)
+{
+    return wld_score_jitter_compare(color, first, second, 0.10);
+}
+
+static int wld_score_jitter_compare(
+        color_t color,
+        const double * first,
+        const double * second,
+        double jitter)
+{
+    double rand_jitter1 = ((rand()/RAND_MAX) * 2 * jitter) - jitter;
+    double rand_jitter2 = ((rand()/RAND_MAX) * 2 * jitter) - jitter;
+    int w_idx = color == WHITE ? 0 : 1;
+    int d_idx = 2;
+    double score_first = (first[w_idx] + (first[d_idx] / 2)) * (1 + rand_jitter1);
+    double score_second = (second[w_idx] + (second[d_idx] / 2)) * (1 + rand_jitter2);
+
+    if (score_first == score_second) {
+        return 0;
+    }
+    else if (score_first < score_second) {
+        return -1;
+    }
+    else {
+        return 1;
+    }
 }
