@@ -115,7 +115,7 @@ for n in range(0, game_num):
                 player2,
                 resulting_positions)
 
-        pos = (str(resulting_positions[1][idx])[1:-1])
+        pos = (str(resulting_positions[idx])[1:-1])
         pos = pos.replace(',', '') + '\n'
         position_inputs.append(pos)
         human_game += ms.move_to_string(available_moves[idx], game)

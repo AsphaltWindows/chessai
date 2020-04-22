@@ -17,6 +17,10 @@ static int wld_win_draw_compare(color_t color, const double * first, const doubl
  * Uses wld_score metric, but adds a +/- 10% random jitter to score to avoid fully deterministic comparisons.
  */
 static int wld_score_jitter10_compare(color_t color, const double * first, const double * second);
+/**
+ * Uses wld_score metric, but adds a +/- 20% random jitter to score to avoid fully deterministic comparisons.
+ */
+static int wld_score_jitter20_compare(color_t color, const double * first, const double * second);
 
 /**
  * wld_score metric with custom jitter %
@@ -46,6 +50,9 @@ player_t * player(
     }
     else if (!strcmp(compare_type, WLD_SCORE_JITTER_10)) {
         res->compare_moves = &wld_score_jitter10_compare;
+    }
+    else if (!strcmp(compare_type, WLD_SCORE_JITTER_20)) {
+        res->compare_moves = &wld_score_jitter20_compare;
     }
     else {
         printf("Invalid move comparison type provided: %s.\n", compare_type);
@@ -192,6 +199,14 @@ static int wld_score_jitter10_compare(
         const double * second)
 {
     return wld_score_jitter_compare(color, first, second, 0.10);
+}
+
+static int wld_score_jitter20_compare(
+        color_t color,
+        const double * first,
+        const double * second)
+{
+    return wld_score_jitter_compare(color, first, second, 0.20);
 }
 
 static int wld_score_jitter_compare(

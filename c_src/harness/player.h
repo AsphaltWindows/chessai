@@ -8,6 +8,7 @@
 
 #define WLD_SCORE "wld_score"
 #define WLD_SCORE_JITTER_10 "wld_score_jitter10"
+#define WLD_SCORE_JITTER_20 "wld_score_jitter20"
 #define WLD_WIN_DRAW "wld_wd"
 
 player_t * player(
