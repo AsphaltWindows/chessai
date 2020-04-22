@@ -2,6 +2,7 @@
 #define CHESSAI_HARNESS_TYPES_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 typedef void * (*new_model_t)(const char **);
 typedef void * (*read_model_t)(const char *, const char **);
@@ -27,10 +28,12 @@ typedef enum player_color {
 } color_t;
 
 typedef int (*compare_moves_t)(color_t, const double *, const double *);
+typedef size_t (*select_move_t)(color_t, const uint8_t * const *, size_t);
 
 typedef struct player {
     em_t * eval_model;
     compare_moves_t compare_moves;
+    select_move_t select_move;
     color_t color;
 } player_t;
 

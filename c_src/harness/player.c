@@ -27,6 +27,8 @@ static int wld_score_jitter20_compare(color_t color, const double * first, const
  */
 static int wld_score_jitter_compare(color_t color, const double * first, const double * second, double jitter);
 
+static size_t random_select(color_t color, const uint8_t * const * positions, size_t pos_num);
+
 player_t * player(
         em_t * eval_model,
         const char * compare_type,
@@ -43,16 +45,24 @@ player_t * player(
     res->color = color;
 
     if (!strcmp(compare_type, WLD_SCORE)) {
+        res->select_move = NULL;
         res->compare_moves = &wld_score_compare;
     }
     else if (!strcmp(compare_type, WLD_WIN_DRAW)) {
+        res->select_move = NULL;
         res->compare_moves = &wld_win_draw_compare;
     }
     else if (!strcmp(compare_type, WLD_SCORE_JITTER_10)) {
+        res->select_move = NULL;
         res->compare_moves = &wld_score_jitter10_compare;
     }
     else if (!strcmp(compare_type, WLD_SCORE_JITTER_20)) {
+        res->select_move = NULL;
         res->compare_moves = &wld_score_jitter20_compare;
+    }
+    else if (!strcmp(compare_type, RANDOM_SELECT)) {
+        res->select_move = &random_select;
+        res->compare_moves = NULL;
     }
     else {
         printf("Invalid move comparison type provided: %s.\n", compare_type);
@@ -91,31 +101,36 @@ uint32_t select_move(
     size_t at = 0;
     int comp_res;
 
-    while (at < pos_num) {
-        player->eval_model->run_model(player->eval_model->model, positions[at], (double *) next);
-
-        if (!at || ((comp_res = player->compare_moves(
+    if (player->select_move) {
+        return (uint32_t) player->select_move(
                 player->color,
-                best,
-                next)) == -1))
-        {
-            num_candidates = 1;
-            candidate_indices[0] = at;
-            memcpy(best, next, 3 * sizeof(double));
-        }
-        else if (comp_res == 0) {
-            candidate_indices[num_candidates] = at;
-            ++num_candidates;
-        }
-
-        ++at;
-    }
-
-    if (num_candidates == 1) {
-        return candidate_indices[0];
+                positions,
+                pos_num);
     }
     else {
-        return candidate_indices[rand() % num_candidates];
+        while (at < pos_num) {
+            player->eval_model->run_model(player->eval_model->model, positions[at], (double *) next);
+
+            if (!at || ((comp_res = player->compare_moves(
+                    player->color,
+                    best,
+                    next)) == -1)) {
+                num_candidates = 1;
+                candidate_indices[0] = at;
+                memcpy(best, next, 3 * sizeof(double));
+            } else if (comp_res == 0) {
+                candidate_indices[num_candidates] = at;
+                ++num_candidates;
+            }
+
+            ++at;
+        }
+
+        if (num_candidates == 1) {
+            return candidate_indices[0];
+        } else {
+            return candidate_indices[rand() % num_candidates];
+        }
     }
 
 }
@@ -231,4 +246,8 @@ static int wld_score_jitter_compare(
     else {
         return 1;
     }
+}
+
+static size_t random_select(color_t color, const uint8_t * const * positions, size_t pos_num) {
+    return rand() % pos_num;
 }
