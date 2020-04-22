@@ -15,7 +15,8 @@ static void node_train_single(
         bdt_t * bdt,
         bdt_node_t * node,
         const uint8_t * data,
-        const double * label);
+        const double * label,
+        double error);
 
 static void node_predict_class(
         const bdt_t * bdt,
@@ -33,6 +34,12 @@ static bdt_node_t * bdt_node_from_file(
 static void bdt_node_to_file(
         const bdt_node_t * node,
         FILE * file);
+
+static double bdt_compute_error(
+        bdt_t * bdt,
+        const double * expected,
+        const double * actual);
+
 
 bdt_t * create_bdt(
         uint8_t * categories,
@@ -119,11 +126,24 @@ void bdt_train_single(
         const uint8_t * data,
         const double * label)
 {
+    double child_error;
+
+    cnbp_predict_class(
+            bdt->nodes[0]->classifier,
+            data,
+            bdt->class_scratch_space);
+
+    child_error = bdt_compute_error(
+            bdt,
+            bdt->class_scratch_space,
+            label);
+
     node_train_single(
             bdt,
             bdt->nodes[0],
             data,
-            label);
+            label,
+            child_error);
 
     return;
 }
@@ -363,7 +383,10 @@ static bdt_node_t * create_bdt_node_shell(
 
     res->root_bdt = (bdt_t *) bdt;
     res->children = NULL;
-    res->num_trained = 0;
+    res->num_trained_total = 0;
+    res->num_trained_last = 0;
+    res->error_total = 0.0;
+    res->error_last = 0.0;
 
     return res;
 }
@@ -398,7 +421,8 @@ static void node_train_single(
         bdt_t * bdt,
         bdt_node_t * node,
         const uint8_t * data,
-        const double * label)
+        const double * label,
+        double error)
 {
     double child_error;
     double min_error;
@@ -407,74 +431,82 @@ static void node_train_single(
 
     if (node->type == LEAF) {
 
-        if (node->num_trained >= bdt->split_threshold && bdt->split_number < bdt->split_limit) {
+        if (node->num_trained_last >= bdt->split_threshold && bdt->split_number < bdt->split_limit) {
 
-            printf("Splitting Node with node_id: %u.\n", node->node_id);
+            if ((node->error_last / node->num_trained_last) > (node->error_total / node->num_trained_total)) {
 
-            if (!(node->children = malloc(bdt->branch_factor * sizeof(uint32_t)))) {
-                printf("Failed to allocate array for children indices.\n");
-                return;
-            }
+                printf("Splitting Node with node_id: %u.\n", node->node_id);
 
-            if (!(bdt->nodes = realloc(
-                    bdt->nodes,
-                    (bdt->nodes_num + bdt->branch_factor) * sizeof(bdt_node_t *))))
-            {
-                printf("Failed to reallocate the nodes array of bdt.\n");
-                return;
-            }
-
-            for (uint8_t child = 0; child < bdt->branch_factor; ++child) {
-                node->children[child] = bdt->nodes_num + child;
-
-                if (!(bdt->nodes[bdt->nodes_num + child] = create_bdt_node_shell(bdt))) {
-                    printf("Failed to create new bdt node shell for node split.\n");
+                if (!(node->children = malloc(bdt->branch_factor * sizeof(uint32_t)))) {
+                    printf("Failed to allocate array for children indices.\n");
                     return;
                 }
 
-                bdt->nodes[bdt->nodes_num + child]->node_id = bdt->nodes_num + child;
-                bdt->nodes[bdt->nodes_num + child]->type = LEAF;
-
-                if (!(bdt->nodes[bdt->nodes_num + child]->classifier = copy_cnbp(node->classifier))) {
-                    printf("Failed to copy cnbp of bdt node for node split.\n");
+                if (!(bdt->nodes = realloc(
+                        bdt->nodes,
+                        (bdt->nodes_num + bdt->branch_factor) * sizeof(bdt_node_t *)))) {
+                    printf("Failed to reallocate the nodes array of bdt.\n");
                     return;
                 }
 
-                cnbp_forget(
-                        bdt->nodes[bdt->nodes_num + child]->classifier,
-                        bdt->forget_factor);
+                for (uint8_t child = 0; child < bdt->branch_factor; ++child) {
+                    node->children[child] = bdt->nodes_num + child;
+
+                    if (!(bdt->nodes[bdt->nodes_num + child] = create_bdt_node_shell(bdt))) {
+                        printf("Failed to create new bdt node shell for node split.\n");
+                        return;
+                    }
+
+                    bdt->nodes[bdt->nodes_num + child]->node_id = bdt->nodes_num + child;
+                    bdt->nodes[bdt->nodes_num + child]->type = LEAF;
+
+                    if (!(bdt->nodes[bdt->nodes_num + child]->classifier = copy_cnbp(node->classifier))) {
+                        printf("Failed to copy cnbp of bdt node for node split.\n");
+                        return;
+                    }
+
+                    cnbp_forget(
+                            bdt->nodes[bdt->nodes_num + child]->classifier,
+                            bdt->forget_factor);
+                }
+
+                free_cnbp(node->classifier);
+
+                if (!(node->classifier = create_cnbp_with_alpha(
+                        bdt->branch_factor,
+                        bdt->categories,
+                        bdt->cat_num,
+                        bdt->nb_alpha,
+                        bdt->use_probs))) {
+                    printf("Failed to create new classifier for branch node.\n");
+                    return;
+                }
+
+                node->type = BRANCH;
+                node->num_trained_total = 0;
+                node->error_total = 0;
+                bdt->nodes_num += bdt->branch_factor;
+                bdt->split_number++;
             }
 
-            free_cnbp(node->classifier);
-
-            if (!(node->classifier = create_cnbp_with_alpha(
-                    bdt->branch_factor,
-                    bdt->categories,
-                    bdt->cat_num,
-                    bdt->nb_alpha,
-                    bdt->use_probs)))
-            {
-                printf("Failed to create new classifier for branch node.\n");
-                return;
-            }
-
-            node->type = BRANCH;
-            node->num_trained = 0;
-            bdt->nodes_num += bdt->branch_factor;
-            bdt->split_number++;
-
-            node_train_single(
+            node->num_trained_last = 0;
+            node->error_last = 0.0;
+            return node_train_single(
                     bdt,
                     node,
                     data,
-                    label);
+                    label,
+                    error);
         }
         else {
             cnbp_train_single(
                     node->classifier,
                     data,
                     label);
-            node->num_trained++;
+            node->num_trained_last++;
+            node->num_trained_total++;
+            node->error_last += error;
+            node->error_total += error;
             return;
         }
     }
@@ -518,9 +550,13 @@ static void node_train_single(
                 bdt,
                 bdt->nodes[node->children[min_error_index]],
                 data,
-                label);
+                label,
+                min_error);
 
-        node->num_trained++;
+        node->num_trained_last++;
+        node->num_trained_total++;
+        node->error_last += error;
+        node->error_total += error;
         return;
     }
 
@@ -608,7 +644,10 @@ static bdt_node_t * bdt_node_from_file(
 
     fscanf(file, "%u\n", &(res->type));
     fscanf(file, "%u\n", &(res->node_id));
-    fscanf(file, "%u\n", &(res->num_trained));
+    fscanf(file, "%u\n", &(res->num_trained_total));
+    fscanf(file, "%lf\n", &(res->error_total));
+    fscanf(file, "%u\n", &(res->num_trained_last));
+    fscanf(file, "%lf\n", &(res->error_last));
 
     if (res->type == BRANCH) {
 
@@ -646,7 +685,10 @@ static void bdt_node_to_file(
 {
     fprintf(file, "%u\n", (uint32_t) node->type);
     fprintf(file, "%u\n", node->node_id);
-    fprintf(file, "%u\n", node->num_trained);
+    fprintf(file, "%u\n", node->num_trained_total);
+    fprintf(file, "%lf\n", node->error_total);
+    fprintf(file, "%u\n", node->num_trained_last);
+    fprintf(file, "%lf\n", node->error_last);
 
     if (node->type == BRANCH) {
 
@@ -660,4 +702,19 @@ static void bdt_node_to_file(
             node->classifier,
             file);
     return;
+}
+
+
+static double bdt_compute_error(
+        bdt_t * bdt,
+        const double * expected,
+        const double * actual)
+{
+    double child_error = 0.0;
+
+    for (uint8_t cl = 0; cl < bdt->class_num; ++cl) {
+        child_error += fabs(expected[cl] - actual[cl]);
+    }
+
+    return child_error /= 2;
 }

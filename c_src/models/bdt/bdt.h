@@ -63,7 +63,10 @@ struct bdt_node {
     uint32_t * children;
     ntype_t type;
     uint32_t node_id;
-    uint32_t num_trained;
+    uint32_t num_trained_total;
+    uint32_t num_trained_last;
+    double error_total;
+    double error_last;
 };
 
 struct bayesian_delegation_tree {
