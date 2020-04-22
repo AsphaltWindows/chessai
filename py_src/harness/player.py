@@ -19,6 +19,10 @@ class player_c:
     switch_color_c.argtypes = [c_void_p]
     switch_color_c.restype = None
 
+    set_color_c = lib.set_color
+    set_color_c.argtypes = [c_void_p, c_uint32]
+    set_color_c.restype = None
+
     @staticmethod
     def player(
             eval_model,
@@ -61,4 +65,10 @@ class player_c:
     def switch_color(
             player):
         player_c.switch_color_c(player)
+
+    @staticmethod
+    def set_color(
+            player,
+            color):
+        player_c.set_color_c(player, c_uint32(color))
 

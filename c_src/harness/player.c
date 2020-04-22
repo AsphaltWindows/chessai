@@ -119,6 +119,13 @@ void switch_color(
     return;
 }
 
+void set_color(
+        player_t * player,
+        color_t color)
+{
+    player->color = color;
+}
+
 static int wld_score_compare(
         color_t color,
         const double * first,

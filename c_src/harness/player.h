@@ -26,6 +26,9 @@ uint32_t select_move(
 void switch_color(
         player_t * player);
 
+void set_color(
+        player_t * player,
+        color_t color);
 
 #endif
 

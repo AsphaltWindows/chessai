@@ -15,13 +15,19 @@ game_dir = sys.argv[2]
 model1_type = sys.argv[3]
 model1_dir = sys.argv[4]
 model1_version = int(sys.argv[5])
-model1_args = [3] + [70] + ci.game_classes() + sys.argv[6].split(",")
+if model1_version == 0:
+    model1_args = [3] + [70] + ci.game_classes() + sys.argv[6].split(",")
+else:
+    model1_args = sys.argv[6].split(",")
 player1_move_compare = sys.argv[7]
 
 model2_type = sys.argv[8]
 model2_dir = sys.argv[9]
 model2_version = int(sys.argv[10])
-model2_args = [3] + [70] + ci.game_classes() + sys.argv[11].split(",")
+if model2_version == 0:
+    model2_args = [3] + [70] + ci.game_classes() + sys.argv[11].split(",")
+else:
+    model2_args = sys.argv[11].split(",")
 player2_move_compare = sys.argv[12]
 
 print("Loading Player 1 model")
@@ -109,12 +115,16 @@ for n in range(0, game_num):
                 player2,
                 resulting_positions)
 
-        pos = (str(all_moves[1][idx])[1:-1])
+        pos = (str(resulting_positions[1][idx])[1:-1])
         pos = pos.replace(',', '') + '\n'
         position_inputs.append(pos)
         human_game += ms.move_to_string(available_moves[idx], game)
         human_game += " "
         game.apply_move(available_moves[idx])
+
+    pos = (str(ci.game_as_input(game)))[1:-1]
+    pos = pos.replace(",", '') + '\n'
+    position_inputs.append(pos)
 
     state = gs.game_state(game)
     out = "Game " + str(n) + ": "
@@ -152,6 +162,8 @@ for n in range(0, game_num):
         player1_side = cc.Black
     else:
         player1_side = cc.White
+    player.player_c.switch_color(player1)
+    player.player_c.switch_color(player2)
 
     human.write(human_game)
 
