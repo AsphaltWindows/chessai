@@ -36,7 +36,7 @@ player_t * player(
 {
     player_t * res;
 
-    if (!(res = malloc(sizeof(res)))) {
+    if (!(res = malloc(sizeof(player_t)))) {
         printf("Failed to allocate memory for player.\n");
         return NULL;
     }
