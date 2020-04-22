@@ -114,12 +114,10 @@ while at_round < round_num:
             for p in position_inputs:
                 whitewins.write(p)
             human_game += "1-0\n\n"
-            printstr += "White Win"
         else:
             for p in position_inputs:
                 blackwins.write(p)
             human_game += "0-1\n\n"
-            printstr += "Black Win"
 
         if state == player_side:
             printstr += "player wins"
