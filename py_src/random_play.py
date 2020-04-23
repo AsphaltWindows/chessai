@@ -44,7 +44,7 @@ player = pl.player_c.player(
 
 
 resultsFile = open(randomplay_dir + "/results.txt", "a")
-at_round = 0
+at_round = model_version
 
 while at_round < round_num:
 
@@ -84,12 +84,6 @@ while at_round < round_num:
             else:
                 idx = random.randrange(0, len(resulting_positions))
 
-            pos = (str(resulting_positions[idx])[1:-1])
-            pos = pos.replace(',', '') + '\n'
-            position_inputs.append(pos)
-
-            game.apply_move(available_moves[idx])
-
             if to_move == cc.White:
                 move_num += 1
                 human_game += (str(move_num) + ". ")
@@ -97,7 +91,12 @@ while at_round < round_num:
             else:
                 to_move = cc.White
 
+            pos = (str(resulting_positions[idx])[1:-1])
+            pos = pos.replace(',', '') + '\n'
+            position_inputs.append(pos)
+
             human_game += ms.move_to_string(available_moves[idx], game) + " "
+            game.apply_move(available_moves[idx])
 
         pos = (str(ci.game_as_input(game))[1:-1])
         pos = pos.replace(',', '') + '\n'
@@ -143,7 +142,7 @@ while at_round < round_num:
     blackwins.close()
     human.close()
 
-    resultsFile.write("round " + str(at_round) + "player score: +" + str(player_win_num) + "-" + str(random_win_num) + "=" + str(draw_num) + "\n")
+    resultsFile.write("round " + str(at_round) + " player score: +" + str(player_win_num) + "-" + str(random_win_num) + "=" + str(draw_num) + "\n")
     resultsFile.flush()
 
     print("Training model on games of round " + str(at_round))
