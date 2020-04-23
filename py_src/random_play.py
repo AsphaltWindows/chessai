@@ -84,8 +84,6 @@ while at_round < round_num:
             else:
                 idx = random.randrange(0, len(resulting_positions))
 
-            human_game += ms.move_to_string(available_moves[idx], game) + " "
-
             pos = (str(resulting_positions[idx])[1:-1])
             pos = pos.replace(',', '') + '\n'
             position_inputs.append(pos)
@@ -98,6 +96,8 @@ while at_round < round_num:
                 to_move = cc.Black
             else:
                 to_move = cc.White
+
+            human_game += ms.move_to_string(available_moves[idx], game) + " "
 
         pos = (str(ci.game_as_input(game))[1:-1])
         pos = pos.replace(',', '') + '\n'
