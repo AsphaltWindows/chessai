@@ -277,6 +277,7 @@ bdt_t * bdt_from_file(
     free(res->nodes);
 
     res->nodes_num = nodes_num;
+    res->split_number = split_number;
 
     if (!(res->nodes = malloc(nodes_num * sizeof(bdt_node_t *)))) {
         printf("Failed to allocate memory for bdt node array while reading bdt classifier from file.\n");
