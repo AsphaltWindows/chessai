@@ -30,6 +30,8 @@ typedef struct {
   uint64_t nodes;
 } test_t;
 
+char initial_fen[] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -";
+
 test_t tests[] =
 {
   { .fen = "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ -",
@@ -96,7 +98,7 @@ uint64_t perft(search_data_t *sd, int depth, int ply)
       continue;
 
     make_move(sd, moves[i]);
-    nodes += perft(sd, depth - 1, ply + 1, additional_tests);
+    nodes += perft(sd, depth - 1, ply + 1);
     undo_move(sd);
   }
 

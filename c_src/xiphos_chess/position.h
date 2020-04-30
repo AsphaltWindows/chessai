@@ -30,24 +30,6 @@
 #define _f_piece(pos, w_piece)    ((w_piece) | ((pos)->side << SIDE_SHIFT))
 #define _o_piece(pos, w_piece)    ((w_piece) | (((pos)->side ^ 1) << SIDE_SHIFT))
 
-typedef struct {
-  uint8_t  side,
-           ep_sq,
-           c_flag,
-           in_check,
-           fifty_cnt,
-           phase,
-           k_sq[N_SIDES];
-  uint64_t phash_key,
-           occ[N_SIDES],
-           piece_occ[N_PIECES - 1],
-           pinned[N_SIDES],
-           pinners[N_SIDES];
-  move_t   move;
-  uint8_t  board[BOARD_SIZE];
-} __attribute__ ((aligned (16))) position_t;
-_Static_assert(sizeof(position_t) == 192, "position_t size error");
-
 void set_pins_and_checks(position_t *);
 int is_pseudo_legal(position_t *pos, move_t move);
 int legal_move(position_t *, move_t);

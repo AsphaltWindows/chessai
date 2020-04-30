@@ -307,3 +307,65 @@ void king_moves(position_t *pos, move_t *moves, int *moves_cnt)
   *moves_cnt = m_ptr - moves;
 }
 
+int count_non_king_moves(position_t *pos)
+{
+    uint64_t b0, b1, p_occ, p_sh_occ, p_occ_c, occ, n_occ_f, n_occ, occ_f, occ_o;
+    int moves_cnt, piece;
+
+    moves_cnt = 0;
+    occ_f = pos->occ[pos->side];
+    occ_o = pos->occ[pos->side ^ 1];
+    occ = occ_f | occ_o;
+    n_occ_f = ~occ_f;
+    n_occ = ~occ;
+
+#define _count_moves(pp, method)                                             \
+    b0 = pos->piece_occ[pp] & occ_f;                                           \
+    _loop(b0)                                                                  \
+      moves_cnt += _popcnt(method(occ, _bsf(b0)) & n_occ_f);                   \
+
+    _count_moves(KNIGHT, knight_attack);
+    _count_moves(QUEEN, queen_attack);
+    _count_moves(BISHOP, bishop_attack);
+    _count_moves(ROOK, rook_attack);
+
+    // pawns
+    p_occ = pos->piece_occ[PAWN] & occ_f;
+
+    // pawn captures
+    b0 = pawn_attacks(p_occ, pos->side);
+    p_occ_c = occ_o;
+    if (pos->ep_sq != NO_SQ) p_occ_c |= _b(pos->ep_sq);
+    b0 &= p_occ_c;
+    piece = _o_piece(pos, PAWN);
+
+    b1 = b0 & (pos->side == WHITE ? _B_RANK_8 : _B_RANK_1);
+    b0 ^= b1;
+    _loop(b0)
+        moves_cnt += _popcnt(_b_piece_area[piece][_bsf(b0)] & p_occ);
+    _loop(b1)
+        moves_cnt += _popcnt(_b_piece_area[piece][_bsf(b1)] & p_occ) << 2;
+
+    // quiet pawn moves
+    p_sh_occ = p_occ;
+    if (pos->side == WHITE)
+    {
+        p_sh_occ = (p_sh_occ >> 8) & n_occ;
+        moves_cnt += _popcnt(p_sh_occ & ~_B_RANK_8);
+        moves_cnt += _popcnt(p_sh_occ & _B_RANK_8) << 2;
+
+        p_sh_occ = (p_sh_occ >> 8) & n_occ & _B_RANK_4;
+        moves_cnt += _popcnt(p_sh_occ);
+    }
+    else
+    {
+        p_sh_occ = (p_sh_occ << 8) & n_occ;
+        moves_cnt += _popcnt(p_sh_occ & ~_B_RANK_1);
+        moves_cnt += _popcnt(p_sh_occ & _B_RANK_1) << 2;
+
+        p_sh_occ = (p_sh_occ << 8) & n_occ & _B_RANK_5;
+        moves_cnt += _popcnt(p_sh_occ);
+    }
+
+    return moves_cnt;
+}

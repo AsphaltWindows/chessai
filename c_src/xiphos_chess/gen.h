@@ -27,5 +27,6 @@ void quiet_moves(position_t *, move_t *, int *);
 void get_all_moves(position_t *, move_t *, int *);
 void check_evasion_moves(position_t *, move_t *, int *);
 void king_moves(position_t *, move_t *, int *);
+int count_non_king_moves(position_t *pos);
 
 #endif

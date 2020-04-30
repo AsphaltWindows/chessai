@@ -98,7 +98,7 @@ static inline int _popcnt(uint64_t b)
   }
 #endif
 
-static inline uint64_t non_king_bishop_attack(uint64_t occ, int sq)
+static inline uint64_t bishop_attack(uint64_t occ, int sq)
 {
   attack_lookup_t *att;
 

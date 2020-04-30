@@ -16,8 +16,9 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "hash.h"
 #include "move.h"
+#include "position.h"
+#include "hash.h"
 
 int rook_c_flag_mask[BOARD_SIZE];
 const int king_c_flag_mask[N_SIDES] = {
