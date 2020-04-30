@@ -139,8 +139,14 @@ void new_model(
 }
 
 void free_model(em_t * model) {
+
+    if (!model) {
+        return;
+    }
+
     if (model->model) {
         model->free_model(model->model);
+        model->model = NULL;
     }
 
     free(model);
@@ -219,6 +225,8 @@ void store_model(
     model->write_model(
             model->model,
             filename);
+
+    free(filename);
 }
 
 void train_model(
@@ -280,7 +288,7 @@ void train_model(
     fsize = snprintf(NULL, 0, "%s/draws.games", directory) + 1;
 
     if (!(filename = malloc(fsize * sizeof(char)))) {
-        printf("Failed to allocate memory for filename with black wins.\n");
+        printf("Failed to allocate memory for filename with draws.\n");
         return;
     }
 
@@ -300,7 +308,6 @@ void train_model(
     printf("Total training data points: %u.\n", total_trained);
 
     free(filename);
-
 }
 
 

@@ -128,8 +128,9 @@ void bdt_train_single(
 {
     double child_error;
 
-    cnbp_predict_class(
-            bdt->nodes[0]->classifier,
+    node_predict_class(
+            bdt,
+            bdt->nodes[0],
             data,
             bdt->class_scratch_space);
 

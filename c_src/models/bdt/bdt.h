@@ -75,16 +75,16 @@ struct bayesian_delegation_tree {
     bdt_node_t ** nodes;
     double * class_scratch_space;
     double * branch_scratch_space;
-    uint32_t cat_num;
     size_t nodes_num;
-    uint8_t class_num;
-    uint8_t branch_factor;
+    uint32_t cat_num;
     uint32_t split_threshold;
     uint32_t split_limit;
     uint32_t split_number;
     double forget_factor;
     double nb_alpha;
     uint8_t use_probs;
+    uint8_t class_num;
+    uint8_t branch_factor;
 };
 
 bdt_t * create_bdt(

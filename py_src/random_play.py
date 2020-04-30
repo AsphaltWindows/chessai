@@ -152,25 +152,15 @@ while at_round < round_num:
     )
 
     model_version += 1
+    print("Storing model version: " + str(model_version))
     modellib.model_c.store_model(
         model,
         model_type,
         model_version,
         randomplay_dir)
 
-    pl.player_c.free_player(player)
-
-    model = modellib.model_c.load_model(
-        model_type,
-        model_version,
-        randomplay_dir,
-        model_args)
-
-    player = pl.player_c.player(
-        model,
-        player_move_compare,
-        cc.White)
-
     at_round += 1
+
+pl.player_c.free_player(player)
 
 resultsFile.close()
