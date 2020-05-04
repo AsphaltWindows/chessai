@@ -1,0 +1,6 @@
+#ifndef CHESSAI_XIPHOS_ADAPTER_H
+#define CHESSAI_XIPHOS_ADAPTER_H
+
+
+
+#endif

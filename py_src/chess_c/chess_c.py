@@ -8,6 +8,12 @@ class Chess:
     InProgress = 3
 
     @staticmethod
+    def game_categories():
+        classes = [13 for a in range(0, 64)]
+        classes += [2, 9, 2, 2, 2, 2]
+        return classes
+
+    @staticmethod
     def game_as_input(game):
         return None
 
