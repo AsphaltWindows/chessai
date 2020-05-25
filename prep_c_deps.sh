@@ -1,6 +1,6 @@
 #!/bin/bash
 
-for makefile in $(find ./c_src -name "Makefile" -exec dirname {} +); do
+for makefile in $(find ./c_src -name "Makefile" -exec dirname {} \;); do
     pushd "$makefile" && make && popd
 done
 
