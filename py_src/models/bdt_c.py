@@ -58,7 +58,6 @@ class BDT_C:
         free_bdt(self.bdt)
 
     def train_batch(self, labels, data):
-        print("training batch")
         DataArray = POINTER(c_uint8 * self.cat_num) * len(data)
         LabelArray = POINTER(c_double * self.class_num) * len(data)
 
@@ -78,7 +77,6 @@ class BDT_C:
             label_list.append(row_param)
         label_param = LabelArray(*label_list)
 
-        print("Trying to train batch")
         bdt_train_batch.argtypes = [c_void_p, DataArray, LabelArray, c_size_t]
         bdt_train_batch.restype = None
         bdt_train_batch(self.bdt, data_param, label_param, len(data))
@@ -88,11 +86,8 @@ class BDT_C:
         labels_uncasted = (c_double * self.class_num)()
         data_param = DataArray(*data)
         # bdt_predict_class.argtypes = [c_void_p, c_uint8 * self.cat_num, c_double * self.class_num]
-        print("about to make call")
         bdt_predict_class(self.bdt, data_param, cast(labels_uncasted, POINTER(c_double)))
-        print("exited call")
         res = [r for r in labels_uncasted]
-        print(res)
         return res
 
     def model_to_file(self, filename):

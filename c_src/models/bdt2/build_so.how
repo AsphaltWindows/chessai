@@ -1,0 +1,9 @@
+gcc -fPIC -c -o bdt2.o bdt2.c
+gcc -shared -o libbdt2.so bdt2.o
+
+
+optimization flags:
+
+-O3 (optimization level 3)
+-Wall
+-Wextra

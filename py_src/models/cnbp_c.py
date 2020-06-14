@@ -5,15 +5,15 @@ cnbplib = CDLL("models/libcnbp.so")
 
 create_cnbp_with_alpha = cnbplib.create_cnbp_with_alpha
 
-cnbp_train_batch = cnbplib.train_batch
+cnbp_train_batch = cnbplib.cnbp_train_batch
 
-predict_class = cnbplib.predict_class
+cnbp_predict_class = cnbplib.cnbp_predict_class
 
-cnbp_from_file_with_name = cnbplib.bdt_from_file_with_name
+cnbp_from_file_with_name = cnbplib.cnbp_from_file_with_name
 cnbp_from_file_with_name.argtypes = [c_char_p, c_uint8]
 cnbp_from_file_with_name.restype = c_void_p
 
-cnbp_to_file_with_name = cnbplib.bdt_to_file_with_name
+cnbp_to_file_with_name = cnbplib.cnbp_to_file_with_name
 cnbp_to_file_with_name.argtypes = [c_void_p, c_char_p]
 
 free_cnbp = cnbplib.free_cnbp
@@ -40,7 +40,6 @@ class CNBP_C:
         free_cnbp(self.cnbp)
 
     def train_batch(self, labels, data):
-        print("training batch")
         DataArray = POINTER(c_uint8 * self.cat_num) * len(data)
         LabelArray = POINTER(c_double * self.class_num) * len(data)
 
@@ -60,19 +59,17 @@ class CNBP_C:
             label_list.append(row_param)
         label_param = LabelArray(*label_list)
 
-        print("Trying to train batch")
         cnbp_train_batch.argtypes = [c_void_p, DataArray, LabelArray, c_size_t]
         cnbp_train_batch.restype = None
         cnbp_train_batch(self.cnbp, data_param, label_param, len(data))
 
     def predict_class(self, data):
         DataArray = c_uint8 * len(data)
+        labels_uncasted = (c_double * self.class_num)()
         data_param = DataArray(*data)
-        predict_class.argtypes = [c_void_p, POINTER(c_uint8 * self.cat_num)]
-        predict_class.restype = POINTER(c_double * self.class_num)
-        c_res = predict_class(self.cnbp, data_param)
-        res = [r for r in c_res.contents]
-        free(c_res)
+        # bdt_predict_class.argtypes = [c_void_p, c_uint8 * self.cat_num, c_double * self.class_num]
+        cnbp_predict_class(self.cnbp, data_param, cast(labels_uncasted, POINTER(c_double)))
+        res = [r for r in labels_uncasted]
         return res
 
     def model_to_file(self, filename):

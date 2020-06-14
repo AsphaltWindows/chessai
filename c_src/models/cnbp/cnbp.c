@@ -61,7 +61,7 @@ cnbp_t * create_cnbp_with_alpha(
 
     memset(res->class_cat_idx, 0, cat_num * sizeof(uint32_t));
 
-    for (unsigned int cn = 0; cn < cat_num; ++cn) {
+    for (size_t cn = 0; cn < cat_num; ++cn) {
 
         if (cn > 0) {
             res->class_cat_idx[cn] = res->class_cat_idx[cn - 1] + cats[cn - 1];
