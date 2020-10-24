@@ -15,7 +15,7 @@ bdt_model = bdt.BDT_C([2 for _ in range(28*28)], 10, 2, 5000, 15, 1, 1, 0)
 
 print("Training models")
 
-for time in range(20):
+for time in range(2):
     for idx in range(60000):
         input = []
         for d1 in x_train[idx]:
