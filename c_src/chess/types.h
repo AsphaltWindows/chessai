@@ -62,7 +62,8 @@ typedef enum PIECETYPE {
     BISHOP = 3,
     ROOK = 4,
     QUEEN = 5,
-    KING = 6
+    KING = 6,
+    PIECETYPE_NUM = 7
 } piecetype_t;
 
 typedef enum PIECE {
@@ -79,7 +80,7 @@ typedef enum PIECE {
     BLACK_ROOK = 12,
     BLACK_QUEEN = 13,
     BLACK_KING = 14,
-    PIECE_T_NUM = 15
+    PIECE_NUM = 15
 } piece_t;
 
 typedef enum CASTLE {
