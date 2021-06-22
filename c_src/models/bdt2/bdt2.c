@@ -80,21 +80,13 @@ bdt2_t * create_bdt2(
 
     memset(res->class_scratch_space, 0, class_num * sizeof(double));
 
-    if (!(res->branch_scratch_space = malloc(branch_factor * sizeof(double)))) {
-        printf("Failed to allocate memory for bdt2 branch scratch space.\n");
-        free_bdt2(res);
-        return NULL;
-    }
-
-    memset(res->branch_scratch_space, 0, branch_factor * sizeof(double));
+    memset(res->branch_scratch_space, 0, BRANCH_NUM * sizeof(double));
 
     res->cat_num = (uint32_t) cat_num;
     res->class_num = class_num;
-    res->branch_factor = branch_factor;
     res->split_threshold = split_threshold;
     res->split_limit = split_limit;
     res->split_number = 0;
-    res->forget_factor = forget_factor;
     res->nb_alpha = nb_alpha;
     res->use_probs = use_probs;
 
@@ -202,11 +194,6 @@ void free_bdt2(
         bdt2->class_scratch_space = NULL;
     }
 
-    if (bdt2->branch_scratch_space) {
-        free(bdt2->branch_scratch_space);
-        bdt2->branch_scratch_space = NULL;
-    }
-
     if (bdt2->nodes) {
         for (size_t n = 0; n < bdt2->nodes_num; ++n) {
             free_bdt2_node(bdt2->nodes[n]);
@@ -228,12 +215,10 @@ bdt2_t * bdt2_from_file(
     uint8_t * categories;
     uint32_t cat_num;
     uint8_t class_num;
-    uint8_t branch_factor;
     uint32_t split_threshold;
     uint32_t split_limit;
     uint32_t split_number;
     size_t nodes_num;
-    double forget_factor;
     double nb_alpha;
 
     fscanf(file, "%u\n", &cat_num);
@@ -248,22 +233,18 @@ bdt2_t * bdt2_from_file(
     }
 
     fscanf(file, "%hhu\n", &class_num);
-    fscanf(file, "%hhu\n", &branch_factor);
     fscanf(file, "%u\n", &split_threshold);
     fscanf(file, "%u\n", &split_limit);
     fscanf(file, "%u\n", &split_number);
     fscanf(file, "%zu\n", &nodes_num);
-    fscanf(file, "%lf\n", &forget_factor);
     fscanf(file, "%lf\n", &nb_alpha);
 
     if (!(res = create_bdt2(
             categories,
             cat_num,
             class_num,
-            branch_factor,
             split_threshold,
             split_limit,
-            forget_factor,
             nb_alpha,
             use_probs)))
     {
@@ -335,12 +316,10 @@ void bdt2_to_file(
     }
 
     fprintf(file, "%hhu\n", bdt2->class_num);
-    fprintf(file, "%hhu\n", bdt2->branch_factor);
     fprintf(file, "%u\n", bdt2->split_threshold);
     fprintf(file, "%u\n", bdt2->split_limit);
     fprintf(file, "%u\n", bdt2->split_number);
     fprintf(file, "%zu\n", bdt2->nodes_num);
-    fprintf(file, "%lf\n", bdt2->forget_factor);
     fprintf(file, "%lf\n", bdt2->nb_alpha);
 
     for (size_t n = 0; n < bdt2->nodes_num; ++n) {
@@ -414,6 +393,18 @@ static bdt2_node_t * create_bdt2_node_leaf(
         return NULL;
     }
 
+    if (!(res->error_classifier = create_cnbp_with_alpha(
+            BRANCH_NUM,
+            bdt2->categories,
+            bdt2->cat_num,
+            bdt2->nb_alpha,
+            bdt2->use_probs)))
+    {
+        printf("Failed to create cnbp for bdt2 node error classifier.\n");
+        free_bdt2_node(res);
+        return NULL;
+    }
+
     return res;
 }
 
@@ -428,6 +419,7 @@ static void node_train_single(
     double min_error;
     uint8_t min_error_index;
     double * expected;
+    double branch_error[BRANCH_NUM];
 
     if (node->type == LEAF) {
 
@@ -437,19 +429,19 @@ static void node_train_single(
 
                 printf("Splitting Node with node_id: %u.\n", node->node_id);
 
-                if (!(node->children = malloc(bdt2->branch_factor * sizeof(uint32_t)))) {
+                if (!(node->children = malloc(BRANCH_NUM * sizeof(uint32_t)))) {
                     printf("Failed to allocate array for children indices.\n");
                     return;
                 }
 
                 if (!(bdt2->nodes = realloc(
                         bdt2->nodes,
-                        (bdt2->nodes_num + bdt2->branch_factor) * sizeof(bdt2_node_t *)))) {
+                        (bdt2->nodes_num + BRANCH_NUM) * sizeof(bdt2_node_t *)))) {
                     printf("Failed to reallocate the nodes array of bdt2.\n");
                     return;
                 }
 
-                for (uint8_t child = 0; child < bdt2->branch_factor; ++child) {
+                for (uint8_t child = 0; child < BRANCH_NUM; ++child) {
                     node->children[child] = bdt2->nodes_num + child;
 
                     if (!(bdt2->nodes[bdt2->nodes_num + child] = create_bdt2_node_shell(bdt2))) {
@@ -460,28 +452,33 @@ static void node_train_single(
                     bdt2->nodes[bdt2->nodes_num + child]->node_id = bdt2->nodes_num + child;
                     bdt2->nodes[bdt2->nodes_num + child]->type = LEAF;
 
-                    if (!(bdt2->nodes[bdt2->nodes_num + child]->classifier = copy_cnbp(node->classifier))) {
-                        printf("Failed to copy cnbp of bdt2 node for node split.\n");
+                    if (!(bdt2->nodes[bdt2->nodes_num + child]->error_classifier = create_cnbp_with_alpha(
+                            BRANCH_NUM,
+                            bdt2->categories,
+                            bdt2->cat_num,
+                            bdt2->nb_alpha,
+                            bdt2->use_probs)))
+                    {
+                        printf("Failed to create new cnbp error classifier for new bdt node.\n");
                         return;
                     }
-
-                    cnbp_forget(
-                            bdt2->nodes[bdt2->nodes_num + child]->classifier,
-                            bdt2->forget_factor);
                 }
 
-                free_cnbp(node->classifier);
-
-                if (!(node->classifier = create_cnbp_with_alpha(
-                        bdt2->branch_factor,
+                bdt2->nodes[bdt2->nodes_num]->classifier = node->classifier;
+                if (!(bdt2->nodes[bdt2->nodes_num + 1]->classifier = create_cnbp_with_alpha(
+                        bdt2->class_num,
                         bdt2->categories,
                         bdt2->cat_num,
                         bdt2->nb_alpha,
-                        bdt2->use_probs))) {
-                    printf("Failed to create new classifier for branch node.\n");
+                        bdt2->use_probs
+                        )))
+                {
+                    printf("Failed to crate new cnbp classifier for new bdt node.\n");
                     return;
                 }
 
+                node->classifier = node->error_classifier;
+                node->error_classifier = NULL;
                 node->type = BRANCH;
                 node->num_trained_total = 0;
                 node->error_total = 0;
@@ -503,6 +500,15 @@ static void node_train_single(
                     node->classifier,
                     data,
                     label);
+
+            branch_error[0] = 1.0 - error;
+            branch_error[1] = error;
+
+            cnbp_train_single(
+                    node->error_classifier,
+                    data,
+                    (const double *) branch_error);
+
             node->num_trained_last++;
             node->num_trained_total++;
             node->error_last += error;
@@ -512,7 +518,7 @@ static void node_train_single(
     }
     else if (node->type == BRANCH) {
 
-        for (uint8_t child = 0; child < bdt2->branch_factor; ++child) {
+        for (uint8_t child = 0; child < BRANCH_NUM; ++child) {
 
             node_predict_class(
                     bdt2,
@@ -535,7 +541,7 @@ static void node_train_single(
 
         }
 
-        for (uint8_t b = 0; b < bdt2->branch_factor; ++b) {
+        for (uint8_t b = 0; b < BRANCH_NUM; ++b) {
             bdt2->branch_scratch_space[b] = 0.0;
         }
 
@@ -588,7 +594,7 @@ static void node_predict_class(
                 bdt2->branch_scratch_space);
         branch_expected = bdt2->branch_scratch_space;
 
-        for (uint8_t b = 0; b < bdt2->branch_factor; ++b) {
+        for (uint8_t b = 0; b < BRANCH_NUM; ++b) {
 
             if (!b || branch_expected[b] > max) {
                 max = branch_expected[b];

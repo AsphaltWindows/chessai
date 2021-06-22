@@ -7,6 +7,7 @@
 
 #include "../cnbp/cnbp.h"
 
+#define BRANCH_NUM 2
 
 /**
  * Bayesian Delegation Tree Classification model
@@ -42,7 +43,7 @@
  *** Dynamic Expansion ***
  * Using a decision procedure local to the node, a leaf node can split into several leaf
  * nodes and a branch node, which remains the child of the original leaf's parent.
- * The split creates branch_factor new leafs which are identical in predictive
+ * The split creates BRANCH_NUM(2) new leafs which are identical in predictive
  * behavior to the original leaf, but may be modified to accelerate their future training.
  * In the case of the Naive Bayes Classifier nodes this can be done by scaling down the
  * frequencies.
@@ -61,7 +62,7 @@ struct bdt2_node {
     bdt2_t * root_bdt2;
     cnbp_t * classifier;
     cnbp_t * error_classifier;
-    uint32_t children[2];
+    uint32_t children[BRANCH_NUM];
     ntype_t type;
     uint32_t node_id;
     uint32_t num_trained_total;
@@ -75,7 +76,7 @@ struct bayesian_delegation_tree2 {
     uint8_t * categories;
     bdt2_node_t ** nodes;
     double * class_scratch_space;
-    double * branch_scratch_space;
+    double branch_scratch_space[BRANCH_NUM];
     size_t nodes_num;
     uint32_t cat_num;
     uint32_t split_threshold;
@@ -90,10 +91,8 @@ bdt2_t * create_bdt2(
         uint8_t * categories,
         size_t cat_num,
         uint8_t class_num,
-        uint8_t branch_factor,
         uint32_t split_threshold,
         uint32_t split_limit,
-        double forget_factor,
         double nb_alpha,
         uint8_t use_probs);
 
