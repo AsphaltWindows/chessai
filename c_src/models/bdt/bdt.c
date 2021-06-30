@@ -90,7 +90,7 @@ bdt_t * create_bdt(
 
     memset(res->branch_scratch_space, 0, branch_factor * sizeof(double));
 
-    res->cat_num = (uint32_t) cat_num;
+    res->cat_num = cat_num;
     res->class_num = class_num;
     res->branch_factor = branch_factor;
     res->split_threshold = split_threshold;
@@ -228,7 +228,7 @@ bdt_t * bdt_from_file(
 {
     bdt_t * res;
     uint8_t * categories;
-    uint32_t cat_num;
+    size_t cat_num;
     uint8_t class_num;
     uint8_t branch_factor;
     uint32_t split_threshold;
@@ -238,14 +238,14 @@ bdt_t * bdt_from_file(
     double forget_factor;
     double nb_alpha;
 
-    fscanf(file, "%u\n", &cat_num);
+    fscanf(file, "%zu\n", &cat_num);
 
     if (!(categories = malloc(cat_num * sizeof(uint8_t)))) {
         printf("Failed to allocate memory for categories of bdt classifier being read from file.\n");
         return NULL;
     }
 
-    for (uint32_t cat = 0; cat < cat_num; ++cat) {
+    for (size_t cat = 0; cat < cat_num; ++cat) {
         fscanf(file, "%hhu\n", &(categories[cat]));
     }
 
@@ -330,9 +330,9 @@ void bdt_to_file(
         const bdt_t * bdt,
         FILE * file)
 {
-    fprintf(file, "%u\n", bdt->cat_num);
+    fprintf(file, "%zu\n", bdt->cat_num);
 
-    for (uint32_t cat = 0; cat < bdt->cat_num; ++cat) {
+    for (size_t cat = 0; cat < bdt->cat_num; ++cat) {
         fprintf(file, "%hhu\n", bdt->categories[cat]);
     }
 
@@ -435,7 +435,7 @@ static void node_train_single(
 
         if (node->num_trained_last >= bdt->split_threshold && bdt->split_number < bdt->split_limit) {
 
-            if ((node->error_last / node->num_trained_last) > (node->error_total / node->num_trained_total)) {
+            if ((node->error_last / node->num_trained_last) >= (node->error_total / node->num_trained_total)) {
 
                 printf("Splitting Node with node_id: %u.\n", node->node_id);
 

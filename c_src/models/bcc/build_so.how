@@ -1,0 +1,9 @@
+gcc -fPIC -c -o bdn.o bdn.c 
+gcc -shared -o libbdn.so bdn.o
+
+
+optimization flags:
+
+-O3 (optimization level 3)
+-Wall
+-Wextra

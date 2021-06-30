@@ -82,12 +82,15 @@ class BDT_C:
         bdt_train_batch(self.bdt, data_param, label_param, len(data))
 
     def predict_class(self, data):
+        start_labels = [0] * self.class_num
         DataArray = c_uint8 * len(data)
-        labels_uncasted = (c_double * self.class_num)()
+        LabelArray = c_double * self.class_num
+        # labels_uncasted = (c_double * self.class_num)()
         data_param = DataArray(*data)
-        # bdt_predict_class.argtypes = [c_void_p, c_uint8 * self.cat_num, c_double * self.class_num]
-        bdt_predict_class(self.bdt, data_param, cast(labels_uncasted, POINTER(c_double)))
-        res = [r for r in labels_uncasted]
+        label_param = LabelArray(*start_labels)
+        bdt_predict_class.argtypes = [c_void_p, c_uint8 * self.cat_num, c_double * self.class_num]
+        bdt_predict_class(self.bdt, data_param, label_param)
+        res = [r for r in label_param]
         return res
 
     def model_to_file(self, filename):

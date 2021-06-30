@@ -1,0 +1,10 @@
+example:
+gcc -fPIC -c -o k_modes.o k_modes.c 
+gcc -shared -o libkm.so k_modes.o
+
+
+optimization flags:
+
+-O3 (optimization level 3)
+-Wall
+-Wextra

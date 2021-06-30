@@ -76,7 +76,7 @@ struct bayesian_delegation_tree {
     double * class_scratch_space;
     double * branch_scratch_space;
     size_t nodes_num;
-    uint32_t cat_num;
+    size_t cat_num;
     uint32_t split_threshold;
     uint32_t split_limit;
     uint32_t split_number;
