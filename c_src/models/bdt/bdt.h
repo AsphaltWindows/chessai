@@ -71,6 +71,8 @@ struct bdt_node {
     uint32_t num_trained_last;
     double error_total;
     double error_last;
+    /* Mean error of the previous full window, or -1 before the first. */
+    double error_prev;
 };
 
 struct bayesian_delegation_tree {

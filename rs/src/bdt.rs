@@ -36,6 +36,8 @@ struct Node {
     num_trained_last: u32,
     error_total: f64,
     error_last: f64,
+    /// Mean error of the previous full window, or -1 before the first.
+    error_prev: f64,
     /// Output of `classifier` for the position of the current training step;
     /// valid while `cache_step` equals the tree's `step`.
     cache: Vec<f64>,
@@ -160,13 +162,18 @@ impl Bdt {
     fn train_node(&mut self, idx: usize, data: &[u8], label: &[f64], error: f64, scratch: &mut [f64]) {
         match &self.nodes[idx].kind {
             Kind::Leaf => {
-                let node = &self.nodes[idx];
+                let node = &mut self.nodes[idx];
                 if node.num_trained_last >= self.params.split_threshold
                     && self.split_number < self.params.split_limit
                 {
+                    // Split when the leaf stopped improving: this window's mean
+                    // error is above the previous window's. Comparing with the
+                    // lifetime mean instead is skewed by the high error of the
+                    // first data.
                     let recent = node.error_last / node.num_trained_last as f64;
-                    let lifetime = node.error_total / node.num_trained_total as f64;
-                    if recent > lifetime {
+                    let previous = node.error_prev;
+                    node.error_prev = recent;
+                    if previous >= 0.0 && recent > previous {
                         self.split(idx);
                     }
                     let node = &mut self.nodes[idx];
@@ -266,6 +273,7 @@ impl Bdt {
             writeln!(s, "{:.6}", node.error_total).unwrap();
             writeln!(s, "{}", node.num_trained_last).unwrap();
             writeln!(s, "{:.6}", node.error_last).unwrap();
+            writeln!(s, "{:.6}", node.error_prev).unwrap();
             if let Kind::Branch { children } = &node.kind {
                 for child in children {
                     writeln!(s, "{child}").unwrap();
@@ -311,6 +319,7 @@ impl Bdt {
             let error_total = t.next()?;
             let num_trained_last = t.next()?;
             let error_last = t.next()?;
+            let error_prev = t.next()?;
             let (kind, classes) = match kind {
                 0 => (Kind::Leaf, class_num),
                 1 => {
@@ -324,7 +333,13 @@ impl Bdt {
             };
             let mut classifier = Cnbp::new(classes, &categories, nb_alpha, use_probs);
             classifier.read_counts(&mut t)?;
-            nodes.push(Node { num_trained_total, num_trained_last, error_total, error_last, ..Node::new(kind, classifier) });
+            nodes.push(Node {
+                num_trained_total,
+                num_trained_last,
+                error_total,
+                error_last,
+                error_prev,
+                ..Node::new(kind, classifier) });
         }
 
         Ok(Bdt { categories, params, split_number, nodes, step: 0 })
@@ -350,6 +365,7 @@ impl Node {
             num_trained_last: 0,
             error_total: 0.0,
             error_last: 0.0,
+            error_prev: -1.0,
         }
     }
 

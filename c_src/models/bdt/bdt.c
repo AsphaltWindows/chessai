@@ -403,6 +403,7 @@ static bdt_node_t * create_bdt_node_shell(
     res->num_trained_last = 0;
     res->error_total = 0.0;
     res->error_last = 0.0;
+    res->error_prev = -1.0;
 
     if (!(res->cache = malloc(
             (bdt->class_num > bdt->branch_factor ? bdt->class_num : bdt->branch_factor) * sizeof(double)))) {
@@ -461,7 +462,14 @@ static void node_train_single(
 
         if (node->num_trained_last >= bdt->split_threshold && bdt->split_number < bdt->split_limit) {
 
-            if ((node->error_last / node->num_trained_last) > (node->error_total / node->num_trained_total)) {
+            /* Split when the leaf stopped improving: this window's mean error
+             * is above the previous window's. Comparing with the lifetime
+             * mean instead is skewed by the high error of the first data. */
+            double recent = node->error_last / node->num_trained_last;
+            double previous = node->error_prev;
+            node->error_prev = recent;
+
+            if (previous >= 0.0 && recent > previous) {
 
                 printf("Splitting Node with node_id: %u.\n", node->node_id);
 
@@ -731,6 +739,7 @@ static bdt_node_t * bdt_node_from_file(
     fscanf(file, "%lf\n", &(res->error_total));
     fscanf(file, "%u\n", &(res->num_trained_last));
     fscanf(file, "%lf\n", &(res->error_last));
+    fscanf(file, "%lf\n", &(res->error_prev));
 
     if (res->type == BRANCH) {
 
@@ -772,6 +781,7 @@ static void bdt_node_to_file(
     fprintf(file, "%lf\n", node->error_total);
     fprintf(file, "%u\n", node->num_trained_last);
     fprintf(file, "%lf\n", node->error_last);
+    fprintf(file, "%lf\n", node->error_prev);
 
     if (node->type == BRANCH) {
 
