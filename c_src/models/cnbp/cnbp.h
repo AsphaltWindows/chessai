@@ -87,6 +87,15 @@ void cnbp_predict_class(
         const uint8_t * data,
         double * labels);
 
+/**
+ * Predicts from the raw counts, ignoring use_probs and never touching the
+ * cached probabilities. Cheaper while a model is still being trained.
+ */
+void cnbp_predict_class_counts(
+        const cnbp_t * cnbp,
+        const uint8_t * data,
+        double * labels);
+
 void cnbp_forget(
         cnbp_t * cnbp,
         double factor);

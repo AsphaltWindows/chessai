@@ -185,46 +185,57 @@ void cnbp_predict_class(
         double * labels)
 {
     double total = 0;
-    double class_total = 0;
 
-    if (!cnbp->is_fresh && cnbp->use_probs) {
+    if (!cnbp->use_probs) {
+        cnbp_predict_class_counts(cnbp, data, labels);
+        return;
+    }
+
+    if (!cnbp->is_fresh) {
         recalculate_probabilities((cnbp_t *) cnbp);
     }
 
-/** Alternatively we can avoid this and simply do the multiplication on doubles **/
-    if (cnbp->use_probs) {
+    for (uint8_t cl = 0; cl < cnbp-> class_num; ++cl) {
+        labels[cl] = (double) cnbp->class_probs[cl];
 
-        for (uint8_t cl = 0; cl < cnbp-> class_num; ++cl) {
-            labels[cl] = (double) cnbp->class_probs[cl];
-
-            for (size_t cat = 0; cat < cnbp->cat_num; ++cat) {
-                labels[cl] *= (double) cnbp->class_cat_probs[
-                cl *cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + data[cat]];
-            }
-
-            total += labels[cl];
+        for (size_t cat = 0; cat < cnbp->cat_num; ++cat) {
+            labels[cl] *= (double) cnbp->class_cat_probs[
+            cl *cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + data[cat]];
         }
 
+        total += labels[cl];
     }
-    else {
 
-        for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
-            class_total += cnbp->class_totals[cl];
+    for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
+        labels[cl] /= total;
+    }
+
+    return;
+}
+
+void cnbp_predict_class_counts(
+        const cnbp_t * cnbp,
+        const uint8_t * data,
+        double * labels)
+{
+    double total = 0;
+    double class_total = 0;
+
+    for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
+        class_total += cnbp->class_totals[cl];
+    }
+
+    for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
+
+        labels[cl] = (cnbp->class_totals[cl] + cnbp->alpha)/(class_total + (cnbp->class_num * cnbp->alpha));
+
+        for (size_t cat = 0; cat < cnbp->cat_num; ++cat) {
+
+            labels[cl] *= ((cnbp->class_cat_totals[cl *cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + data[cat]] + cnbp->alpha) /
+                (cnbp->class_totals[cl] + (cnbp->categories[cat] * cnbp->alpha)));
         }
 
-        for (uint8_t cl = 0; cl < cnbp->class_num; ++cl) {
-
-            labels[cl] = (cnbp->class_totals[cl] + cnbp->alpha)/(class_total + (cnbp->class_num * cnbp->alpha));
-
-            for (size_t cat = 0; cat < cnbp->cat_num; ++cat) {
-
-                labels[cl] *= ((cnbp->class_cat_totals[cl *cnbp->total_cat_vals + cnbp->class_cat_idx[cat] + data[cat]] + cnbp->alpha) /
-                    (cnbp->class_totals[cl] + (cnbp->categories[cat] * cnbp->alpha)));
-            }
-
-            total += labels[cl];
-        }
-
+        total += labels[cl];
     }
 
 /**

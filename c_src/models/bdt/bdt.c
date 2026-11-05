@@ -22,7 +22,8 @@ static void node_predict_class(
         const bdt_t * bdt,
         bdt_node_t * node,
         const uint8_t * data,
-        double * labels);
+        double * labels,
+        uint8_t training);
 
 static void free_bdt_node(
         bdt_node_t * node);
@@ -128,11 +129,15 @@ void bdt_train_single(
 {
     double child_error;
 
+    /* Starts a new step, invalidating every node's cached prediction. */
+    ++bdt->step;
+
     node_predict_class(
             bdt,
             bdt->nodes[0],
             data,
-            bdt->class_scratch_space);
+            bdt->class_scratch_space,
+            1);
 
     child_error = bdt_compute_error(
             bdt,
@@ -184,7 +189,8 @@ void bdt_predict_class(
             bdt,
             bdt->nodes[0],
             data,
-            labels);
+            labels,
+            0);
 }
 
 void free_bdt(
@@ -390,6 +396,15 @@ static bdt_node_t * create_bdt_node_shell(
     res->error_total = 0.0;
     res->error_last = 0.0;
 
+    if (!(res->cache = malloc(
+            (bdt->class_num > bdt->branch_factor ? bdt->class_num : bdt->branch_factor) * sizeof(double)))) {
+        printf("Failed to allocate prediction cache for bdt node.\n");
+        free(res);
+        return NULL;
+    }
+
+    res->cache_step = 0;
+
     return res;
 }
 
@@ -485,6 +500,7 @@ static void node_train_single(
                 }
 
                 node->type = BRANCH;
+                node->cache_step = 0;
                 node->num_trained_total = 0;
                 node->error_total = 0;
                 bdt->nodes_num += bdt->branch_factor;
@@ -505,6 +521,7 @@ static void node_train_single(
                     node->classifier,
                     data,
                     label);
+            node->cache_step = 0;
             node->num_trained_last++;
             node->num_trained_total++;
             node->error_last += error;
@@ -520,7 +537,8 @@ static void node_train_single(
                     bdt,
                     bdt->nodes[node->children[child]],
                     data,
-                    bdt->class_scratch_space);
+                    bdt->class_scratch_space,
+                    1);
             expected = bdt->class_scratch_space;
             child_error = 0.0;
 
@@ -547,6 +565,7 @@ static void node_train_single(
                 node->classifier,
                 data,
                 bdt->branch_scratch_space);
+        node->cache_step = 0;
 
         node_train_single(
                 bdt,
@@ -565,29 +584,55 @@ static void node_train_single(
     return;
 }
 
+/**
+ * Runs a node's own classifier. While training, the output is cached for the
+ * rest of the step: the position does not change within a step, and a
+ * classifier is only trained after the predictions that use it.
+ **/
+static void predict_node(
+        const bdt_t * bdt,
+        bdt_node_t * node,
+        const uint8_t * data,
+        double * out,
+        void (* predict)(const cnbp_t *, const uint8_t *, double *),
+        uint8_t training)
+{
+    size_t outputs = node->type == LEAF ? bdt->class_num : bdt->branch_factor;
+
+    if (training && node->cache_step == bdt->step) {
+        memcpy(out, node->cache, outputs * sizeof(double));
+        return;
+    }
+
+    predict(node->classifier, data, out);
+
+    if (training) {
+        memcpy(node->cache, out, outputs * sizeof(double));
+        node->cache_step = bdt->step;
+    }
+}
+
 static void node_predict_class(
         const bdt_t * bdt,
         bdt_node_t * node,
         const uint8_t * data,
-        double * labels)
+        double * labels,
+        uint8_t training)
 {
     double * branch_expected;
     double max;
     uint8_t max_index;
 
-    if (node->type == LEAF) {
+    /* While training, predict from the raw counts so models with use_probs
+     * do not recalculate their probabilities after every step. */
+    void (* predict)(const cnbp_t *, const uint8_t *, double *) =
+            training ? cnbp_predict_class_counts : cnbp_predict_class;
 
-        cnbp_predict_class(
-                node->classifier,
-                data,
-                labels);
+    if (node->type == LEAF) {
+        predict_node(bdt, node, data, labels, predict, training);
     }
     else if (node->type == BRANCH) {
-
-        cnbp_predict_class(
-                node->classifier,
-                data,
-                bdt->branch_scratch_space);
+        predict_node(bdt, node, data, bdt->branch_scratch_space, predict, training);
         branch_expected = bdt->branch_scratch_space;
 
         for (uint8_t b = 0; b < bdt->branch_factor; ++b) {
@@ -603,7 +648,8 @@ static void node_predict_class(
                 bdt,
                 bdt->nodes[node->children[max_index]],
                 data,
-                labels);
+                labels,
+                training);
     }
     else {
         printf("Unrecognized bdt NODE TYPE: %u.\n", node->type);
@@ -627,6 +673,11 @@ static void free_bdt_node(
     if (node->classifier) {
         free_cnbp(node->classifier);
         node->classifier = NULL;
+    }
+
+    if (node->cache) {
+        free(node->cache);
+        node->cache = NULL;
     }
 
     free(node);

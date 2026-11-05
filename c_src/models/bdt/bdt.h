@@ -61,6 +61,10 @@ struct bdt_node {
     bdt_t * root_bdt;
     cnbp_t * classifier;
     uint32_t * children;
+    /** Output of this node's classifier for the position of the current
+     * training step; valid while cache_step equals the tree's step. **/
+    double * cache;
+    uint64_t cache_step;
     ntype_t type;
     uint32_t node_id;
     uint32_t num_trained_total;
@@ -75,6 +79,8 @@ struct bayesian_delegation_tree {
     bdt_node_t ** nodes;
     double * class_scratch_space;
     double * branch_scratch_space;
+    /** Counts calls to bdt_train_single, starting at 1; 0 marks no cache. **/
+    uint64_t step;
     size_t nodes_num;
     size_t cat_num;
     uint32_t split_threshold;
