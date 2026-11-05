@@ -79,6 +79,26 @@ enum Command {
         params: ModelArgs,
     },
 
+    /// Train a model on existing round directories (from self-play, a ladder
+    /// or an arena) instead of its own games. Round N's positions are
+    /// shuffled and trained on, then the model is saved as {model}{N+1}.model.
+    Train {
+        /// Directory containing round0/, round1/, ...
+        games: PathBuf,
+        /// Directory for the saved models.
+        out: PathBuf,
+        #[arg(long, value_enum, default_value_t = ModelKind::Cnbp)]
+        model: ModelKind,
+        /// Number of rounds to train on, starting from round0.
+        #[arg(long, default_value_t = 10)]
+        rounds: u64,
+        /// Seed for shuffling each round's positions.
+        #[arg(long, default_value_t = 0)]
+        seed: u64,
+        #[command(flatten)]
+        params: ModelArgs,
+    },
+
     /// Replay games dumped by rs/bench/dump_python_games.py and compare legal
     /// moves, encodings and game results with the Python implementation.
     Xcheck { file: PathBuf },
@@ -254,6 +274,12 @@ fn main() -> Result<()> {
                 ModelKind::Bdt => run.run("bdt", Bdt::new(&CATEGORIES, params.bdt_params())),
             }
         }
+        Command::Train { games, out, model, rounds, seed, params } => match model {
+            ModelKind::Cnbp => {
+                train_rounds(&games, &out, rounds, seed, "cnbp", Cnbp::new(3, &CATEGORIES, params.alpha, params.use_probs))
+            }
+            ModelKind::Bdt => train_rounds(&games, &out, rounds, seed, "bdt", Bdt::new(&CATEGORIES, params.bdt_params())),
+        },
         Command::Xcheck { file } => xcheck(file),
         Command::BenchMovegen { games, seed } => bench_movegen(games, seed),
         Command::BenchCnbp { games_dir, model_out, predictions_out, alpha, use_probs, reps } => bench_classifier(
@@ -295,6 +321,24 @@ fn main() -> Result<()> {
             )
         }
     }
+}
+
+fn train_rounds<M: Classifier>(games: &Path, out: &Path, rounds: u64, seed: u64, name: &str, mut model: M) -> Result<()> {
+    use rand::seq::SliceRandom;
+    std::fs::create_dir_all(out)?;
+    for round in 0..rounds {
+        let dir = games.join(format!("round{round}"));
+        let mut data = games::read_labelled(&dir).with_context(|| format!("reading {}", dir.display()))?;
+        data.shuffle(&mut StdRng::seed_from_u64(selfplay::derive_seed(seed, round, u64::MAX)));
+        let start = Instant::now();
+        for (pos, label) in &data {
+            model.train(pos, label);
+        }
+        model.refresh();
+        model.save(&out.join(format!("{name}{}.model", round + 1)))?;
+        println!("round {round}: {} positions, train {:.2}s", data.len(), start.elapsed().as_secs_f64());
+    }
+    Ok(())
 }
 
 fn sorted_uci(pos: &Chess) -> String {
