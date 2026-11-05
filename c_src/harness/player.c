@@ -148,6 +148,12 @@ void set_color(
     player->color = color;
 }
 
+void seed_random(
+        uint32_t seed)
+{
+    srand(seed);
+}
+
 static int wld_score_compare(
         color_t color,
         const double * first,
@@ -230,8 +236,8 @@ static int wld_score_jitter_compare(
         const double * second,
         double jitter)
 {
-    double rand_jitter1 = ((rand()/RAND_MAX) * 2 * jitter) - jitter;
-    double rand_jitter2 = ((rand()/RAND_MAX) * 2 * jitter) - jitter;
+    double rand_jitter1 = (((double) rand() / RAND_MAX) * 2 * jitter) - jitter;
+    double rand_jitter2 = (((double) rand() / RAND_MAX) * 2 * jitter) - jitter;
     int w_idx = color == WHITE ? 0 : 1;
     int d_idx = 2;
     double score_first = (first[w_idx] + (first[d_idx] / 2)) * (1 + rand_jitter1);

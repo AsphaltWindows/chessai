@@ -21,6 +21,11 @@ else:
     model_args = sys.argv[6].split(",")
 player_move_compare = sys.argv[7]
 
+seed = int(sys.argv[8]) if len(sys.argv) > 8 else random.randrange(2 ** 32)
+print("Random seed: " + str(seed))
+pl.player_c.seed_random(seed)
+random.seed(seed)
+
 print("Loading Player model")
 print("Model type: " + model_type)
 print("Model version: " + str(model_version))

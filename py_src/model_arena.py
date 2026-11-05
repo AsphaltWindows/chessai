@@ -1,4 +1,5 @@
 import sys
+import random
 import harness.model as model
 import harness.player as player
 import chess.categorical_input as ci
@@ -29,6 +30,10 @@ if model2_version == 0:
 else:
     model2_args = sys.argv[11].split(",")
 player2_move_compare = sys.argv[12]
+
+seed = int(sys.argv[13]) if len(sys.argv) > 13 else random.randrange(2 ** 32)
+print("Random seed: " + str(seed))
+player.player_c.seed_random(seed)
 
 print("Loading Player 1 model")
 print("Model 1 type: " + model1_type)

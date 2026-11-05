@@ -1,5 +1,6 @@
 import sys
 import os
+import random
 import harness.model as modellib
 import harness.player as pl
 import chess.categorical_input as ci
@@ -19,6 +20,10 @@ if model_version == 0:
 else:
     model_args = sys.argv[6].split(",")
 player_move_compare = sys.argv[7]
+
+seed = int(sys.argv[8]) if len(sys.argv) > 8 else random.randrange(2 ** 32)
+print("Random seed: " + str(seed))
+pl.player_c.seed_random(seed)
 
 print("Loading Player model")
 print("Model type: " + model_type)
@@ -79,6 +84,13 @@ while at_round < round_num:
                 player,
                 resulting_positions)
 
+            if to_move == cc.White:
+                move_num += 1
+                human_game += (str(move_num) + ". ")
+                to_move = cc.Black
+            else:
+                to_move = cc.White
+
             human_game += ms.move_to_string(available_moves[idx], game) + " "
 
             pos = (str(resulting_positions[idx])[1:-1])
@@ -89,13 +101,6 @@ while at_round < round_num:
 
 
             pl.player_c.switch_color(player)
-
-            if to_move == cc.White:
-                move_num += 1
-                human_game += (str(move_num) + ". ")
-                to_move = cc.Black
-            else:
-                to_move = cc.White
 
         pos = (str(ci.game_as_input(game))[1:-1])
         pos = pos.replace(',', '') + '\n'

@@ -23,6 +23,10 @@ class player_c:
     set_color_c.argtypes = [c_void_p, c_uint32]
     set_color_c.restype = None
 
+    seed_random_c = lib.seed_random
+    seed_random_c.argtypes = [c_uint32]
+    seed_random_c.restype = None
+
     @staticmethod
     def player(
             eval_model,
@@ -72,3 +76,7 @@ class player_c:
             color):
         player_c.set_color_c(player, c_uint32(color))
 
+    @staticmethod
+    def seed_random(
+            seed):
+        player_c.seed_random_c(c_uint32(seed))

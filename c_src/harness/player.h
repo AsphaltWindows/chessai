@@ -32,5 +32,11 @@ void set_color(
         player_t * player,
         color_t color);
 
+/**
+ * Seeds the random number generator used for jitter, tie-breaking and random move selection.
+ **/
+void seed_random(
+        uint32_t seed);
+
 #endif
 
