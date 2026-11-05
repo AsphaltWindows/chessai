@@ -70,6 +70,11 @@ enum Command {
         /// Worker threads for playing; defaults to the number of cores.
         #[arg(long)]
         threads: Option<usize>,
+        /// Instead of playing itself, version N plays version N-1 each round
+        /// (round 0: the untrained model plays itself). Records version N's
+        /// score in ladder.csv.
+        #[arg(long)]
+        vs_previous: bool,
         #[command(flatten)]
         params: ModelArgs,
     },
@@ -227,39 +232,9 @@ fn arena(
         println!("{warning}");
     }
 
-    // Score from A's point of view; A is white in even-numbered games.
-    let scores: Vec<f64> = records
-        .iter()
-        .enumerate()
-        .map(|(g, r)| {
-            let a_white = g % 2 == 0;
-            match r.result {
-                GameResult::Draw => 0.5,
-                GameResult::WhiteWin if a_white => 1.0,
-                GameResult::BlackWin if !a_white => 1.0,
-                _ => 0.0,
-            }
-        })
-        .collect();
-    let n = scores.len() as f64;
-    let wins = scores.iter().filter(|&&s| s == 1.0).count();
-    let losses = scores.iter().filter(|&&s| s == 0.0).count();
-    let draws = scores.len() - wins - losses;
-    let mean = scores.iter().sum::<f64>() / n;
-    let variance = scores.iter().map(|s| (s - mean).powi(2)).sum::<f64>() / n;
-    let margin = 1.96 * (variance / n).sqrt();
-    let elo = |s: f64| {
-        let s = s.clamp(1e-6, 1.0 - 1e-6);
-        -400.0 * (1.0 / s - 1.0).log10()
-    };
-
-    println!("A: +{wins} -{losses} ={draws}, score {:.1}% ({secs:.1}s)", 100.0 * mean);
-    println!(
-        "Elo difference A - B: {:+.0} (95% range {:+.0} to {:+.0})",
-        elo(mean),
-        elo(mean - margin),
-        elo(mean + margin)
-    );
+    let m = selfplay::score_match(&records);
+    println!("A: +{} -{} ={}, score {:.1}% ({secs:.1}s)", m.wins, m.losses, m.draws, 100.0 * m.score);
+    println!("Elo difference A - B: {:+.0} (95% range {:+.0} to {:+.0})", m.elo, m.elo_low, m.elo_high);
     Ok(())
 }
 
@@ -268,12 +243,12 @@ fn main() -> Result<()> {
         Command::Arena { a, b, games, a_policy, b_policy, use_probs, seed, out } => {
             arena(&a, &b, games, (a_policy, b_policy), use_probs, seed.unwrap_or_else(random_seed), out)
         }
-        Command::SelfPlay { out, model, rounds, games, policy, seed, threads, params } => {
+        Command::SelfPlay { out, model, rounds, games, policy, seed, threads, vs_previous, params } => {
             if let Some(threads) = threads {
                 rayon::ThreadPoolBuilder::new().num_threads(threads).build_global()?;
             }
             let seed = seed.unwrap_or_else(random_seed);
-            let run = SelfPlayRun { out, rounds, games, policy, seed };
+            let run = SelfPlayRun { out, rounds, games, policy, seed, vs_previous };
             match model {
                 ModelKind::Cnbp => run.run("cnbp", Cnbp::new(3, &CATEGORIES, params.alpha, params.use_probs)),
                 ModelKind::Bdt => run.run("bdt", Bdt::new(&CATEGORIES, params.bdt_params())),
@@ -531,24 +506,63 @@ struct SelfPlayRun {
     games: usize,
     policy: Policy,
     seed: u64,
+    vs_previous: bool,
 }
 
 impl SelfPlayRun {
-    fn run<M: Classifier + Sync>(&self, name: &str, mut model: M) -> Result<()> {
+    fn run<M: Classifier + Sync + Clone>(&self, name: &str, mut model: M) -> Result<()> {
         std::fs::create_dir_all(&self.out)?;
         println!(
-            "self-play: {name}, {} rounds of {} games, policy {:?}, seed {}, {} threads",
+            "self-play: {name}, {} rounds of {} games, {}policy {:?}, seed {}, {} threads",
             self.rounds,
             self.games,
+            if self.vs_previous { "version N vs N-1, " } else { "" },
             self.policy,
             self.seed,
             rayon::current_num_threads()
         );
 
+        let ladder_path = self.out.join("ladder.csv");
+        if self.vs_previous {
+            std::fs::write(&ladder_path, "round,version,opponent,wins,losses,draws,score,elo,elo_low,elo_high\n")?;
+        }
+        let mut previous = model.clone();
+
         for round in 0..self.rounds {
             let start = Instant::now();
-            let records = selfplay::play_round(&model, self.policy, self.games, self.seed, round);
+            let records = if self.vs_previous {
+                let current = Player { model: &model, policy: self.policy };
+                let opponent = Player { model: &previous, policy: self.policy };
+                selfplay::play_match(current, opponent, self.games, selfplay::derive_seed(self.seed, round, 0))
+            } else {
+                selfplay::play_round(&model, self.policy, self.games, self.seed, round)
+            };
             let play_secs = start.elapsed().as_secs_f64();
+
+            if self.vs_previous {
+                let m = selfplay::score_match(&records);
+                let opponent = round.saturating_sub(1);
+                let mut ladder = std::fs::OpenOptions::new().append(true).open(&ladder_path)?;
+                std::io::Write::write_all(
+                    &mut ladder,
+                    format!(
+                        "{round},{round},{opponent},{},{},{},{:.4},{:.1},{:.1},{:.1}\n",
+                        m.wins, m.losses, m.draws, m.score, m.elo, m.elo_low, m.elo_high
+                    )
+                    .as_bytes(),
+                )?;
+                println!(
+                    "round {round}: v{round} vs v{opponent}: +{} -{} ={}, score {:.1}%, Elo {:+.0} ({:+.0} to {:+.0})",
+                    m.wins,
+                    m.losses,
+                    m.draws,
+                    100.0 * m.score,
+                    m.elo,
+                    m.elo_low,
+                    m.elo_high
+                );
+                previous = model.clone();
+            }
 
             selfplay::write_round(&self.out.join(format!("round{round}")), &records)?;
             let count = |r: GameResult| records.iter().filter(|g| g.result == r).count();

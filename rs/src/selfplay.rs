@@ -126,6 +126,57 @@ pub fn write_round(dir: &Path, records: &[GameRecord]) -> io::Result<()> {
     std::fs::write(dir.join("human.games"), human)
 }
 
+/// Result of a match from the point of view of player A.
+pub struct MatchScore {
+    pub wins: usize,
+    pub losses: usize,
+    pub draws: usize,
+    /// Fraction of points won, draws counting half.
+    pub score: f64,
+    /// Elo difference A - B implied by the score, with a 95% range.
+    pub elo: f64,
+    pub elo_low: f64,
+    pub elo_high: f64,
+}
+
+/// Scores a match played by `play_match` (A white in even-numbered games).
+pub fn score_match(records: &[GameRecord]) -> MatchScore {
+    let scores: Vec<f64> = records
+        .iter()
+        .enumerate()
+        .map(|(g, r)| {
+            let a_white = g % 2 == 0;
+            match r.result {
+                GameResult::Draw => 0.5,
+                GameResult::WhiteWin if a_white => 1.0,
+                GameResult::BlackWin if !a_white => 1.0,
+                _ => 0.0,
+            }
+        })
+        .collect();
+
+    let n = scores.len() as f64;
+    let wins = scores.iter().filter(|&&s| s == 1.0).count();
+    let losses = scores.iter().filter(|&&s| s == 0.0).count();
+    let score = scores.iter().sum::<f64>() / n;
+    let variance = scores.iter().map(|s| (s - score).powi(2)).sum::<f64>() / n;
+    let margin = 1.96 * (variance / n).sqrt();
+    let elo = |s: f64| {
+        let s = s.clamp(1e-6, 1.0 - 1e-6);
+        -400.0 * (1.0 / s - 1.0).log10()
+    };
+
+    MatchScore {
+        wins,
+        losses,
+        draws: scores.len() - wins - losses,
+        score,
+        elo: elo(score),
+        elo_low: elo(score - margin),
+        elo_high: elo(score + margin),
+    }
+}
+
 /// A warning if more than 5% of the games are repeats of other games, which
 /// makes results look more precise than they are. Happens with policies
 /// without jitter, where only exact score ties introduce randomness.
@@ -148,7 +199,7 @@ pub fn duplicate_warning(records: &[GameRecord]) -> Option<String> {
 }
 
 /// Mixes the run seed, round and game number into an independent seed.
-fn derive_seed(seed: u64, round: u64, game: u64) -> u64 {
+pub fn derive_seed(seed: u64, round: u64, game: u64) -> u64 {
     splitmix64(splitmix64(seed ^ splitmix64(round)) ^ game)
 }
 
