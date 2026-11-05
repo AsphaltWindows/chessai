@@ -16,7 +16,7 @@ use chessai::encoding::{self, CATEGORIES, Encoded};
 use chessai::game::Game;
 use chessai::games;
 use chessai::game::GameResult;
-use chessai::player::{Player, Policy};
+use chessai::player::{self, Player, Policy};
 use chessai::selfplay;
 
 #[derive(Parser)]
@@ -107,6 +107,39 @@ enum Command {
         seed: u64,
         #[command(flatten)]
         params: ModelArgs,
+    },
+
+    /// Play games with a model and report, over the positions reached, how
+    /// often jitter10 and softmax at each temperature would play something
+    /// other than the top-scored move, and the gap between the top two moves.
+    PolicyStats {
+        /// `cnbp:PATH` or `bdt:PATH`.
+        model: String,
+        #[arg(long, default_value_t = 200)]
+        games: usize,
+        /// Policy used to play the games that provide the positions.
+        #[arg(long, value_enum, default_value_t = Policy::WldScoreJitter10)]
+        policy: Policy,
+        #[arg(long, default_value_t = 0.01)]
+        temperature: f64,
+        /// Temperatures to report.
+        #[arg(long, value_delimiter = ',', default_value = "0.001,0.003,0.01,0.03,0.1")]
+        temperatures: Vec<f64>,
+        #[arg(long)]
+        use_probs: bool,
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+    },
+
+    /// Compare a model's predicted probabilities with actual outcomes on
+    /// labelled positions (a round directory), bucketed by prediction.
+    Calibration {
+        /// `cnbp:PATH` or `bdt:PATH`.
+        model: String,
+        /// Round directory with white_wins/black_wins/draws.games.
+        games: PathBuf,
+        #[arg(long)]
+        use_probs: bool,
     },
 
     /// Replay games dumped by rs/bench/dump_python_games.py and compare legal
@@ -227,12 +260,16 @@ impl LoadedModel {
         })
     }
 
-    fn player(&self, policy: Policy, temperature: f64) -> Player<'_> {
-        let model: &(dyn Classifier + Sync) = match self {
+    fn classifier(&self) -> &(dyn Classifier + Sync) {
+        match self {
             LoadedModel::Cnbp(m) => m,
             LoadedModel::Bdt(m) => m,
             LoadedModel::Uniform(m) => m,
-        };
+        }
+    }
+
+    fn player(&self, policy: Policy, temperature: f64) -> Player<'_> {
+        let model = self.classifier();
         // A random player chooses moves at random whatever the policy.
         let policy = if matches!(self, LoadedModel::Uniform(_)) { Policy::Rand } else { policy };
         Player { model, policy, temperature }
@@ -291,6 +328,10 @@ fn main() -> Result<()> {
             }
             ModelKind::Bdt => train_rounds(&games, &out, rounds, seed, "bdt", Bdt::new(&CATEGORIES, params.bdt_params())),
         },
+        Command::PolicyStats { model, games, policy, temperature, temperatures, use_probs, seed } => {
+            policy_stats(&model, games, policy, temperature, &temperatures, use_probs, seed)
+        }
+        Command::Calibration { model, games, use_probs } => calibration(&model, &games, use_probs),
         Command::Xcheck { file } => xcheck(file),
         Command::BenchMovegen { games, seed } => bench_movegen(games, seed),
         Command::BenchCnbp { games_dir, model_out, predictions_out, alpha, use_probs, reps } => bench_classifier(
@@ -348,6 +389,161 @@ fn train_rounds<M: Classifier>(games: &Path, out: &Path, rounds: u64, seed: u64,
         model.refresh();
         model.save(&out.join(format!("{name}{}.model", round + 1)))?;
         println!("round {round}: {} positions, train {:.2}s", data.len(), start.elapsed().as_secs_f64());
+    }
+    Ok(())
+}
+
+fn policy_stats(
+    model: &str,
+    games: usize,
+    policy: Policy,
+    temperature: f64,
+    temperatures: &[f64],
+    use_probs: bool,
+    seed: u64,
+) -> Result<()> {
+    let model = LoadedModel::load(model, use_probs)?;
+    let player = model.player(policy, temperature);
+    let mut rng = StdRng::seed_from_u64(seed);
+    let (mut positions, mut jitter_off) = (0usize, 0usize);
+    let mut softmax_off = vec![0.0; temperatures.len()];
+    let mut gaps = Vec::new();
+    let mut draws = Vec::new();
+    let mut underflows = 0usize;
+    let mut scores = [0.0; 3];
+    // Statistics are about log-odds for the log-odds policies, otherwise
+    // about expected score.
+    let log_odds = matches!(policy, Policy::LogOdds | Policy::LogOddsSoftmax);
+
+    for _ in 0..games {
+        let mut game = Game::default();
+        while game.result().is_none() {
+            let pos = game.position();
+            let candidates = player::candidates(pos);
+            let (win, loss) = if pos.turn().is_white() { (0, 1) } else { (1, 0) };
+            let expected: Vec<f64> = candidates
+                .iter()
+                .map(|c| {
+                    player.model.predict(&c.position, &mut scores);
+                    draws.push(scores[2]);
+                    if scores[win] == 0.0 || scores[loss] == 0.0 {
+                        underflows += 1;
+                    }
+                    if log_odds {
+                        player::log_odds(scores[win], scores[loss])
+                    } else {
+                        scores[win] + scores[2] / 2.0
+                    }
+                })
+                .collect();
+
+            if expected.len() > 1 {
+                let mut sorted = expected.clone();
+                sorted.sort_by(|a, b| b.total_cmp(a));
+                let (best, second) = (sorted[0], sorted[1]);
+                gaps.push(best - second);
+                positions += 1;
+                // Off-best probability under softmax: 1 - p(top move); moves
+                // tied for the top count as the top move.
+                for (off, &t) in softmax_off.iter_mut().zip(temperatures) {
+                    let weights = expected.iter().map(|v| ((v - best) / t).exp());
+                    let total: f64 = weights.clone().sum();
+                    let top: f64 = weights.filter(|&w| w == 1.0).sum();
+                    *off += 1.0 - top / total;
+                }
+                let jittered = expected.iter().map(|v| v * (1.0 + rng.random_range(-0.1..=0.1)));
+                let pick = jittered.enumerate().max_by(|a, b| a.1.total_cmp(&b.1)).unwrap().0;
+                if expected[pick] < best {
+                    jitter_off += 1;
+                }
+            }
+
+            let chosen = player::select(player, pos.turn(), &candidates, &mut rng);
+            game.play(candidates[chosen].mv);
+        }
+    }
+
+    gaps.sort_by(f64::total_cmp);
+    let pct = |q: f64| gaps[((gaps.len() - 1) as f64 * q) as usize];
+    println!("{positions} positions with 2+ moves, {games} games played with {policy:?}");
+    println!(
+        "gap between top two moves: median {:.1e}, 25% {:.1e}, 75% {:.1e}, 90% {:.1e}; exact ties {:.1}%",
+        pct(0.5),
+        pct(0.25),
+        pct(0.75),
+        pct(0.9),
+        100.0 * gaps.iter().filter(|&&g| g == 0.0).count() as f64 / gaps.len() as f64
+    );
+    draws.sort_by(f64::total_cmp);
+    let draw = |q: f64| draws[((draws.len() - 1) as f64 * q) as usize];
+    println!(
+        "predicted draw probability over all candidate positions: 10% {:.4}, median {:.6}, 90% {:.6}",
+        draw(0.1),
+        draw(0.5),
+        draw(0.9)
+    );
+    println!(
+        "candidate positions with P(win) or P(loss) exactly 0: {:.2}%",
+        100.0 * underflows as f64 / draws.len() as f64
+    );
+    if log_odds {
+        println!("(gaps and softmax figures below are in log-odds, nats)");
+    }
+    println!("jitter10: plays a non-top move {:.1}% of the time", 100.0 * jitter_off as f64 / positions as f64);
+    for (off, t) in softmax_off.iter().zip(temperatures) {
+        println!("softmax T={t}: plays a non-top move {:.1}% of the time", 100.0 * off / positions as f64);
+    }
+    Ok(())
+}
+
+fn calibration(model: &str, games: &Path, use_probs: bool) -> Result<()> {
+    let model = LoadedModel::load(model, use_probs)?;
+    let model = model.classifier();
+    let data = games::read_labelled(games)?;
+    let mut predictions = Vec::with_capacity(data.len());
+    let mut out = [0.0; 3];
+    for (pos, label) in &data {
+        model.predict(pos, &mut out);
+        let class = label.iter().position(|&l| l == 1.0).unwrap();
+        predictions.push((out, class));
+    }
+    println!("{} positions from {}", data.len(), games.display());
+
+    // Probability buckets: by decade of p below 0.5, by decade of 1 - p above.
+    let bucket = |p: f64| -> i32 {
+        let decade = |x: f64| (x.max(1e-300).log10().floor() as i32).max(-12);
+        if p < 0.5 { decade(p) } else { -decade(1.0 - p) }
+    };
+    for (k, name) in ["white win", "black win", "draw"].iter().enumerate() {
+        let mut buckets = std::collections::BTreeMap::<i32, (usize, f64, usize)>::new();
+        for (p, class) in &predictions {
+            let b = buckets.entry(bucket(p[k])).or_default();
+            b.0 += 1;
+            b.1 += p[k];
+            b.2 += (*class == k) as usize;
+        }
+        println!("\nP({name}): predicted range | positions | mean predicted | actual");
+        for (b, (n, sum, hits)) in buckets {
+            let range = if b < 0 { format!("1e{b}..1e{}", b + 1) } else { format!("1-1e{}..1-1e{}", -b + 1, -b) };
+            println!("  {range:>18} | {n:>8} | {:>12.3e} | {:.3e}", sum / n as f64, hits as f64 / n as f64);
+        }
+    }
+
+    // Ratio calibration: predicted ln(P(white win) / P(black win)) against
+    // the actual ln(white wins / black wins) in each bucket.
+    let mut buckets = std::collections::BTreeMap::<i64, (usize, f64, usize, usize)>::new();
+    for (p, class) in &predictions {
+        let lo = chessai::player::log_odds(p[0], p[1]);
+        let b = buckets.entry((lo / 2.0).floor() as i64).or_default();
+        b.0 += 1;
+        b.1 += lo;
+        b.2 += (*class == 0) as usize;
+        b.3 += (*class == 1) as usize;
+    }
+    println!("\nln(P(white win) / P(black win)): range | positions | mean predicted | actual ln(W/B) (W, B)");
+    for (b, (n, sum, w, l)) in buckets {
+        let actual = if w > 0 && l > 0 { format!("{:+.2}", (w as f64 / l as f64).ln()) } else { "-".into() };
+        println!("  {:+4}..{:+4} | {n:>8} | {:+8.2} | {actual} ({w}, {l})", 2 * b, 2 * b + 2, sum / n as f64);
     }
     Ok(())
 }
