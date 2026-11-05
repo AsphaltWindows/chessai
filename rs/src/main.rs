@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use shakmaty::uci::UciMove;
@@ -15,6 +15,9 @@ use chessai::cnbp::Cnbp;
 use chessai::encoding::{self, CATEGORIES, Encoded};
 use chessai::game::Game;
 use chessai::games;
+use chessai::game::GameResult;
+use chessai::player::Policy;
+use chessai::selfplay;
 
 #[derive(Parser)]
 #[command(about = "chessai: categorical Bayesian chess models")]
@@ -25,6 +28,29 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Train a model by self-play: each round plays games in parallel, writes
+    /// them in the self_play.py format, and trains the model on them.
+    SelfPlay {
+        /// Directory for round{N}/ game files, results.txt and models.
+        out: PathBuf,
+        #[arg(long, value_enum, default_value_t = ModelKind::Cnbp)]
+        model: ModelKind,
+        #[arg(long, default_value_t = 10)]
+        rounds: u64,
+        #[arg(long, default_value_t = 1000)]
+        games: usize,
+        #[arg(long, value_enum, default_value_t = Policy::WldScoreJitter10)]
+        policy: Policy,
+        /// Random seed; chosen and printed if not given.
+        #[arg(long)]
+        seed: Option<u64>,
+        /// Worker threads for playing; defaults to the number of cores.
+        #[arg(long)]
+        threads: Option<usize>,
+        #[command(flatten)]
+        params: ModelArgs,
+    },
+
     /// Replay games dumped by rs/bench/dump_python_games.py and compare legal
     /// moves, encodings and game results with the Python implementation.
     Xcheck { file: PathBuf },
@@ -76,8 +102,63 @@ enum Command {
     },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+enum ModelKind {
+    Cnbp,
+    Bdt,
+}
+
+#[derive(clap::Args, Clone, Debug)]
+struct ModelArgs {
+    /// Laplace smoothing.
+    #[arg(long, default_value_t = 1.0)]
+    alpha: f64,
+    /// Predict from cached probabilities (faster) instead of raw counts.
+    #[arg(long)]
+    use_probs: bool,
+    /// BDT: children per split.
+    #[arg(long, default_value_t = 2)]
+    branch_factor: usize,
+    /// BDT: examples a leaf sees between split checks.
+    #[arg(long, default_value_t = 2000)]
+    split_threshold: u32,
+    /// BDT: maximum number of splits.
+    #[arg(long, default_value_t = 20)]
+    split_limit: u32,
+    /// BDT: divisor applied to a splitting leaf's counts.
+    #[arg(long, default_value_t = 10.0)]
+    forget_factor: f64,
+}
+
+impl ModelArgs {
+    fn bdt_params(&self) -> BdtParams {
+        BdtParams {
+            class_num: 3,
+            branch_factor: self.branch_factor,
+            split_threshold: self.split_threshold,
+            split_limit: self.split_limit,
+            forget_factor: self.forget_factor,
+            nb_alpha: self.alpha,
+            use_probs: self.use_probs,
+        }
+    }
+}
+
 fn main() -> Result<()> {
     match Cli::parse().command {
+        Command::SelfPlay { out, model, rounds, games, policy, seed, threads, params } => {
+            if let Some(threads) = threads {
+                rayon::ThreadPoolBuilder::new().num_threads(threads).build_global()?;
+            }
+            let seed = seed.unwrap_or_else(|| {
+                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos() as u64
+            });
+            let run = SelfPlayRun { out, rounds, games, policy, seed };
+            match model {
+                ModelKind::Cnbp => run.run("cnbp", Cnbp::new(3, &CATEGORIES, params.alpha, params.use_probs)),
+                ModelKind::Bdt => run.run("bdt", Bdt::new(&CATEGORIES, params.bdt_params())),
+            }
+        }
         Command::Xcheck { file } => xcheck(file),
         Command::BenchMovegen { games, seed } => bench_movegen(games, seed),
         Command::BenchCnbp { games_dir, model_out, predictions_out, alpha, use_probs, reps } => bench_classifier(
@@ -322,4 +403,57 @@ fn bench_classifier<C: Classifier>(
         n / predict_secs / 1e6
     );
     Ok(())
+}
+
+struct SelfPlayRun {
+    out: PathBuf,
+    rounds: u64,
+    games: usize,
+    policy: Policy,
+    seed: u64,
+}
+
+impl SelfPlayRun {
+    fn run<M: Classifier + Sync>(&self, name: &str, mut model: M) -> Result<()> {
+        std::fs::create_dir_all(&self.out)?;
+        println!(
+            "self-play: {name}, {} rounds of {} games, policy {:?}, seed {}, {} threads",
+            self.rounds,
+            self.games,
+            self.policy,
+            self.seed,
+            rayon::current_num_threads()
+        );
+
+        for round in 0..self.rounds {
+            let start = Instant::now();
+            let records = selfplay::play_round(&model, self.policy, self.games, self.seed, round);
+            let play_secs = start.elapsed().as_secs_f64();
+
+            selfplay::write_round(&self.out.join(format!("round{round}")), &records)?;
+            let count = |r: GameResult| records.iter().filter(|g| g.result == r).count();
+            let (w, b, d) = (count(GameResult::WhiteWin), count(GameResult::BlackWin), count(GameResult::Draw));
+            let mut results = std::fs::OpenOptions::new().create(true).append(true).open(self.out.join("results.txt"))?;
+            std::io::Write::write_all(
+                &mut results,
+                format!("round {round} white wins: {w} black wins: {b} draws: {d}\n").as_bytes(),
+            )?;
+
+            let start = Instant::now();
+            let data = selfplay::training_data(&records, self.seed, round);
+            for (pos, label) in &data {
+                model.train(pos, label);
+            }
+            model.refresh();
+            let train_secs = start.elapsed().as_secs_f64();
+            model.save(&self.out.join(format!("{name}{}.model", round + 1)))?;
+
+            println!(
+                "round {round}: +{w} -{b} ={d}, {} plies, play {play_secs:.2}s ({:.0} plies/s), train {train_secs:.2}s",
+                data.len(),
+                data.len() as f64 / play_secs
+            );
+        }
+        Ok(())
+    }
 }
