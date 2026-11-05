@@ -25,6 +25,14 @@ static void node_predict_class(
         double * labels,
         uint8_t training);
 
+static void predict_node(
+        const bdt_t * bdt,
+        bdt_node_t * node,
+        const uint8_t * data,
+        double * out,
+        void (* predict)(const cnbp_t *, const uint8_t *, double *),
+        uint8_t training);
+
 static void free_bdt_node(
         bdt_node_t * node);
 
@@ -444,6 +452,8 @@ static void node_train_single(
     double child_error;
     double min_error;
     uint8_t min_error_index;
+    double routed_error;
+    uint8_t routed_index;
     double * expected;
 
     if (node->type == LEAF) {
@@ -531,6 +541,21 @@ static void node_train_single(
     }
     else if (node->type == BRANCH) {
 
+        /* The position goes to the child the router picks from the position
+         * alone, as in prediction, so each child learns about the positions
+         * it will be asked about. The router learns which child predicted
+         * the actual outcome best. */
+        predict_node(bdt, node, data, bdt->branch_scratch_space, cnbp_predict_class_counts, 1);
+        routed_index = 0;
+
+        for (uint8_t b = 1; b < bdt->branch_factor; ++b) {
+
+            if (bdt->branch_scratch_space[b] > bdt->branch_scratch_space[routed_index]) {
+                routed_index = b;
+            }
+
+        }
+
         for (uint8_t child = 0; child < bdt->branch_factor; ++child) {
 
             node_predict_class(
@@ -553,6 +578,10 @@ static void node_train_single(
                 min_error_index = child;
             }
 
+            if (child == routed_index) {
+                routed_error = child_error;
+            }
+
         }
 
         for (uint8_t b = 0; b < bdt->branch_factor; ++b) {
@@ -569,10 +598,10 @@ static void node_train_single(
 
         node_train_single(
                 bdt,
-                bdt->nodes[node->children[min_error_index]],
+                bdt->nodes[node->children[routed_index]],
                 data,
                 label,
-                min_error);
+                routed_error);
 
         node->num_trained_last++;
         node->num_trained_total++;

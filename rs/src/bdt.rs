@@ -182,7 +182,16 @@ impl Bdt {
             }
             Kind::Branch { children } => {
                 let children = children.clone();
-                let (mut best, mut min_error) = (0, f64::INFINITY);
+                // The position goes to the child the router picks from the
+                // position alone, as in prediction, so each child learns about
+                // the positions it will be asked about. The router learns which
+                // child predicted the actual outcome best.
+                let mut router = [0.0; 256];
+                let router = &mut router[..self.params.branch_factor];
+                self.node_output(idx, data, router);
+                let routed = argmax(router);
+
+                let (mut best, mut min_error, mut routed_error) = (0, f64::INFINITY, 0.0);
                 for (i, &child) in children.iter().enumerate() {
                     self.predict_training(child, data, scratch);
                     let child_error = prediction_error(scratch, label);
@@ -191,6 +200,9 @@ impl Bdt {
                         min_error = child_error;
                         best = i;
                     }
+                    if i == routed {
+                        routed_error = child_error;
+                    }
                 }
 
                 let mut target = vec![0.0; self.params.branch_factor];
@@ -198,7 +210,7 @@ impl Bdt {
                 self.nodes[idx].classifier.train(data, &target);
                 self.nodes[idx].cache_step = 0;
 
-                self.train_node(children[best], data, label, min_error, scratch);
+                self.train_node(children[routed], data, label, routed_error, scratch);
                 self.nodes[idx].record(error);
             }
         }
