@@ -9,3 +9,4 @@ models/**
 selfplay/**
 .idea/
 rs/target/
+__pycache__/
