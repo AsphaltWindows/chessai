@@ -81,6 +81,10 @@ enum Command {
         /// score in ladder.csv.
         #[arg(long)]
         vs_previous: bool,
+        /// Don't write each round's games to disk (they take ~50 MB per
+        /// 1000 games); models, results.txt and ladder.csv are still written.
+        #[arg(long)]
+        no_games: bool,
         #[command(flatten)]
         params: ModelArgs,
     },
@@ -270,12 +274,12 @@ fn main() -> Result<()> {
         Command::Arena { a, b, games, a_policy, b_policy, temperature, use_probs, seed, out } => {
             arena(&a, &b, games, (a_policy, b_policy), temperature, use_probs, seed.unwrap_or_else(random_seed), out)
         }
-        Command::SelfPlay { out, model, rounds, games, policy, temperature, seed, threads, vs_previous, params } => {
+        Command::SelfPlay { out, model, rounds, games, policy, temperature, seed, threads, vs_previous, no_games, params } => {
             if let Some(threads) = threads {
                 rayon::ThreadPoolBuilder::new().num_threads(threads).build_global()?;
             }
             let seed = seed.unwrap_or_else(random_seed);
-            let run = SelfPlayRun { out, rounds, games, policy, temperature, seed, vs_previous };
+            let run = SelfPlayRun { out, rounds, games, policy, temperature, seed, vs_previous, no_games };
             match model {
                 ModelKind::Cnbp => run.run("cnbp", Cnbp::new(3, &CATEGORIES, params.alpha, params.use_probs)),
                 ModelKind::Bdt => run.run("bdt", Bdt::new(&CATEGORIES, params.bdt_params())),
@@ -559,6 +563,7 @@ struct SelfPlayRun {
     temperature: f64,
     seed: u64,
     vs_previous: bool,
+    no_games: bool,
 }
 
 impl SelfPlayRun {
@@ -616,7 +621,9 @@ impl SelfPlayRun {
                 previous = model.clone();
             }
 
-            selfplay::write_round(&self.out.join(format!("round{round}")), &records)?;
+            if !self.no_games {
+                selfplay::write_round(&self.out.join(format!("round{round}")), &records)?;
+            }
             let count = |r: GameResult| records.iter().filter(|g| g.result == r).count();
             let (w, b, d) = (count(GameResult::WhiteWin), count(GameResult::BlackWin), count(GameResult::Draw));
             let mut results = std::fs::OpenOptions::new().create(true).append(true).open(self.out.join("results.txt"))?;
