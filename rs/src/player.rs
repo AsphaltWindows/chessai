@@ -27,6 +27,13 @@ pub enum Policy {
     Rand,
 }
 
+/// A model and the policy it chooses moves with.
+#[derive(Clone, Copy)]
+pub struct Player<'a> {
+    pub model: &'a (dyn Classifier + Sync),
+    pub policy: Policy,
+}
+
 /// A legal move and the encoding of the position it leads to.
 pub struct Candidate {
     pub mv: Move,
@@ -45,13 +52,13 @@ pub fn candidates(pos: &Chess) -> Vec<Candidate> {
 }
 
 /// Index into `candidates` of the move to play.
-pub fn select<M: Classifier, R: RngExt>(
-    model: &M,
-    policy: Policy,
+pub fn select<R: RngExt>(
+    player: Player,
     turn: Color,
     candidates: &[Candidate],
     rng: &mut R,
 ) -> usize {
+    let Player { model, policy } = player;
     if policy == Policy::Rand {
         return rng.random_range(0..candidates.len());
     }

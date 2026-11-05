@@ -10,13 +10,13 @@ use shakmaty::uci::UciMove;
 use shakmaty::{CastlingMode, Chess, Position};
 
 use chessai::bdt::{Bdt, BdtParams};
-use chessai::classifier::Classifier;
+use chessai::classifier::{Classifier, Uniform};
 use chessai::cnbp::Cnbp;
 use chessai::encoding::{self, CATEGORIES, Encoded};
 use chessai::game::Game;
 use chessai::games;
 use chessai::game::GameResult;
-use chessai::player::Policy;
+use chessai::player::{Player, Policy};
 use chessai::selfplay;
 
 #[derive(Parser)]
@@ -28,6 +28,29 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Play a match between two players, alternating colours, and report the
+    /// score and an Elo difference estimate. A player is `cnbp:PATH`,
+    /// `bdt:PATH` (a saved model) or `rand`.
+    Arena {
+        a: String,
+        b: String,
+        #[arg(long, default_value_t = 1000)]
+        games: usize,
+        #[arg(long, value_enum, default_value_t = Policy::WldScoreJitter10)]
+        a_policy: Policy,
+        #[arg(long, value_enum, default_value_t = Policy::WldScoreJitter10)]
+        b_policy: Policy,
+        /// Predict from cached probabilities (faster) instead of raw counts.
+        #[arg(long)]
+        use_probs: bool,
+        /// Random seed; chosen and printed if not given.
+        #[arg(long)]
+        seed: Option<u64>,
+        /// Also write the games, in the self-play round format.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+
     /// Train a model by self-play: each round plays games in parallel, writes
     /// them in the self_play.py format, and trains the model on them.
     SelfPlay {
@@ -144,15 +167,112 @@ impl ModelArgs {
     }
 }
 
+fn random_seed() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos() as u64
+}
+
+/// A player's model, loaded from a `cnbp:PATH`, `bdt:PATH` or `rand` spec.
+enum LoadedModel {
+    Cnbp(Cnbp),
+    Bdt(Bdt),
+    Uniform(Uniform),
+}
+
+impl LoadedModel {
+    fn load(spec: &str, use_probs: bool) -> Result<Self> {
+        if spec == "rand" {
+            return Ok(LoadedModel::Uniform(Uniform));
+        }
+        let (kind, path) = spec.split_once(':').with_context(|| format!("expected KIND:PATH or rand, got {spec}"))?;
+        let path = Path::new(path);
+        Ok(match kind {
+            "cnbp" => LoadedModel::Cnbp(Cnbp::load(path, use_probs).with_context(|| format!("loading {path:?}"))?),
+            "bdt" => LoadedModel::Bdt(Bdt::load(path, use_probs).with_context(|| format!("loading {path:?}"))?),
+            _ => bail!("unknown model kind {kind:?}, expected cnbp or bdt"),
+        })
+    }
+
+    fn player(&self, policy: Policy) -> Player<'_> {
+        let model: &(dyn Classifier + Sync) = match self {
+            LoadedModel::Cnbp(m) => m,
+            LoadedModel::Bdt(m) => m,
+            LoadedModel::Uniform(m) => m,
+        };
+        // A random player chooses moves at random whatever the policy.
+        let policy = if matches!(self, LoadedModel::Uniform(_)) { Policy::Rand } else { policy };
+        Player { model, policy }
+    }
+}
+
+fn arena(
+    a: &str,
+    b: &str,
+    games: usize,
+    (a_policy, b_policy): (Policy, Policy),
+    use_probs: bool,
+    seed: u64,
+    out: Option<PathBuf>,
+) -> Result<()> {
+    let (model_a, model_b) = (LoadedModel::load(a, use_probs)?, LoadedModel::load(b, use_probs)?);
+    let (player_a, player_b) = (model_a.player(a_policy), model_b.player(b_policy));
+    println!("arena: A = {a} ({:?}), B = {b} ({:?}), {games} games, seed {seed}", player_a.policy, player_b.policy);
+
+    let start = Instant::now();
+    let records = selfplay::play_match(player_a, player_b, games, seed);
+    let secs = start.elapsed().as_secs_f64();
+    if let Some(out) = out {
+        selfplay::write_round(&out, &records)?;
+    }
+    if let Some(warning) = selfplay::duplicate_warning(&records) {
+        println!("{warning}");
+    }
+
+    // Score from A's point of view; A is white in even-numbered games.
+    let scores: Vec<f64> = records
+        .iter()
+        .enumerate()
+        .map(|(g, r)| {
+            let a_white = g % 2 == 0;
+            match r.result {
+                GameResult::Draw => 0.5,
+                GameResult::WhiteWin if a_white => 1.0,
+                GameResult::BlackWin if !a_white => 1.0,
+                _ => 0.0,
+            }
+        })
+        .collect();
+    let n = scores.len() as f64;
+    let wins = scores.iter().filter(|&&s| s == 1.0).count();
+    let losses = scores.iter().filter(|&&s| s == 0.0).count();
+    let draws = scores.len() - wins - losses;
+    let mean = scores.iter().sum::<f64>() / n;
+    let variance = scores.iter().map(|s| (s - mean).powi(2)).sum::<f64>() / n;
+    let margin = 1.96 * (variance / n).sqrt();
+    let elo = |s: f64| {
+        let s = s.clamp(1e-6, 1.0 - 1e-6);
+        -400.0 * (1.0 / s - 1.0).log10()
+    };
+
+    println!("A: +{wins} -{losses} ={draws}, score {:.1}% ({secs:.1}s)", 100.0 * mean);
+    println!(
+        "Elo difference A - B: {:+.0} (95% range {:+.0} to {:+.0})",
+        elo(mean),
+        elo(mean - margin),
+        elo(mean + margin)
+    );
+    Ok(())
+}
+
 fn main() -> Result<()> {
     match Cli::parse().command {
+        Command::Arena { a, b, games, a_policy, b_policy, use_probs, seed, out } => {
+            arena(&a, &b, games, (a_policy, b_policy), use_probs, seed.unwrap_or_else(random_seed), out)
+        }
         Command::SelfPlay { out, model, rounds, games, policy, seed, threads, params } => {
             if let Some(threads) = threads {
                 rayon::ThreadPoolBuilder::new().num_threads(threads).build_global()?;
             }
-            let seed = seed.unwrap_or_else(|| {
-                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos() as u64
-            });
+            let seed = seed.unwrap_or_else(random_seed);
             let run = SelfPlayRun { out, rounds, games, policy, seed };
             match model {
                 ModelKind::Cnbp => run.run("cnbp", Cnbp::new(3, &CATEGORIES, params.alpha, params.use_probs)),
@@ -453,6 +573,9 @@ impl SelfPlayRun {
                 data.len(),
                 data.len() as f64 / play_secs
             );
+            if let Some(warning) = selfplay::duplicate_warning(&records) {
+                println!("  {warning}");
+            }
         }
         Ok(())
     }

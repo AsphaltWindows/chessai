@@ -45,3 +45,18 @@ impl Classifier for Bdt {
         Bdt::save(self, path)
     }
 }
+
+/// Predicts every class as equally likely; the model of a random player.
+pub struct Uniform;
+
+impl Classifier for Uniform {
+    fn train(&mut self, _data: &[u8], _label: &[f64]) {}
+    fn refresh(&mut self) {}
+    fn predict(&self, _data: &[u8], out: &mut [f64]) {
+        let n = out.len() as f64;
+        out.iter_mut().for_each(|p| *p = 1.0 / n);
+    }
+    fn save(&self, _path: &Path) -> io::Result<()> {
+        Ok(())
+    }
+}

@@ -20,7 +20,7 @@ use crate::classifier::Classifier;
 use crate::encoding::Encoded;
 use crate::game::{Game, GameResult};
 use crate::games::OUTCOME_FILES;
-use crate::player::{self, Policy};
+use crate::player::{self, Player, Policy};
 
 pub struct GameRecord {
     pub result: GameResult,
@@ -40,7 +40,8 @@ impl GameRecord {
     }
 }
 
-pub fn play_game<M: Classifier>(model: &M, policy: Policy, seed: u64) -> GameRecord {
+/// Plays one game between two players.
+pub fn play_game(white: Player, black: Player, seed: u64) -> GameRecord {
     let mut rng = StdRng::seed_from_u64(seed);
     let mut game = Game::default();
     let mut positions = Vec::new();
@@ -52,7 +53,8 @@ pub fn play_game<M: Classifier>(model: &M, policy: Policy, seed: u64) -> GameRec
         }
         let pos = game.position();
         let candidates = player::candidates(pos);
-        let chosen = &candidates[player::select(model, policy, pos.turn(), &candidates, &mut rng)];
+        let player = if pos.turn().is_white() { white } else { black };
+        let chosen = &candidates[player::select(player, pos.turn(), &candidates, &mut rng)];
 
         if pos.turn().is_white() {
             write!(movetext, "{}. ", pos.fullmoves()).unwrap();
@@ -66,7 +68,7 @@ pub fn play_game<M: Classifier>(model: &M, policy: Policy, seed: u64) -> GameRec
     GameRecord { result, positions, movetext }
 }
 
-/// Plays a round of games in parallel. Records are in game order.
+/// Plays a round of self-play games in parallel. Records are in game order.
 pub fn play_round<M: Classifier + Sync>(
     model: &M,
     policy: Policy,
@@ -74,9 +76,22 @@ pub fn play_round<M: Classifier + Sync>(
     seed: u64,
     round: u64,
 ) -> Vec<GameRecord> {
+    let player = Player { model, policy };
     (0..games as u64)
         .into_par_iter()
-        .map(|g| play_game(model, policy, derive_seed(seed, round, g)))
+        .map(|g| play_game(player, player, derive_seed(seed, round, g)))
+        .collect()
+}
+
+/// Plays a match in parallel. `a` is white in even games, `b` in odd ones.
+/// Records are in game order.
+pub fn play_match(a: Player, b: Player, games: usize, seed: u64) -> Vec<GameRecord> {
+    (0..games as u64)
+        .into_par_iter()
+        .map(|g| {
+            let (white, black) = if g % 2 == 0 { (a, b) } else { (b, a) };
+            play_game(white, black, derive_seed(seed, u64::MAX, g))
+        })
         .collect()
 }
 
@@ -111,6 +126,27 @@ pub fn write_round(dir: &Path, records: &[GameRecord]) -> io::Result<()> {
     std::fs::write(dir.join("human.games"), human)
 }
 
+/// A warning if more than 5% of the games are repeats of other games, which
+/// makes results look more precise than they are. Happens with policies
+/// without jitter, where only exact score ties introduce randomness.
+pub fn duplicate_warning(records: &[GameRecord]) -> Option<String> {
+    let mut counts = std::collections::HashMap::new();
+    for r in records {
+        *counts.entry(r.movetext.as_str()).or_insert(0usize) += 1;
+    }
+    let repeats = records.len() - counts.len();
+    if repeats * 20 <= records.len() {
+        return None;
+    }
+    let most = counts.values().max().copied().unwrap_or(0);
+    Some(format!(
+        "warning: only {} distinct games out of {} (one game was played {most} times); \
+         results rest on fewer independent games than it seems. Use a jittered policy for variety.",
+        counts.len(),
+        records.len()
+    ))
+}
+
 /// Mixes the run seed, round and game number into an independent seed.
 fn derive_seed(seed: u64, round: u64, game: u64) -> u64 {
     splitmix64(splitmix64(seed ^ splitmix64(round)) ^ game)
@@ -141,9 +177,20 @@ mod tests {
     }
 
     #[test]
+    fn warns_about_repeated_games() {
+        let model = Cnbp::new(3, &CATEGORIES, 1.0, false);
+        let player = Player { model: &model, policy: Policy::Rand };
+        let mut records = vec![play_game(player, player, 1), play_game(player, player, 2)];
+        assert!(duplicate_warning(&records).is_none());
+        records.push(play_game(player, player, 1));
+        assert!(duplicate_warning(&records).unwrap().contains("2 distinct games out of 3"));
+    }
+
+    #[test]
     fn positions_match_moves() {
         let model = Cnbp::new(3, &CATEGORIES, 1.0, false);
-        let record = play_game(&model, Policy::Rand, 1);
+        let player = Player { model: &model, policy: Policy::Rand };
+        let record = play_game(player, player, 1);
         let plies = record.movetext.split_whitespace().filter(|t| !t.ends_with('.')).count() - 1;
         assert_eq!(record.positions.len(), plies);
     }
