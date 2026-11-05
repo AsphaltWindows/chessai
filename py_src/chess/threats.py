@@ -73,8 +73,8 @@ def is_threatened(byside, square, game):
     while 0 < f2 < 9 and 0 < r2 < 9:
         piecenum = game.board[r2][f2][0]
         if piecenum is None:
-            f2 += 1
-            r2 -= 1
+            f2 -= 1
+            r2 += 1
         elif (game.pieces[piecenum][1] != cc.Bishop and game.pieces[piecenum][1] != cc.Queen) or game.pieces[piecenum][0] != byside:
             break
         else:
