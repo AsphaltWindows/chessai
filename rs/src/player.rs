@@ -23,6 +23,12 @@ pub enum Policy {
     /// Sample a move with probability proportional to
     /// exp(expected score / temperature).
     WldScoreSoftmax,
+    /// Highest log-odds of winning, ln P(win) - ln P(loss). Unlike expected
+    /// score, it still separates moves when P(draw) is close to 1.
+    LogOdds,
+    /// Sample a move with probability proportional to
+    /// exp(log-odds / temperature); the temperature is in nats.
+    LogOddsSoftmax,
     /// Prefer positions where win > loss, by win probability; otherwise
     /// the highest draw probability.
     WldWd,
@@ -75,15 +81,19 @@ pub fn select<R: RngExt>(
     };
     let mut scores = [0.0; 3];
 
-    if policy == Policy::WldScoreSoftmax {
-        let expected: Vec<f64> = candidates
+    if matches!(policy, Policy::WldScoreSoftmax | Policy::LogOddsSoftmax) {
+        let values: Vec<f64> = candidates
             .iter()
             .map(|c| {
                 model.predict(&c.position, &mut scores);
-                scores[win] + scores[2] / 2.0
+                if policy == Policy::LogOddsSoftmax {
+                    log_odds(scores[win], scores[loss])
+                } else {
+                    scores[win] + scores[2] / 2.0
+                }
             })
             .collect();
-        return softmax_sample(&expected, temperature, rng);
+        return softmax_sample(&values, temperature, rng);
     }
 
     let mut best_key = (f64::NEG_INFINITY, f64::NEG_INFINITY);
@@ -97,9 +107,10 @@ pub fn select<R: RngExt>(
             Policy::WldScore => (0.0, expected),
             Policy::WldScoreJitter10 => (0.0, expected * (1.0 + rng.random_range(-0.1..=0.1))),
             Policy::WldScoreJitter20 => (0.0, expected * (1.0 + rng.random_range(-0.2..=0.2))),
+            Policy::LogOdds => (0.0, log_odds(scores[win], scores[loss])),
             Policy::WldWd if scores[win] > scores[loss] => (1.0, scores[win]),
             Policy::WldWd => (0.0, scores[2]),
-            Policy::Rand | Policy::WldScoreSoftmax => unreachable!(),
+            Policy::Rand | Policy::WldScoreSoftmax | Policy::LogOddsSoftmax => unreachable!(),
         };
 
         if key > best_key {
@@ -112,6 +123,12 @@ pub fn select<R: RngExt>(
     }
 
     best[rng.random_range(0..best.len())]
+}
+
+/// ln P(win) - ln P(loss). Probabilities that underflowed to 0 are treated
+/// as the smallest positive double, so the result is always finite.
+pub fn log_odds(win: f64, loss: f64) -> f64 {
+    win.max(f64::MIN_POSITIVE).ln() - loss.max(f64::MIN_POSITIVE).ln()
 }
 
 /// Samples an index with probability proportional to exp(value / temperature).
