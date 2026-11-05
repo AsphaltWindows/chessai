@@ -20,6 +20,9 @@ pub enum Policy {
     WldScoreJitter10,
     /// Expected score multiplied by a random factor in [0.8, 1.2].
     WldScoreJitter20,
+    /// Sample a move with probability proportional to
+    /// exp(expected score / temperature).
+    WldScoreSoftmax,
     /// Prefer positions where win > loss, by win probability; otherwise
     /// the highest draw probability.
     WldWd,
@@ -32,6 +35,9 @@ pub enum Policy {
 pub struct Player<'a> {
     pub model: &'a (dyn Classifier + Sync),
     pub policy: Policy,
+    /// Softmax temperature, in units of expected score (0..1). Only used by
+    /// `WldScoreSoftmax`.
+    pub temperature: f64,
 }
 
 /// A legal move and the encoding of the position it leads to.
@@ -58,7 +64,7 @@ pub fn select<R: RngExt>(
     candidates: &[Candidate],
     rng: &mut R,
 ) -> usize {
-    let Player { model, policy } = player;
+    let Player { model, policy, temperature } = player;
     if policy == Policy::Rand {
         return rng.random_range(0..candidates.len());
     }
@@ -68,6 +74,18 @@ pub fn select<R: RngExt>(
         Color::Black => (1, 0),
     };
     let mut scores = [0.0; 3];
+
+    if policy == Policy::WldScoreSoftmax {
+        let expected: Vec<f64> = candidates
+            .iter()
+            .map(|c| {
+                model.predict(&c.position, &mut scores);
+                scores[win] + scores[2] / 2.0
+            })
+            .collect();
+        return softmax_sample(&expected, temperature, rng);
+    }
+
     let mut best_key = (f64::NEG_INFINITY, f64::NEG_INFINITY);
     let mut best = Vec::new();
 
@@ -81,7 +99,7 @@ pub fn select<R: RngExt>(
             Policy::WldScoreJitter20 => (0.0, expected * (1.0 + rng.random_range(-0.2..=0.2))),
             Policy::WldWd if scores[win] > scores[loss] => (1.0, scores[win]),
             Policy::WldWd => (0.0, scores[2]),
-            Policy::Rand => unreachable!(),
+            Policy::Rand | Policy::WldScoreSoftmax => unreachable!(),
         };
 
         if key > best_key {
@@ -94,4 +112,45 @@ pub fn select<R: RngExt>(
     }
 
     best[rng.random_range(0..best.len())]
+}
+
+/// Samples an index with probability proportional to exp(value / temperature).
+fn softmax_sample<R: RngExt>(values: &[f64], temperature: f64, rng: &mut R) -> usize {
+    let max = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    // Subtracting the maximum keeps exp() from overflowing at low temperatures.
+    let weights: Vec<f64> = values.iter().map(|v| ((v - max) / temperature).exp()).collect();
+    let mut target = rng.random_range(0.0..weights.iter().sum::<f64>());
+    for (i, w) in weights.iter().enumerate() {
+        if target < *w {
+            return i;
+        }
+        target -= w;
+    }
+    weights.len() - 1
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::SeedableRng;
+    use rand::rngs::StdRng;
+
+    #[test]
+    fn softmax_follows_temperature() {
+        let mut rng = StdRng::seed_from_u64(1);
+        let mut count = |t: f64| {
+            let mut picks = [0; 2];
+            for _ in 0..10_000 {
+                picks[softmax_sample(&[0.5, 0.5 + t * 2f64.ln()], t, &mut rng)] += 1;
+            }
+            picks
+        };
+        // A gap of T*ln(2) makes the better move twice as likely, at any T.
+        for t in [0.001, 0.1] {
+            let [worse, better] = count(t);
+            assert!((better as f64 / worse as f64 - 2.0).abs() < 0.15, "{worse} {better}");
+        }
+        // Far below the gap, the best move is always chosen.
+        assert_eq!(softmax_sample(&[0.4, 0.6], 1e-6, &mut rng), 1);
+    }
 }

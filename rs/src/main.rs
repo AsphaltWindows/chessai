@@ -40,6 +40,9 @@ enum Command {
         a_policy: Policy,
         #[arg(long, value_enum, default_value_t = Policy::WldScoreJitter10)]
         b_policy: Policy,
+        /// Softmax temperature for the wld-score-softmax policy.
+        #[arg(long, default_value_t = 0.01)]
+        temperature: f64,
         /// Predict from cached probabilities (faster) instead of raw counts.
         #[arg(long)]
         use_probs: bool,
@@ -64,6 +67,9 @@ enum Command {
         games: usize,
         #[arg(long, value_enum, default_value_t = Policy::WldScoreJitter10)]
         policy: Policy,
+        /// Softmax temperature for the wld-score-softmax policy.
+        #[arg(long, default_value_t = 0.01)]
+        temperature: f64,
         /// Random seed; chosen and printed if not given.
         #[arg(long)]
         seed: Option<u64>,
@@ -217,7 +223,7 @@ impl LoadedModel {
         })
     }
 
-    fn player(&self, policy: Policy) -> Player<'_> {
+    fn player(&self, policy: Policy, temperature: f64) -> Player<'_> {
         let model: &(dyn Classifier + Sync) = match self {
             LoadedModel::Cnbp(m) => m,
             LoadedModel::Bdt(m) => m,
@@ -225,7 +231,7 @@ impl LoadedModel {
         };
         // A random player chooses moves at random whatever the policy.
         let policy = if matches!(self, LoadedModel::Uniform(_)) { Policy::Rand } else { policy };
-        Player { model, policy }
+        Player { model, policy, temperature }
     }
 }
 
@@ -234,12 +240,13 @@ fn arena(
     b: &str,
     games: usize,
     (a_policy, b_policy): (Policy, Policy),
+    temperature: f64,
     use_probs: bool,
     seed: u64,
     out: Option<PathBuf>,
 ) -> Result<()> {
     let (model_a, model_b) = (LoadedModel::load(a, use_probs)?, LoadedModel::load(b, use_probs)?);
-    let (player_a, player_b) = (model_a.player(a_policy), model_b.player(b_policy));
+    let (player_a, player_b) = (model_a.player(a_policy, temperature), model_b.player(b_policy, temperature));
     println!("arena: A = {a} ({:?}), B = {b} ({:?}), {games} games, seed {seed}", player_a.policy, player_b.policy);
 
     let start = Instant::now();
@@ -260,15 +267,15 @@ fn arena(
 
 fn main() -> Result<()> {
     match Cli::parse().command {
-        Command::Arena { a, b, games, a_policy, b_policy, use_probs, seed, out } => {
-            arena(&a, &b, games, (a_policy, b_policy), use_probs, seed.unwrap_or_else(random_seed), out)
+        Command::Arena { a, b, games, a_policy, b_policy, temperature, use_probs, seed, out } => {
+            arena(&a, &b, games, (a_policy, b_policy), temperature, use_probs, seed.unwrap_or_else(random_seed), out)
         }
-        Command::SelfPlay { out, model, rounds, games, policy, seed, threads, vs_previous, params } => {
+        Command::SelfPlay { out, model, rounds, games, policy, temperature, seed, threads, vs_previous, params } => {
             if let Some(threads) = threads {
                 rayon::ThreadPoolBuilder::new().num_threads(threads).build_global()?;
             }
             let seed = seed.unwrap_or_else(random_seed);
-            let run = SelfPlayRun { out, rounds, games, policy, seed, vs_previous };
+            let run = SelfPlayRun { out, rounds, games, policy, temperature, seed, vs_previous };
             match model {
                 ModelKind::Cnbp => run.run("cnbp", Cnbp::new(3, &CATEGORIES, params.alpha, params.use_probs)),
                 ModelKind::Bdt => run.run("bdt", Bdt::new(&CATEGORIES, params.bdt_params())),
@@ -549,6 +556,7 @@ struct SelfPlayRun {
     rounds: u64,
     games: usize,
     policy: Policy,
+    temperature: f64,
     seed: u64,
     vs_previous: bool,
 }
@@ -574,12 +582,12 @@ impl SelfPlayRun {
 
         for round in 0..self.rounds {
             let start = Instant::now();
+            let player = |model| Player { model, policy: self.policy, temperature: self.temperature };
             let records = if self.vs_previous {
-                let current = Player { model: &model, policy: self.policy };
-                let opponent = Player { model: &previous, policy: self.policy };
+                let (current, opponent) = (player(&model), player(&previous));
                 selfplay::play_match(current, opponent, self.games, selfplay::derive_seed(self.seed, round, 0))
             } else {
-                selfplay::play_round(&model, self.policy, self.games, self.seed, round)
+                selfplay::play_round(player(&model), self.games, self.seed, round)
             };
             let play_secs = start.elapsed().as_secs_f64();
 
