@@ -8,3 +8,4 @@ games/**
 models/**
 selfplay/**
 .idea/
+rs/target/
