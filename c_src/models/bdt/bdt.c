@@ -454,6 +454,7 @@ static void node_train_single(
     uint8_t min_error_index;
     double routed_error;
     uint8_t routed_index;
+    double child_errors[256];
     double * expected;
 
     if (node->type == LEAF) {
@@ -541,21 +542,6 @@ static void node_train_single(
     }
     else if (node->type == BRANCH) {
 
-        /* The position goes to the child the router picks from the position
-         * alone, as in prediction, so each child learns about the positions
-         * it will be asked about. The router learns which child predicted
-         * the actual outcome best. */
-        predict_node(bdt, node, data, bdt->branch_scratch_space, cnbp_predict_class_counts, 1);
-        routed_index = 0;
-
-        for (uint8_t b = 1; b < bdt->branch_factor; ++b) {
-
-            if (bdt->branch_scratch_space[b] > bdt->branch_scratch_space[routed_index]) {
-                routed_index = b;
-            }
-
-        }
-
         for (uint8_t child = 0; child < bdt->branch_factor; ++child) {
 
             node_predict_class(
@@ -578,9 +564,7 @@ static void node_train_single(
                 min_error_index = child;
             }
 
-            if (child == routed_index) {
-                routed_error = child_error;
-            }
+            child_errors[child] = child_error;
 
         }
 
@@ -595,6 +579,23 @@ static void node_train_single(
                 data,
                 bdt->branch_scratch_space);
         node->cache_step = 0;
+
+        /* The router is trained on which child predicted the actual outcome
+         * best, then the position goes to the child the updated router picks
+         * from the position alone, as in prediction, so each child learns
+         * about the positions it will be asked about. */
+        predict_node(bdt, node, data, bdt->branch_scratch_space, cnbp_predict_class_counts, 1);
+        routed_index = 0;
+
+        for (uint8_t b = 1; b < bdt->branch_factor; ++b) {
+
+            if (bdt->branch_scratch_space[b] > bdt->branch_scratch_space[routed_index]) {
+                routed_index = b;
+            }
+
+        }
+
+        routed_error = child_errors[routed_index];
 
         node_train_single(
                 bdt,

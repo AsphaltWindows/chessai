@@ -182,26 +182,15 @@ impl Bdt {
             }
             Kind::Branch { children } => {
                 let children = children.clone();
-                // The position goes to the child the router picks from the
-                // position alone, as in prediction, so each child learns about
-                // the positions it will be asked about. The router learns which
-                // child predicted the actual outcome best.
-                let mut router = [0.0; 256];
-                let router = &mut router[..self.params.branch_factor];
-                self.node_output(idx, data, router);
-                let routed = argmax(router);
-
-                let (mut best, mut min_error, mut routed_error) = (0, f64::INFINITY, 0.0);
+                let mut child_errors = vec![0.0; children.len()];
+                let (mut best, mut min_error) = (0, f64::INFINITY);
                 for (i, &child) in children.iter().enumerate() {
                     self.predict_training(child, data, scratch);
-                    let child_error = prediction_error(scratch, label);
+                    child_errors[i] = prediction_error(scratch, label);
                     // Strict comparison: ties go to the lowest index, as in C.
-                    if i == 0 || child_error < min_error {
-                        min_error = child_error;
+                    if i == 0 || child_errors[i] < min_error {
+                        min_error = child_errors[i];
                         best = i;
-                    }
-                    if i == routed {
-                        routed_error = child_error;
                     }
                 }
 
@@ -210,7 +199,17 @@ impl Bdt {
                 self.nodes[idx].classifier.train(data, &target);
                 self.nodes[idx].cache_step = 0;
 
-                self.train_node(children[routed], data, label, routed_error, scratch);
+                // The router is trained on which child predicted the actual
+                // outcome best, then the position goes to the child the
+                // updated router picks from the position alone, as in
+                // prediction, so each child learns about the positions it will
+                // be asked about.
+                let mut router = [0.0; 256];
+                let router = &mut router[..self.params.branch_factor];
+                self.node_output(idx, data, router);
+                let routed = argmax(router);
+
+                self.train_node(children[routed], data, label, child_errors[routed], scratch);
                 self.nodes[idx].record(error);
             }
         }
