@@ -38,10 +38,39 @@ struct Node {
     error_last: f64,
     /// Mean error of the previous full window, or -1 before the first.
     error_prev: f64,
+    /// Sum of squared errors in the current window, and the squared standard
+    /// error of the previous window's mean; for `split_z`. Not saved.
+    error_sq_last: f64,
+    error_prev_se2: f64,
+    /// The tree's error sum and count when this node's window started.
+    window_tree_sum: f64,
+    window_tree_count: u64,
     /// Output of `classifier` for the position of the current training step;
     /// valid while `cache_step` equals the tree's `step`.
     cache: Vec<f64>,
     cache_step: u64,
+}
+
+/// How the error of a prediction is measured, for the split check and the
+/// routers' targets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum ErrorMeasure {
+    /// Half the absolute difference: 1 - P(actual class) for a one-hot label.
+    Abs,
+    /// Log-loss: -ln P(actual class).
+    Log,
+}
+
+/// When a leaf splits, checked every `split_threshold` examples.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub enum SplitRule {
+    /// The window's mean error rose above the previous window's by more than
+    /// `split_z` standard errors.
+    Worse,
+    /// The leaf stalled - its error did not fall by more than `split_z`
+    /// standard errors since the previous window - while its mean error is
+    /// above the whole tree's over the same window.
+    StallHigh,
 }
 
 #[derive(Clone, Debug)]
@@ -53,6 +82,14 @@ pub struct BdtParams {
     pub forget_factor: f64,
     pub nb_alpha: f64,
     pub use_probs: bool,
+    /// Not saved in model files; `Abs` when loading.
+    pub error: ErrorMeasure,
+    /// A leaf splits when its window's mean error exceeds the previous
+    /// window's by more than this many standard errors of the difference.
+    /// Not saved in model files; 0 when loading.
+    pub split_z: f64,
+    /// Not saved in model files; `Worse` when loading.
+    pub split_rule: SplitRule,
 }
 
 #[derive(Clone, Debug)]
@@ -63,6 +100,10 @@ pub struct Bdt {
     nodes: Vec<Node>,
     /// Counts training steps, starting at 1; a `cache_step` of 0 marks no cache.
     step: u64,
+    /// Sum and count of the whole tree's prediction errors while training,
+    /// for `SplitRule::StallHigh`. Not saved.
+    tree_error_sum: f64,
+    tree_error_count: u64,
 }
 
 impl Bdt {
@@ -73,7 +114,15 @@ impl Bdt {
             Kind::Leaf,
             Cnbp::new(params.class_num, categories, params.nb_alpha, params.use_probs),
         );
-        Bdt { categories: categories.to_vec(), params, split_number: 0, nodes: vec![root], step: 0 }
+        Bdt {
+            categories: categories.to_vec(),
+            params,
+            split_number: 0,
+            nodes: vec![root],
+            step: 0,
+            tree_error_sum: 0.0,
+            tree_error_count: 0,
+        }
     }
 
     pub fn params(&self) -> &BdtParams {
@@ -93,12 +142,18 @@ impl Bdt {
     /// # Panics
     /// With `use_probs`, if the tree was trained since the last `refresh()`.
     pub fn predict(&self, data: &[u8], out: &mut [f64]) {
+        self.predict_routed(data, data, out)
+    }
+
+    /// Predicts `data` with the leaf that `route_by` is routed to, so that
+    /// several positions can be compared by the same leaf.
+    pub fn predict_routed(&self, route_by: &[u8], data: &[u8], out: &mut [f64]) {
         let mut idx = 0;
         loop {
             let node = &self.nodes[idx];
             match &node.kind {
                 Kind::Leaf => return node.classifier.predict(data, out),
-                Kind::Branch { children } => idx = children[best_child(&node.classifier, data)],
+                Kind::Branch { children } => idx = children[best_child(&node.classifier, route_by)],
             }
         }
     }
@@ -154,7 +209,9 @@ impl Bdt {
         self.step += 1;
         let mut out = vec![0.0; self.params.class_num];
         self.predict_training(0, data, &mut out);
-        let error = prediction_error(&out, label);
+        let error = self.error(&out, label);
+        self.tree_error_sum += error;
+        self.tree_error_count += 1;
         self.train_node(0, data, label, error, &mut out);
     }
 
@@ -172,15 +229,32 @@ impl Bdt {
                     // error is above the previous window's. Comparing with the
                     // lifetime mean instead is skewed by the high error of the
                     // first data.
-                    let recent = node.error_last / node.num_trained_last as f64;
-                    let previous = node.error_prev;
+                    let n = node.num_trained_last as f64;
+                    let recent = node.error_last / n;
+                    let se2 = (node.error_sq_last / n - recent * recent).max(0.0) / n;
+                    let (previous, previous_se2) = (node.error_prev, node.error_prev_se2);
                     node.error_prev = recent;
-                    if previous >= 0.0 && recent > previous {
+                    node.error_prev_se2 = se2;
+                    let margin = self.params.split_z * (se2 + previous_se2).sqrt();
+                    let split = previous >= 0.0
+                        && match self.params.split_rule {
+                            SplitRule::Worse => recent > previous + margin,
+                            SplitRule::StallHigh => {
+                                let tree_mean = (self.tree_error_sum - node.window_tree_sum)
+                                    / (self.tree_error_count - node.window_tree_count).max(1) as f64;
+                                previous - recent < margin && recent > tree_mean
+                            }
+                        };
+                    if split {
                         self.split(idx);
                     }
+                    let (sum, count) = (self.tree_error_sum, self.tree_error_count);
                     let node = &mut self.nodes[idx];
                     node.num_trained_last = 0;
                     node.error_last = 0.0;
+                    node.error_sq_last = 0.0;
+                    node.window_tree_sum = sum;
+                    node.window_tree_count = count;
                     return self.train_node(idx, data, label, error, scratch);
                 }
 
@@ -195,7 +269,7 @@ impl Bdt {
                 let (mut best, mut min_error) = (0, f64::INFINITY);
                 for (i, &child) in children.iter().enumerate() {
                     self.predict_training(child, data, scratch);
-                    child_errors[i] = prediction_error(scratch, label);
+                    child_errors[i] = self.error(scratch, label);
                     // Strict comparison: ties go to the lowest index, as in C.
                     if i == 0 || child_errors[i] < min_error {
                         min_error = child_errors[i];
@@ -210,7 +284,7 @@ impl Bdt {
                 let mut router = [0.0; 256];
                 let router = &mut router[..self.params.branch_factor];
                 self.node_output(idx, data, router);
-                let router_error = prediction_error(router, &target);
+                let router_error = self.error(router, &target);
                 self.nodes[idx].classifier.train(data, &target);
                 self.nodes[idx].cache_step = 0;
 
@@ -233,7 +307,10 @@ impl Bdt {
         for _ in 0..self.params.branch_factor {
             let mut classifier = self.nodes[idx].classifier.clone();
             classifier.forget(self.params.forget_factor);
-            self.nodes.push(Node::new(Kind::Leaf, classifier));
+            let mut child = Node::new(Kind::Leaf, classifier);
+            child.window_tree_sum = self.tree_error_sum;
+            child.window_tree_count = self.tree_error_count;
+            self.nodes.push(child);
         }
 
         let node = &mut self.nodes[idx];
@@ -312,6 +389,9 @@ impl Bdt {
             forget_factor,
             nb_alpha,
             use_probs,
+            error: ErrorMeasure::Abs,
+            split_z: 0.0,
+            split_rule: SplitRule::Worse,
         };
 
         let mut nodes = Vec::with_capacity(nodes_num);
@@ -348,7 +428,7 @@ impl Bdt {
                 ..Node::new(kind, classifier) });
         }
 
-        Ok(Bdt { categories, params, split_number, nodes, step: 0 })
+        Ok(Bdt { categories, params, split_number, nodes, step: 0, tree_error_sum: 0.0, tree_error_count: 0 })
     }
 
     pub fn save(&self, path: &Path) -> io::Result<()> {
@@ -372,6 +452,10 @@ impl Node {
             error_total: 0.0,
             error_last: 0.0,
             error_prev: -1.0,
+            error_sq_last: 0.0,
+            error_prev_se2: 0.0,
+            window_tree_sum: 0.0,
+            window_tree_count: 0,
         }
     }
 
@@ -380,6 +464,7 @@ impl Node {
         self.num_trained_total += 1;
         self.error_last += error;
         self.error_total += error;
+        self.error_sq_last += error * error;
     }
 }
 
@@ -403,6 +488,25 @@ fn argmax(values: &[f64]) -> usize {
 }
 
 /// Total variation distance between a prediction and a label.
+impl Bdt {
+    fn error(&self, predicted: &[f64], actual: &[f64]) -> f64 {
+        match self.params.error {
+            ErrorMeasure::Abs => prediction_error(predicted, actual),
+            ErrorMeasure::Log => log_loss(predicted, actual),
+        }
+    }
+}
+
+/// -sum(actual * ln predicted); -ln P(actual class) for a one-hot label.
+pub fn log_loss(predicted: &[f64], actual: &[f64]) -> f64 {
+    predicted
+        .iter()
+        .zip(actual)
+        .filter(|(_, a)| **a != 0.0)
+        .map(|(p, a)| -a * p.max(f64::MIN_POSITIVE).ln())
+        .sum()
+}
+
 fn prediction_error(expected: &[f64], actual: &[f64]) -> f64 {
     let mut error = 0.0;
     for (e, a) in expected.iter().zip(actual) {
@@ -424,6 +528,9 @@ mod tests {
             forget_factor: 10.0,
             nb_alpha: 1.0,
             use_probs,
+            error: ErrorMeasure::Abs,
+            split_z: 0.0,
+            split_rule: SplitRule::Worse,
         }
     }
 

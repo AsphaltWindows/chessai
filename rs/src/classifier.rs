@@ -13,6 +13,12 @@ pub trait Classifier {
     fn refresh(&mut self);
     /// Writes the probability of each class into `out`.
     fn predict(&self, data: &[u8], out: &mut [f64]);
+    /// Predicts `data` as the model would predict positions like `route_by`;
+    /// for models that delegate positions to sub-models (BDT), the sub-model
+    /// is chosen by `route_by`. Others ignore it.
+    fn predict_routed(&self, _route_by: &[u8], data: &[u8], out: &mut [f64]) {
+        self.predict(data, out)
+    }
     fn save(&self, path: &Path) -> io::Result<()>;
 }
 
@@ -40,6 +46,9 @@ impl Classifier for Bdt {
     }
     fn predict(&self, data: &[u8], out: &mut [f64]) {
         Bdt::predict(self, data, out)
+    }
+    fn predict_routed(&self, route_by: &[u8], data: &[u8], out: &mut [f64]) {
+        Bdt::predict_routed(self, route_by, data, out)
     }
     fn save(&self, path: &Path) -> io::Result<()> {
         Bdt::save(self, path)

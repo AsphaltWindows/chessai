@@ -9,7 +9,7 @@ use rand::{RngExt, SeedableRng};
 use shakmaty::uci::UciMove;
 use shakmaty::{CastlingMode, Chess, Position};
 
-use chessai::bdt::{Bdt, BdtParams};
+use chessai::bdt::{self, Bdt, BdtParams, ErrorMeasure, SplitRule};
 use chessai::classifier::{Classifier, Uniform};
 use chessai::cnbp::Cnbp;
 use chessai::encoding::{self, CATEGORIES, Encoded};
@@ -52,6 +52,10 @@ enum Command {
         /// Also write the games, in the self-play round format.
         #[arg(long)]
         out: Option<PathBuf>,
+        /// BDT players score all candidate moves with the leaf the current
+        /// position is routed to.
+        #[arg(long)]
+        route_once: bool,
     },
 
     /// Train a model by self-play: each round plays games in parallel, writes
@@ -142,6 +146,17 @@ enum Command {
         use_probs: bool,
     },
 
+    /// Score a model's predictions on labelled positions (a round directory):
+    /// mean log-loss, mean absolute error, and log-loss of who won among
+    /// decisive positions.
+    EvalLoss {
+        /// `cnbp:PATH` or `bdt:PATH`.
+        model: String,
+        games: PathBuf,
+        #[arg(long)]
+        use_probs: bool,
+    },
+
     /// Replay games dumped by rs/bench/dump_python_games.py and compare legal
     /// moves, encodings and game results with the Python implementation.
     Xcheck { file: PathBuf },
@@ -219,6 +234,16 @@ struct ModelArgs {
     /// BDT: divisor applied to a splitting leaf's counts.
     #[arg(long, default_value_t = 10.0)]
     forget_factor: f64,
+    /// BDT: error measure for the split check and the routers' targets.
+    #[arg(long, value_enum, default_value_t = ErrorMeasure::Abs)]
+    error: ErrorMeasure,
+    /// BDT: split only if a window's mean error rose by more than this many
+    /// standard errors over the previous window's.
+    #[arg(long, default_value_t = 0.0)]
+    split_z: f64,
+    /// BDT: when a leaf splits.
+    #[arg(long, value_enum, default_value_t = SplitRule::Worse)]
+    split_rule: SplitRule,
 }
 
 impl ModelArgs {
@@ -231,6 +256,9 @@ impl ModelArgs {
             forget_factor: self.forget_factor,
             nb_alpha: self.alpha,
             use_probs: self.use_probs,
+            error: self.error,
+            split_z: self.split_z,
+            split_rule: self.split_rule,
         }
     }
 }
@@ -272,7 +300,7 @@ impl LoadedModel {
         let model = self.classifier();
         // A random player chooses moves at random whatever the policy.
         let policy = if matches!(self, LoadedModel::Uniform(_)) { Policy::Rand } else { policy };
-        Player { model, policy, temperature }
+        Player { model, policy, temperature, route_once: false }
     }
 }
 
@@ -285,9 +313,12 @@ fn arena(
     use_probs: bool,
     seed: u64,
     out: Option<PathBuf>,
+    route_once: bool,
 ) -> Result<()> {
     let (model_a, model_b) = (LoadedModel::load(a, use_probs)?, LoadedModel::load(b, use_probs)?);
-    let (player_a, player_b) = (model_a.player(a_policy, temperature), model_b.player(b_policy, temperature));
+    let (mut player_a, mut player_b) = (model_a.player(a_policy, temperature), model_b.player(b_policy, temperature));
+    player_a.route_once = route_once;
+    player_b.route_once = route_once;
     println!("arena: A = {a} ({:?}), B = {b} ({:?}), {games} games, seed {seed}", player_a.policy, player_b.policy);
 
     let start = Instant::now();
@@ -308,8 +339,8 @@ fn arena(
 
 fn main() -> Result<()> {
     match Cli::parse().command {
-        Command::Arena { a, b, games, a_policy, b_policy, temperature, use_probs, seed, out } => {
-            arena(&a, &b, games, (a_policy, b_policy), temperature, use_probs, seed.unwrap_or_else(random_seed), out)
+        Command::Arena { a, b, games, a_policy, b_policy, temperature, use_probs, seed, out, route_once } => {
+            arena(&a, &b, games, (a_policy, b_policy), temperature, use_probs, seed.unwrap_or_else(random_seed), out, route_once)
         }
         Command::SelfPlay { out, model, rounds, games, policy, temperature, seed, threads, vs_previous, no_games, params } => {
             if let Some(threads) = threads {
@@ -332,6 +363,7 @@ fn main() -> Result<()> {
             policy_stats(&model, games, policy, temperature, &temperatures, use_probs, seed)
         }
         Command::Calibration { model, games, use_probs } => calibration(&model, &games, use_probs),
+        Command::EvalLoss { model, games, use_probs } => eval_loss(&model, &games, use_probs),
         Command::Xcheck { file } => xcheck(file),
         Command::BenchMovegen { games, seed } => bench_movegen(games, seed),
         Command::BenchCnbp { games_dir, model_out, predictions_out, alpha, use_probs, reps } => bench_classifier(
@@ -362,6 +394,9 @@ fn main() -> Result<()> {
                 forget_factor,
                 nb_alpha: alpha,
                 use_probs,
+                error: ErrorMeasure::Abs,
+                split_z: 0.0,
+                split_rule: SplitRule::Worse,
             };
             bench_classifier(
                 "bdt",
@@ -458,7 +493,7 @@ fn policy_stats(
                 }
             }
 
-            let chosen = player::select(player, pos.turn(), &candidates, &mut rng);
+            let chosen = player::select(player, pos.turn(), &encoding::encode(pos), &candidates, &mut rng);
             game.play(candidates[chosen].mv);
         }
     }
@@ -545,6 +580,34 @@ fn calibration(model: &str, games: &Path, use_probs: bool) -> Result<()> {
         let actual = if w > 0 && l > 0 { format!("{:+.2}", (w as f64 / l as f64).ln()) } else { "-".into() };
         println!("  {:+4}..{:+4} | {n:>8} | {:+8.2} | {actual} ({w}, {l})", 2 * b, 2 * b + 2, sum / n as f64);
     }
+    Ok(())
+}
+
+fn eval_loss(model: &str, games: &Path, use_probs: bool) -> Result<()> {
+    let model = LoadedModel::load(model, use_probs)?;
+    let model = model.classifier();
+    let data = games::read_labelled(games)?;
+    let (mut log, mut abs, mut decisive, mut winner_log) = (0.0, 0.0, 0usize, 0.0);
+    let mut out = [0.0; 3];
+    for (pos, label) in &data {
+        model.predict(pos, &mut out);
+        log += bdt::log_loss(&out, label);
+        abs += 1.0 - out.iter().zip(label).map(|(p, l)| p * l).sum::<f64>();
+        if label[2] == 0.0 {
+            let winner = if label[0] == 1.0 { 0 } else { 1 };
+            let p = out[winner] / (out[0] + out[1]).max(f64::MIN_POSITIVE);
+            winner_log += -p.max(f64::MIN_POSITIVE).ln();
+            decisive += 1;
+        }
+    }
+    let n = data.len() as f64;
+    println!(
+        "{} positions: log-loss {:.4}, abs error {:.4}; {decisive} decisive: winner log-loss {:.4}",
+        data.len(),
+        log / n,
+        abs / n,
+        winner_log / decisive.max(1) as f64
+    );
     Ok(())
 }
 
@@ -783,7 +846,7 @@ impl SelfPlayRun {
 
         for round in 0..self.rounds {
             let start = Instant::now();
-            let player = |model| Player { model, policy: self.policy, temperature: self.temperature };
+            let player = |model| Player { model, policy: self.policy, temperature: self.temperature, route_once: false };
             let records = if self.vs_previous {
                 let (current, opponent) = (player(&model), player(&previous));
                 selfplay::play_match(current, opponent, self.games, selfplay::derive_seed(self.seed, round, 0))

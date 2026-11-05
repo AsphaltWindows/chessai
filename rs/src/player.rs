@@ -44,6 +44,9 @@ pub struct Player<'a> {
     /// Softmax temperature, in units of expected score (0..1). Only used by
     /// `WldScoreSoftmax`.
     pub temperature: f64,
+    /// Score every candidate with the sub-model the current position is
+    /// routed to (BDT), instead of routing each candidate separately.
+    pub route_once: bool,
 }
 
 /// A legal move and the encoding of the position it leads to.
@@ -67,10 +70,18 @@ pub fn candidates(pos: &Chess) -> Vec<Candidate> {
 pub fn select<R: RngExt>(
     player: Player,
     turn: Color,
+    current: &Encoded,
     candidates: &[Candidate],
     rng: &mut R,
 ) -> usize {
-    let Player { model, policy, temperature } = player;
+    let Player { model, policy, temperature, route_once } = player;
+    let predict = |c: &Candidate, out: &mut [f64]| {
+        if route_once {
+            model.predict_routed(current, &c.position, out)
+        } else {
+            model.predict(&c.position, out)
+        }
+    };
     if policy == Policy::Rand {
         return rng.random_range(0..candidates.len());
     }
@@ -85,7 +96,7 @@ pub fn select<R: RngExt>(
         let values: Vec<f64> = candidates
             .iter()
             .map(|c| {
-                model.predict(&c.position, &mut scores);
+                predict(c, &mut scores);
                 if policy == Policy::LogOddsSoftmax {
                     log_odds(scores[win], scores[loss])
                 } else {
@@ -100,7 +111,7 @@ pub fn select<R: RngExt>(
     let mut best = Vec::new();
 
     for (i, c) in candidates.iter().enumerate() {
-        model.predict(&c.position, &mut scores);
+        predict(c, &mut scores);
         let expected = scores[win] + scores[2] / 2.0;
         // Moves are compared by (tier, value), larger is better.
         let key = match policy {

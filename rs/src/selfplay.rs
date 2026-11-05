@@ -16,7 +16,7 @@ use rayon::prelude::*;
 use shakmaty::Position;
 use shakmaty::san::SanPlus;
 
-use crate::encoding::Encoded;
+use crate::encoding::{self, Encoded};
 use crate::game::{Game, GameResult};
 use crate::games::OUTCOME_FILES;
 use crate::player::{self, Player};
@@ -53,7 +53,7 @@ pub fn play_game(white: Player, black: Player, seed: u64) -> GameRecord {
         let pos = game.position();
         let candidates = player::candidates(pos);
         let player = if pos.turn().is_white() { white } else { black };
-        let chosen = &candidates[player::select(player, pos.turn(), &candidates, &mut rng)];
+        let chosen = &candidates[player::select(player, pos.turn(), &encoding::encode(pos), &candidates, &mut rng)];
 
         if pos.turn().is_white() {
             write!(movetext, "{}. ", pos.fullmoves()).unwrap();
@@ -212,7 +212,7 @@ mod tests {
     #[test]
     fn same_seed_same_games_regardless_of_threads() {
         let model = Cnbp::new(3, &CATEGORIES, 1.0, false);
-        let jitter = Player { model: &model, policy: Policy::WldScoreJitter10, temperature: 0.0 };
+        let jitter = Player { model: &model, policy: Policy::WldScoreJitter10, temperature: 0.0, route_once: false };
         let one_thread = rayon::ThreadPoolBuilder::new().num_threads(1).build().unwrap();
         let a = one_thread.install(|| play_round(jitter, 6, 7, 0));
         let b = play_round(jitter, 6, 7, 0);
@@ -224,7 +224,7 @@ mod tests {
     #[test]
     fn warns_about_repeated_games() {
         let model = Cnbp::new(3, &CATEGORIES, 1.0, false);
-        let player = Player { model: &model, policy: Policy::Rand, temperature: 0.0 };
+        let player = Player { model: &model, policy: Policy::Rand, temperature: 0.0, route_once: false };
         let mut records = vec![play_game(player, player, 1), play_game(player, player, 2)];
         assert!(duplicate_warning(&records).is_none());
         records.push(play_game(player, player, 1));
@@ -234,7 +234,7 @@ mod tests {
     #[test]
     fn positions_match_moves() {
         let model = Cnbp::new(3, &CATEGORIES, 1.0, false);
-        let player = Player { model: &model, policy: Policy::Rand, temperature: 0.0 };
+        let player = Player { model: &model, policy: Policy::Rand, temperature: 0.0, route_once: false };
         let record = play_game(player, player, 1);
         let plies = record.movetext.split_whitespace().filter(|t| !t.ends_with('.')).count() - 1;
         assert_eq!(record.positions.len(), plies);
