@@ -1,5 +1,5 @@
 use std::fmt::Write as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
@@ -9,6 +9,8 @@ use rand::{RngExt, SeedableRng};
 use shakmaty::uci::UciMove;
 use shakmaty::{CastlingMode, Chess, Position};
 
+use chessai::bdt::{Bdt, BdtParams};
+use chessai::classifier::Classifier;
 use chessai::cnbp::Cnbp;
 use chessai::encoding::{self, CATEGORIES, Encoded};
 use chessai::game::Game;
@@ -50,14 +52,71 @@ enum Command {
         #[arg(long, default_value_t = 10)]
         reps: usize,
     },
+
+    /// Train a BDT on a games directory, save it, and predict every training
+    /// position. Same inputs and outputs as rs/bench/bdt_bench.c.
+    BenchBdt {
+        games_dir: PathBuf,
+        model_out: PathBuf,
+        predictions_out: PathBuf,
+        #[arg(long, default_value_t = 2)]
+        branch_factor: usize,
+        #[arg(long, default_value_t = 2000)]
+        split_threshold: u32,
+        #[arg(long, default_value_t = 20)]
+        split_limit: u32,
+        #[arg(long, default_value_t = 10.0)]
+        forget_factor: f64,
+        #[arg(long, default_value_t = 1.0)]
+        alpha: f64,
+        #[arg(long)]
+        use_probs: bool,
+        #[arg(long, default_value_t = 3)]
+        reps: usize,
+    },
 }
 
 fn main() -> Result<()> {
     match Cli::parse().command {
         Command::Xcheck { file } => xcheck(file),
         Command::BenchMovegen { games, seed } => bench_movegen(games, seed),
-        Command::BenchCnbp { games_dir, model_out, predictions_out, alpha, use_probs, reps } => {
-            bench_cnbp(games_dir, model_out, predictions_out, alpha, use_probs, reps)
+        Command::BenchCnbp { games_dir, model_out, predictions_out, alpha, use_probs, reps } => bench_classifier(
+            "cnbp",
+            || Cnbp::new(3, &CATEGORIES, alpha, use_probs),
+            &games_dir,
+            &model_out,
+            &predictions_out,
+            reps,
+        ),
+        Command::BenchBdt {
+            games_dir,
+            model_out,
+            predictions_out,
+            branch_factor,
+            split_threshold,
+            split_limit,
+            forget_factor,
+            alpha,
+            use_probs,
+            reps,
+        } => {
+            let params = BdtParams {
+                class_num: 3,
+                branch_factor,
+                split_threshold,
+                split_limit,
+                forget_factor,
+                nb_alpha: alpha,
+                use_probs,
+            };
+            bench_classifier(
+                "bdt",
+                || Bdt::new(&CATEGORIES, params.clone()),
+                &games_dir,
+                &model_out,
+                &predictions_out,
+                reps,
+            )
         }
     }
 }
@@ -218,27 +277,27 @@ fn bench_movegen(game_num: usize, seed: u64) -> Result<()> {
     Ok(())
 }
 
-fn bench_cnbp(
-    games_dir: PathBuf,
-    model_out: PathBuf,
-    predictions_out: PathBuf,
-    alpha: f64,
-    use_probs: bool,
+fn bench_classifier<C: Classifier>(
+    name: &str,
+    new_model: impl Fn() -> C,
+    games_dir: &Path,
+    model_out: &Path,
+    predictions_out: &Path,
     reps: usize,
 ) -> Result<()> {
-    let data = games::read_labelled(&games_dir).with_context(|| format!("reading {games_dir:?}"))?;
-    let mut model = Cnbp::new(3, &CATEGORIES, alpha, use_probs);
+    let data = games::read_labelled(games_dir).with_context(|| format!("reading {games_dir:?}"))?;
 
+    let mut model = new_model();
     let start = Instant::now();
     for _ in 0..reps {
-        model = Cnbp::new(3, &CATEGORIES, alpha, use_probs);
+        model = new_model();
         for (pos, label) in &data {
             model.train(pos, label);
         }
         model.refresh();
     }
     let train_secs = start.elapsed().as_secs_f64() / reps as f64;
-    model.save(&model_out)?;
+    model.save(model_out)?;
 
     let mut out = vec![[0.0; 3]; data.len()];
     let start = Instant::now();
@@ -253,11 +312,11 @@ fn bench_cnbp(
     for o in &out {
         writeln!(text, "{:e} {:e} {:e}", o[0], o[1], o[2])?;
     }
-    std::fs::write(&predictions_out, text)?;
+    std::fs::write(predictions_out, text)?;
 
     let n = data.len() as f64;
     println!(
-        "rust cnbp: {} positions, train {:.1}M pos/s, predict {:.2}M pos/s",
+        "rust {name}: {} positions, train {:.2}M pos/s, predict {:.2}M pos/s",
         data.len(),
         n / train_secs / 1e6,
         n / predict_secs / 1e6

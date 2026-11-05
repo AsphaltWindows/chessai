@@ -12,6 +12,8 @@ use std::fmt::Write as _;
 use std::io;
 use std::path::Path;
 
+use crate::textfmt::Tokens;
+
 #[derive(Clone, Debug)]
 pub struct Cnbp {
     categories: Vec<u8>,
@@ -122,35 +124,41 @@ impl Cnbp {
     /// # Panics
     /// With `use_probs`, if the model was trained since the last `refresh()`.
     pub fn predict(&self, data: &[u8], out: &mut [f64]) {
-        let mut total = 0.0;
-
-        if self.use_probs {
-            assert!(self.fresh, "cnbp trained without refresh() before predict()");
-
-            for (cl, block) in self.class_cat_probs.chunks_exact(self.total_cat_vals).enumerate() {
-                let mut p = self.class_probs[cl];
-                for (&off, &val) in self.cat_offsets.iter().zip(data) {
-                    p *= block[off + val as usize];
-                }
-                out[cl] = p;
-                total += p;
-            }
-        } else {
-            let class_total: f64 = self.class_totals.iter().sum();
-            let class_num = self.class_num as f64;
-
-            for (cl, block) in self.class_cat_totals.chunks_exact(self.total_cat_vals).enumerate() {
-                let class_count = self.class_totals[cl];
-                let mut p = (class_count + self.alpha) / (class_total + class_num * self.alpha);
-                for ((&off, &cat), &val) in self.cat_offsets.iter().zip(&self.categories).zip(data) {
-                    p *= (block[off + val as usize] + self.alpha)
-                        / (class_count + cat as f64 * self.alpha);
-                }
-                out[cl] = p;
-                total += p;
-            }
+        if !self.use_probs {
+            return self.predict_counts(data, out);
         }
+        assert!(self.fresh, "cnbp trained without refresh() before predict()");
 
+        let mut total = 0.0;
+        for (cl, block) in self.class_cat_probs.chunks_exact(self.total_cat_vals).enumerate() {
+            let mut p = self.class_probs[cl];
+            for (&off, &val) in self.cat_offsets.iter().zip(data) {
+                p *= block[off + val as usize];
+            }
+            out[cl] = p;
+            total += p;
+        }
+        for p in &mut out[..self.class_num] {
+            *p /= total;
+        }
+    }
+
+    /// Predicts from the raw counts, ignoring `use_probs` and the cached
+    /// probabilities. Cheaper while a model is still being trained.
+    pub fn predict_counts(&self, data: &[u8], out: &mut [f64]) {
+        let class_total: f64 = self.class_totals.iter().sum();
+        let class_num = self.class_num as f64;
+
+        let mut total = 0.0;
+        for (cl, block) in self.class_cat_totals.chunks_exact(self.total_cat_vals).enumerate() {
+            let class_count = self.class_totals[cl];
+            let mut p = (class_count + self.alpha) / (class_total + class_num * self.alpha);
+            for ((&off, &cat), &val) in self.cat_offsets.iter().zip(&self.categories).zip(data) {
+                p *= (block[off + val as usize] + self.alpha) / (class_count + cat as f64 * self.alpha);
+            }
+            out[cl] = p;
+            total += p;
+        }
         for p in &mut out[..self.class_num] {
             *p /= total;
         }
@@ -165,35 +173,41 @@ impl Cnbp {
         for cat in &self.categories {
             writeln!(s, "{cat}").unwrap();
         }
+        self.write_counts(&mut s);
+        s
+    }
+
+    /// Writes only the counts (`cnbp_to_file_no_params`), as BDT nodes do.
+    pub(crate) fn write_counts(&self, s: &mut String) {
         for t in self.class_totals.iter().chain(&self.class_cat_totals) {
             writeln!(s, "{t:.6}").unwrap();
         }
-        s
     }
 
     /// Parses the C text format (`cnbp_from_file`).
     pub fn from_text(text: &str, use_probs: bool) -> io::Result<Self> {
-        let mut tokens = text.split_whitespace();
-        let mut next = || {
-            tokens
-                .next()
-                .ok_or_else(|| invalid("cnbp model file ended early"))
-        };
-
-        let class_num: usize = next()?.parse().map_err(invalid)?;
-        let alpha: f64 = next()?.parse().map_err(invalid)?;
-        let cat_num: usize = next()?.parse().map_err(invalid)?;
+        let mut tokens = Tokens::new(text);
+        let class_num: usize = tokens.next()?;
+        let alpha: f64 = tokens.next()?;
+        let cat_num: usize = tokens.next()?;
         let categories = (0..cat_num)
-            .map(|_| next()?.parse::<u8>().map_err(invalid))
+            .map(|_| tokens.next::<u8>())
             .collect::<io::Result<Vec<_>>>()?;
 
         let mut cnbp = Cnbp::new(class_num, &categories, alpha, use_probs);
-        for t in cnbp.class_totals.iter_mut().chain(cnbp.class_cat_totals.iter_mut()) {
-            *t = next()?.parse().map_err(invalid)?;
-        }
-        cnbp.fresh = false;
-        cnbp.refresh();
+        cnbp.read_counts(&mut tokens)?;
         Ok(cnbp)
+    }
+
+    /// Reads counts written by `write_counts` into a model of the right shape
+    /// (`cnbp_from_file_with_params`).
+    pub(crate) fn read_counts(&mut self, tokens: &mut Tokens) -> io::Result<()> {
+        for t in self.class_totals.iter_mut().chain(self.class_cat_totals.iter_mut()) {
+            *t = tokens.next()?;
+        }
+        self.fresh = false;
+        self.refresh();
+        Ok(())
     }
 
     pub fn save(&self, path: &Path) -> io::Result<()> {
@@ -203,10 +217,6 @@ impl Cnbp {
     pub fn load(path: &Path, use_probs: bool) -> io::Result<Self> {
         Self::from_text(&std::fs::read_to_string(path)?, use_probs)
     }
-}
-
-fn invalid<E: ToString>(e: E) -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidData, e.to_string())
 }
 
 #[cfg(test)]
