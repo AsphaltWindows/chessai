@@ -158,6 +158,8 @@ impl Bdt {
         self.train_node(0, data, label, error, &mut out);
     }
 
+    /// `error` is the error of the node's prediction for this example; only
+    /// leaves use it, routers record the error of their own choice.
     /// `scratch` holds `class_num` values for the children's predictions.
     fn train_node(&mut self, idx: usize, data: &[u8], label: &[f64], error: f64, scratch: &mut [f64]) {
         match &self.nodes[idx].kind {
@@ -203,6 +205,12 @@ impl Bdt {
 
                 let mut target = vec![0.0; self.params.branch_factor];
                 target[best] = 1.0;
+                // Like a leaf, the router records the error of its own
+                // prediction (which child will do best) before training on it.
+                let mut router = [0.0; 256];
+                let router = &mut router[..self.params.branch_factor];
+                self.node_output(idx, data, router);
+                let router_error = prediction_error(router, &target);
                 self.nodes[idx].classifier.train(data, &target);
                 self.nodes[idx].cache_step = 0;
 
@@ -211,13 +219,11 @@ impl Bdt {
                 // updated router picks from the position alone, as in
                 // prediction, so each child learns about the positions it will
                 // be asked about.
-                let mut router = [0.0; 256];
-                let router = &mut router[..self.params.branch_factor];
                 self.node_output(idx, data, router);
                 let routed = argmax(router);
 
                 self.train_node(children[routed], data, label, child_errors[routed], scratch);
-                self.nodes[idx].record(error);
+                self.nodes[idx].record(router_error);
             }
         }
     }

@@ -456,6 +456,8 @@ static void node_train_single(
     double routed_error;
     uint8_t routed_index;
     double child_errors[256];
+    double router_before[256];
+    double router_error;
     double * expected;
 
     if (node->type == LEAF) {
@@ -582,6 +584,17 @@ static void node_train_single(
 
         bdt->branch_scratch_space[min_error_index] = 1.0;
 
+        /* Like a leaf, the router records the error of its own prediction
+         * (which child will do best) before training on it. */
+        predict_node(bdt, node, data, router_before, cnbp_predict_class_counts, 1);
+        router_error = 0.0;
+
+        for (uint8_t b = 0; b < bdt->branch_factor; ++b) {
+            router_error += fabs(router_before[b] - bdt->branch_scratch_space[b]);
+        }
+
+        router_error /= 2;
+
         cnbp_train_single(
                 node->classifier,
                 data,
@@ -614,8 +627,8 @@ static void node_train_single(
 
         node->num_trained_last++;
         node->num_trained_total++;
-        node->error_last += error;
-        node->error_total += error;
+        node->error_last += router_error;
+        node->error_total += router_error;
         return;
     }
 
