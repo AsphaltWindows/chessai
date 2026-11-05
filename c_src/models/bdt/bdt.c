@@ -450,7 +450,7 @@ static void node_train_single(
 
         if (node->num_trained_last >= bdt->split_threshold && bdt->split_number < bdt->split_limit) {
 
-            if ((node->error_last / node->num_trained_last) >= (node->error_total / node->num_trained_total)) {
+            if ((node->error_last / node->num_trained_last) > (node->error_total / node->num_trained_total)) {
 
                 printf("Splitting Node with node_id: %u.\n", node->node_id);
 

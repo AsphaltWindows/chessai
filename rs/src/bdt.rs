@@ -101,6 +101,15 @@ impl Bdt {
         }
     }
 
+    /// Divides the counts of every node's classifier by `factor`. The split
+    /// statistics are left alone.
+    pub fn forget(&mut self, factor: f64) {
+        for node in &mut self.nodes {
+            node.classifier.forget(factor);
+            node.cache_step = 0;
+        }
+    }
+
     /// Recomputes cached probabilities after training (see `Cnbp::refresh`).
     pub fn refresh(&mut self) {
         for node in &mut self.nodes {
@@ -157,7 +166,7 @@ impl Bdt {
                 {
                     let recent = node.error_last / node.num_trained_last as f64;
                     let lifetime = node.error_total / node.num_trained_total as f64;
-                    if recent >= lifetime {
+                    if recent > lifetime {
                         self.split(idx);
                     }
                     let node = &mut self.nodes[idx];
