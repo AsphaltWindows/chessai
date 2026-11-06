@@ -1,140 +1,57 @@
-//! Bayesian Delegation Tree, a port of `c_src/models/bdt/bdt.c`.
+//! Delegation Tree, a port of `c_src/models/bdt/bdt.c` (the Bayesian
+//! Delegation Tree) generalised to other classifiers.
 //!
-//! A tree of CNBP classifiers. Leaves predict the classes. Branches predict
-//! which of their children will classify an input best and delegate to it.
+//! A tree of classifiers, CNBPs or logistic regressions (`NodeModel`).
+//! Leaves predict the classes. Branches predict which of their children will
+//! classify an input best and delegate to it.
 //!
 //! Training a branch asks every child for a prediction, trains the branch's
 //! own classifier with the index of the child with the smallest error as the
-//! label, and then trains only that child. A leaf splits into a branch with
-//! `branch_factor` children once its error over the last `split_threshold`
-//! examples is no better than its lifetime average. The children start as
-//! copies of the leaf with their counts divided by `forget_factor`, so they
-//! predict the same but adapt faster.
+//! label, and then trains the child the updated classifier picks (with
+//! `RouteTarget::Cluster` the label is the branch's own pick, so only the
+//! picked child is asked). A leaf
+//! splits into a branch with `branch_factor` children when its split rule
+//! says so, checked every `split_threshold` examples (by default: when its
+//! error over the last window is above the previous window's). The children
+//! start as copies of the leaf that forget by `forget_factor` (a CNBP's
+//! counts are divided by it), so they predict the same but adapt faster.
 //!
-//! Training order, tie-breaking and file format follow the C version
-//! exactly, so both produce identical trees and predictions.
+//! With CNBP nodes, training order, tie-breaking and file format follow the
+//! C version exactly, so both produce identical trees and predictions. The
+//! nodes, their statistics and the file format are shared with the BDD
+//! (`delegation`).
 
-use std::fmt::Write as _;
 use std::io;
 use std::path::Path;
 
-use crate::cnbp::Cnbp;
-use crate::textfmt::{Tokens, invalid};
-
-#[derive(Clone, Debug)]
-enum Kind {
-    Leaf,
-    Branch { children: Vec<usize> },
-}
-
-#[derive(Clone, Debug)]
-struct Node {
-    kind: Kind,
-    /// Predicts classes for a leaf, or the best child for a branch.
-    classifier: Cnbp,
-    num_trained_total: u32,
-    num_trained_last: u32,
-    error_total: f64,
-    error_last: f64,
-    /// Mean error of the previous full window, or -1 before the first.
-    error_prev: f64,
-    /// Sum of squared errors in the current window, and the squared standard
-    /// error of the previous window's mean; for `split_z`. Not saved.
-    error_sq_last: f64,
-    error_prev_se2: f64,
-    /// The tree's error sum and count when this node's window started.
-    window_tree_sum: f64,
-    window_tree_count: u64,
-    /// Output of `classifier` for the position of the current training step;
-    /// valid while `cache_step` equals the tree's `step`.
-    cache: Vec<f64>,
-    cache_step: u64,
-}
-
-/// How the error of a prediction is measured, for the split check and the
-/// routers' targets.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
-pub enum ErrorMeasure {
-    /// Half the absolute difference: 1 - P(actual class) for a one-hot label.
-    Abs,
-    /// Log-loss: -ln P(actual class).
-    Log,
-}
-
-/// When a leaf splits, checked every `split_threshold` examples.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
-pub enum SplitRule {
-    /// The window's mean error rose above the previous window's by more than
-    /// `split_z` standard errors.
-    Worse,
-    /// The leaf stalled - its error did not fall by more than `split_z`
-    /// standard errors since the previous window - while its mean error is
-    /// above the whole tree's over the same window.
-    StallHigh,
-}
-
-#[derive(Clone, Debug)]
-pub struct BdtParams {
-    pub class_num: usize,
-    pub branch_factor: usize,
-    pub split_threshold: u32,
-    pub split_limit: u32,
-    pub forget_factor: f64,
-    pub nb_alpha: f64,
-    pub use_probs: bool,
-    /// Not saved in model files; `Abs` when loading.
-    pub error: ErrorMeasure,
-    /// A leaf splits when its window's mean error exceeds the previous
-    /// window's by more than this many standard errors of the difference.
-    /// Not saved in model files; 0 when loading.
-    pub split_z: f64,
-    /// Not saved in model files; `Worse` when loading.
-    pub split_rule: SplitRule,
-}
+use crate::delegation::{DelegationParams, Graph, Kind, NodeModel, RouteTarget};
 
 #[derive(Clone, Debug)]
 pub struct Bdt {
-    categories: Vec<u8>,
-    params: BdtParams,
-    split_number: u32,
-    nodes: Vec<Node>,
-    /// Counts training steps, starting at 1; a `cache_step` of 0 marks no cache.
-    step: u64,
-    /// Sum and count of the whole tree's prediction errors while training,
-    /// for `SplitRule::StallHigh`. Not saved.
-    tree_error_sum: f64,
-    tree_error_count: u64,
+    graph: Graph,
 }
 
 impl Bdt {
-    pub fn new(categories: &[u8], params: BdtParams) -> Self {
-        assert!(params.split_threshold > 0, "split_threshold must be at least 1");
-        assert!(params.branch_factor >= 2, "branch_factor must be at least 2");
-        let root = Node::new(
-            Kind::Leaf,
-            Cnbp::new(params.class_num, categories, params.nb_alpha, params.use_probs),
-        );
-        Bdt {
-            categories: categories.to_vec(),
-            params,
-            split_number: 0,
-            nodes: vec![root],
-            step: 0,
-            tree_error_sum: 0.0,
-            tree_error_count: 0,
-        }
+    pub fn new(categories: &[u8], params: DelegationParams) -> Self {
+        Bdt { graph: Graph::new(categories, params) }
     }
 
-    pub fn params(&self) -> &BdtParams {
-        &self.params
+    /// A single leaf that starts as `root`, a classifier of the leaves' kind,
+    /// instead of an untrained one.
+    pub fn starting_from(root: NodeModel, categories: &[u8], params: DelegationParams) -> Self {
+        Bdt { graph: Graph::starting_from(root, categories, params) }
+    }
+
+    pub fn params(&self) -> &DelegationParams {
+        &self.graph.params
     }
 
     pub fn node_count(&self) -> usize {
-        self.nodes.len()
+        self.graph.nodes.len()
     }
 
     pub fn split_count(&self) -> u32 {
-        self.split_number
+        self.graph.split_number
     }
 
     /// Writes the probability of each class into `out`.
@@ -142,293 +59,93 @@ impl Bdt {
     /// # Panics
     /// With `use_probs`, if the tree was trained since the last `refresh()`.
     pub fn predict(&self, data: &[u8], out: &mut [f64]) {
-        self.predict_routed(data, data, out)
+        self.graph.predict(data, out)
     }
 
-    /// Predicts `data` with the leaf that `route_by` is routed to, so that
-    /// several positions can be compared by the same leaf.
-    pub fn predict_routed(&self, route_by: &[u8], data: &[u8], out: &mut [f64]) {
-        let mut idx = 0;
-        loop {
-            let node = &self.nodes[idx];
-            match &node.kind {
-                Kind::Leaf => return node.classifier.predict(data, out),
-                Kind::Branch { children } => idx = children[best_child(&node.classifier, route_by)],
-            }
-        }
+    /// See `Cnbp::predict_log`.
+    pub fn predict_log(&self, data: &[u8], out: &mut [f64]) {
+        self.graph.predict_log(data, out)
     }
 
-    /// Divides the counts of every node's classifier by `factor`. The split
-    /// statistics are left alone.
-    pub fn forget(&mut self, factor: f64) {
-        for node in &mut self.nodes {
-            node.classifier.forget(factor);
-            node.cache_step = 0;
-        }
+    /// Index of the leaf that predicts the position.
+    pub fn leaf(&self, data: &[u8]) -> usize {
+        self.graph.leaf(data)
+    }
+
+    /// The leaves' node indices and classifiers.
+    pub fn leaves(&self) -> impl Iterator<Item = (usize, &NodeModel)> {
+        self.graph.leaves()
+    }
+
+    /// See `Graph::leaf_weights`.
+    pub fn leaf_weights(&self, data: &[u8], tau: f64, min_weight: f64, out: &mut Vec<(usize, f64)>) {
+        self.graph.leaf_weights(data, tau, min_weight, out)
+    }
+
+    /// Writes node `idx`'s own prediction (see `Cnbp::predict_log`).
+    pub fn node_predict_log(&self, idx: usize, data: &[u8], out: &mut [f64]) {
+        self.graph.node_predict_log(idx, data, out)
     }
 
     /// Recomputes cached probabilities after training (see `Cnbp::refresh`).
     pub fn refresh(&mut self) {
-        for node in &mut self.nodes {
-            node.classifier.refresh();
-        }
-    }
-
-    /// Prediction used during training: always from the raw counts, so trees
-    /// with `use_probs` do not recalculate probabilities after every step.
-    fn predict_training(&mut self, mut idx: usize, data: &[u8], out: &mut [f64]) {
-        let mut scores = [0.0; 256];
-        loop {
-            match &self.nodes[idx].kind {
-                Kind::Leaf => return self.node_output(idx, data, out),
-                Kind::Branch { .. } => {
-                    let scores = &mut scores[..self.params.branch_factor];
-                    self.node_output(idx, data, scores);
-                    let Kind::Branch { children } = &self.nodes[idx].kind else { unreachable!() };
-                    idx = children[argmax(scores)];
-                }
-            }
-        }
-    }
-
-    /// Runs a node's own classifier from counts. The output is cached for the
-    /// rest of the step: the position does not change within a step, and a
-    /// classifier is only trained after the predictions that use it.
-    fn node_output(&mut self, idx: usize, data: &[u8], out: &mut [f64]) {
-        let step = self.step;
-        let node = &mut self.nodes[idx];
-        if node.cache_step != step {
-            node.classifier.predict_counts(data, &mut node.cache);
-            node.cache_step = step;
-        }
-        out.copy_from_slice(&node.cache);
+        self.graph.refresh()
     }
 
     /// Adds one data point. `label` must sum to 1.
     pub fn train(&mut self, data: &[u8], label: &[f64]) {
-        self.step += 1;
-        let mut out = vec![0.0; self.params.class_num];
-        self.predict_training(0, data, &mut out);
-        let error = self.error(&out, label);
-        self.tree_error_sum += error;
-        self.tree_error_count += 1;
-        self.train_node(0, data, label, error, &mut out);
+        let mut scratch = vec![0.0; self.graph.params.class_num];
+        let error = self.graph.begin_step(data, label, &mut scratch);
+        self.train_node(0, data, label, error, &mut scratch);
     }
 
-    /// `error` is the error of the node's prediction for this example; only
-    /// leaves use it, routers record the error of their own choice.
-    /// `scratch` holds `class_num` values for the children's predictions.
-    fn train_node(&mut self, idx: usize, data: &[u8], label: &[f64], error: f64, scratch: &mut [f64]) {
-        match &self.nodes[idx].kind {
-            Kind::Leaf => {
-                let node = &mut self.nodes[idx];
-                if node.num_trained_last >= self.params.split_threshold
-                    && self.split_number < self.params.split_limit
-                {
-                    // Split when the leaf stopped improving: this window's mean
-                    // error is above the previous window's. Comparing with the
-                    // lifetime mean instead is skewed by the high error of the
-                    // first data.
-                    let n = node.num_trained_last as f64;
-                    let recent = node.error_last / n;
-                    let se2 = (node.error_sq_last / n - recent * recent).max(0.0) / n;
-                    let (previous, previous_se2) = (node.error_prev, node.error_prev_se2);
-                    node.error_prev = recent;
-                    node.error_prev_se2 = se2;
-                    let margin = self.params.split_z * (se2 + previous_se2).sqrt();
-                    let split = previous >= 0.0
-                        && match self.params.split_rule {
-                            SplitRule::Worse => recent > previous + margin,
-                            SplitRule::StallHigh => {
-                                let tree_mean = (self.tree_error_sum - node.window_tree_sum)
-                                    / (self.tree_error_count - node.window_tree_count).max(1) as f64;
-                                previous - recent < margin && recent > tree_mean
-                            }
-                        };
-                    if split {
-                        self.split(idx);
-                    }
-                    let (sum, count) = (self.tree_error_sum, self.tree_error_count);
-                    let node = &mut self.nodes[idx];
-                    node.num_trained_last = 0;
-                    node.error_last = 0.0;
-                    node.error_sq_last = 0.0;
-                    node.window_tree_sum = sum;
-                    node.window_tree_count = count;
-                    return self.train_node(idx, data, label, error, scratch);
-                }
-
-                let node = &mut self.nodes[idx];
-                node.classifier.train(data, label);
-                node.cache_step = 0;
-                node.record(error);
+    /// `error` is the error of the node's prediction for this example, or
+    /// None if the example is not scored; only leaves use it, branches record
+    /// the error of their own choice. `scratch` holds `class_num` values.
+    fn train_node(&mut self, idx: usize, data: &[u8], label: &[f64], error: Option<f64>, scratch: &mut [f64]) {
+        let g = &mut self.graph;
+        let Kind::Branch { children } = &g.nodes[idx].kind else {
+            if g.check_leaf_split(idx).is_some() {
+                // The leaf may have become a branch; train it as it is now.
+                return self.train_node(idx, data, label, error, scratch);
             }
-            Kind::Branch { children } => {
-                let children = children.clone();
-                let mut child_errors = vec![0.0; children.len()];
-                let (mut best, mut min_error) = (0, f64::INFINITY);
-                for (i, &child) in children.iter().enumerate() {
-                    self.predict_training(child, data, scratch);
-                    child_errors[i] = self.error(scratch, label);
-                    // Strict comparison: ties go to the lowest index, as in C.
-                    if i == 0 || child_errors[i] < min_error {
-                        min_error = child_errors[i];
-                        best = i;
-                    }
-                }
-
-                let mut target = vec![0.0; self.params.branch_factor];
-                target[best] = 1.0;
-                // Like a leaf, the router records the error of its own
-                // prediction (which child will do best) before training on it.
-                let mut router = [0.0; 256];
-                let router = &mut router[..self.params.branch_factor];
-                self.node_output(idx, data, router);
-                let router_error = self.error(router, &target);
-                self.nodes[idx].classifier.train(data, &target);
-                self.nodes[idx].cache_step = 0;
-
-                // The router is trained on which child predicted the actual
-                // outcome best, then the position goes to the child the
-                // updated router picks from the position alone, as in
-                // prediction, so each child learns about the positions it will
-                // be asked about.
-                self.node_output(idx, data, router);
-                let routed = argmax(router);
-
-                self.train_node(children[routed], data, label, child_errors[routed], scratch);
-                self.nodes[idx].record(router_error);
-            }
+            return g.train_leaf(idx, data, label, error);
+        };
+        let children = children.clone();
+        if g.trial_step(idx, data, label, scratch) {
+            // The split was undone; train the node as it is now.
+            return self.train_node(idx, data, label, error, scratch);
         }
-    }
-
-    fn split(&mut self, idx: usize) {
-        let first = self.nodes.len();
-        for _ in 0..self.params.branch_factor {
-            let mut classifier = self.nodes[idx].classifier.clone();
-            classifier.forget(self.params.forget_factor);
-            let mut child = Node::new(Kind::Leaf, classifier);
-            child.window_tree_sum = self.tree_error_sum;
-            child.window_tree_count = self.tree_error_count;
-            self.nodes.push(child);
+        if error.is_none() {
+            let routed = g.route(idx, data);
+            return self.train_node(children[routed], data, label, None, scratch);
         }
 
-        let node = &mut self.nodes[idx];
-        node.kind = Kind::Branch { children: (first..first + self.params.branch_factor).collect() };
-        node.classifier = Cnbp::new(
-            self.params.branch_factor,
-            &self.categories,
-            self.params.nb_alpha,
-            self.params.use_probs,
-        );
-        node.cache = vec![0.0; self.params.branch_factor];
-        node.cache_step = 0;
-        node.num_trained_total = 0;
-        node.error_total = 0.0;
-        self.split_number += 1;
+        // Error routing compares every child's error; cluster routing needs
+        // only the error of the child it picks.
+        let (routed, child_error, router_error) = match g.params.route {
+            RouteTarget::Error => {
+                let child_errors = g.prediction_errors(&children, data, label, scratch);
+                let (routed, router_error) = g.train_router(idx, data, &child_errors);
+                (routed, child_errors[routed], router_error)
+            }
+            RouteTarget::Cluster => {
+                let (routed, router_error) = g.train_cluster_router(idx, &children, data, label, scratch);
+                (routed, g.prediction_errors(&children[routed..=routed], data, label, scratch)[0], router_error)
+            }
+        };
+        self.train_node(children[routed], data, label, Some(child_error), scratch);
+        self.graph.record_router(idx, router_error);
     }
 
     /// Serializes in the C text format (`bdt_to_file`).
     pub fn to_text(&self) -> String {
-        let p = &self.params;
-        let mut s = String::new();
-        writeln!(s, "{}", self.categories.len()).unwrap();
-        for cat in &self.categories {
-            writeln!(s, "{cat}").unwrap();
-        }
-        writeln!(s, "{}", p.class_num).unwrap();
-        writeln!(s, "{}", p.branch_factor).unwrap();
-        writeln!(s, "{}", p.split_threshold).unwrap();
-        writeln!(s, "{}", p.split_limit).unwrap();
-        writeln!(s, "{}", self.split_number).unwrap();
-        writeln!(s, "{}", self.nodes.len()).unwrap();
-        writeln!(s, "{:.6}", p.forget_factor).unwrap();
-        writeln!(s, "{:.6}", p.nb_alpha).unwrap();
-
-        for (id, node) in self.nodes.iter().enumerate() {
-            let kind = match node.kind {
-                Kind::Leaf => 0,
-                Kind::Branch { .. } => 1,
-            };
-            writeln!(s, "{kind}").unwrap();
-            writeln!(s, "{id}").unwrap();
-            writeln!(s, "{}", node.num_trained_total).unwrap();
-            writeln!(s, "{:.6}", node.error_total).unwrap();
-            writeln!(s, "{}", node.num_trained_last).unwrap();
-            writeln!(s, "{:.6}", node.error_last).unwrap();
-            writeln!(s, "{:.6}", node.error_prev).unwrap();
-            if let Kind::Branch { children } = &node.kind {
-                for child in children {
-                    writeln!(s, "{child}").unwrap();
-                }
-            }
-            node.classifier.write_counts(&mut s);
-        }
-        s
+        self.graph.to_text()
     }
 
-    /// Parses the C text format (`bdt_from_file`). The node ids stored in
-    /// the file must match their positions, as the C code always writes them.
+    /// Parses the C text format (`bdt_from_file`).
     pub fn from_text(text: &str, use_probs: bool) -> io::Result<Self> {
-        let mut t = Tokens::new(text);
-        let cat_num: usize = t.next()?;
-        let categories = (0..cat_num).map(|_| t.next::<u8>()).collect::<io::Result<Vec<_>>>()?;
-        let class_num: usize = t.next()?;
-        let branch_factor: usize = t.next()?;
-        let split_threshold: u32 = t.next()?;
-        let split_limit: u32 = t.next()?;
-        let split_number: u32 = t.next()?;
-        let nodes_num: usize = t.next()?;
-        let forget_factor: f64 = t.next()?;
-        let nb_alpha: f64 = t.next()?;
-        let params = BdtParams {
-            class_num,
-            branch_factor,
-            split_threshold,
-            split_limit,
-            forget_factor,
-            nb_alpha,
-            use_probs,
-            error: ErrorMeasure::Abs,
-            split_z: 0.0,
-            split_rule: SplitRule::Worse,
-        };
-
-        let mut nodes = Vec::with_capacity(nodes_num);
-        for n in 0..nodes_num {
-            let kind: u32 = t.next()?;
-            let id: usize = t.next()?;
-            if id != n {
-                return Err(invalid(format!("node {n} has id {id}")));
-            }
-            let num_trained_total = t.next()?;
-            let error_total = t.next()?;
-            let num_trained_last = t.next()?;
-            let error_last = t.next()?;
-            let error_prev = t.next()?;
-            let (kind, classes) = match kind {
-                0 => (Kind::Leaf, class_num),
-                1 => {
-                    let children = (0..branch_factor).map(|_| t.next()).collect::<io::Result<Vec<usize>>>()?;
-                    if children.iter().any(|&c| c >= nodes_num) {
-                        return Err(invalid(format!("node {n} has a child out of range")));
-                    }
-                    (Kind::Branch { children }, branch_factor)
-                }
-                _ => return Err(invalid(format!("node {n} has unknown type {kind}"))),
-            };
-            let mut classifier = Cnbp::new(classes, &categories, nb_alpha, use_probs);
-            classifier.read_counts(&mut t)?;
-            nodes.push(Node {
-                num_trained_total,
-                num_trained_last,
-                error_total,
-                error_last,
-                error_prev,
-                ..Node::new(kind, classifier) });
-        }
-
-        Ok(Bdt { categories, params, split_number, nodes, step: 0, tree_error_sum: 0.0, tree_error_count: 0 })
+        Ok(Bdt { graph: Graph::from_text(text, use_probs)? })
     }
 
     pub fn save(&self, path: &Path) -> io::Result<()> {
@@ -440,87 +157,13 @@ impl Bdt {
     }
 }
 
-impl Node {
-    fn new(kind: Kind, classifier: Cnbp) -> Self {
-        Node {
-            kind,
-            cache: vec![0.0; classifier.class_num()],
-            cache_step: 0,
-            classifier,
-            num_trained_total: 0,
-            num_trained_last: 0,
-            error_total: 0.0,
-            error_last: 0.0,
-            error_prev: -1.0,
-            error_sq_last: 0.0,
-            error_prev_se2: 0.0,
-            window_tree_sum: 0.0,
-            window_tree_count: 0,
-        }
-    }
-
-    fn record(&mut self, error: f64) {
-        self.num_trained_last += 1;
-        self.num_trained_total += 1;
-        self.error_last += error;
-        self.error_total += error;
-        self.error_sq_last += error * error;
-    }
-}
-
-/// Index of the child a branch classifier rates highest.
-fn best_child(classifier: &Cnbp, data: &[u8]) -> usize {
-    let mut scores = [0.0; 256];
-    let scores = &mut scores[..classifier.class_num()];
-    classifier.predict(data, scores);
-    argmax(scores)
-}
-
-/// Index of the largest value, the first one on ties (as in C).
-fn argmax(values: &[f64]) -> usize {
-    let mut best = 0;
-    for (i, &v) in values.iter().enumerate() {
-        if v > values[best] {
-            best = i;
-        }
-    }
-    best
-}
-
-/// Total variation distance between a prediction and a label.
-impl Bdt {
-    fn error(&self, predicted: &[f64], actual: &[f64]) -> f64 {
-        match self.params.error {
-            ErrorMeasure::Abs => prediction_error(predicted, actual),
-            ErrorMeasure::Log => log_loss(predicted, actual),
-        }
-    }
-}
-
-/// -sum(actual * ln predicted); -ln P(actual class) for a one-hot label.
-pub fn log_loss(predicted: &[f64], actual: &[f64]) -> f64 {
-    predicted
-        .iter()
-        .zip(actual)
-        .filter(|(_, a)| **a != 0.0)
-        .map(|(p, a)| -a * p.max(f64::MIN_POSITIVE).ln())
-        .sum()
-}
-
-fn prediction_error(expected: &[f64], actual: &[f64]) -> f64 {
-    let mut error = 0.0;
-    for (e, a) in expected.iter().zip(actual) {
-        error += (e - a).abs();
-    }
-    error / 2.0
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::delegation::{ErrorMeasure, ErrorTarget, NodeKind, RouteTarget, SplitRule, log_loss};
 
-    fn params(use_probs: bool) -> BdtParams {
-        BdtParams {
+    fn params(use_probs: bool) -> DelegationParams {
+        DelegationParams {
             class_num: 2,
             branch_factor: 2,
             split_threshold: 4,
@@ -528,15 +171,28 @@ mod tests {
             forget_factor: 10.0,
             nb_alpha: 1.0,
             use_probs,
+            leaf: NodeKind::Cnbp,
+            router: NodeKind::Cnbp,
+            lr_rate: 0.05,
             error: ErrorMeasure::Abs,
             split_z: 0.0,
             split_rule: SplitRule::Worse,
+            route: RouteTarget::Error,
+            error_target: ErrorTarget::Best,
+            leaf_share: 0.0,
+            split_trial: None,
+            trial_error: ErrorMeasure::Abs,
+            route_switch: None,
         }
     }
 
     /// Two clusters with opposite labels, fed in blocks so leaves stall and split.
     fn trained(use_probs: bool) -> Bdt {
-        let mut bdt = Bdt::new(&[3, 3], params(use_probs));
+        trained_with(params(use_probs))
+    }
+
+    fn trained_with(params: DelegationParams) -> Bdt {
+        let mut bdt = Bdt::new(&[3, 3], params);
         for i in 0..40u8 {
             let (data, label) = if (i / 8) % 2 == 0 { ([0, i % 3], [1.0, 0.0]) } else { ([2, i % 3], [0.0, 1.0]) };
             bdt.train(&data, &label);
@@ -566,5 +222,268 @@ mod tests {
             back.predict(&[2, 0], &mut b);
             assert_eq!(a, b);
         }
+    }
+
+    #[test]
+    fn leaf_weights_blend_the_leaves() {
+        let bdt = trained(false);
+        let leaves: Vec<usize> = bdt.leaves().map(|(i, _)| i).collect();
+        let mut weights = Vec::new();
+        for data in [[0, 0], [0, 2], [2, 1], [1, 1]] {
+            for tau in [1.0, 0.3, 0.0] {
+                bdt.leaf_weights(&data, tau, 0.0, &mut weights);
+                let total: f64 = weights.iter().map(|(_, w)| w).sum();
+                assert!((total - 1.0).abs() < 1e-12, "{weights:?}");
+                assert_eq!(weights.len(), leaves.len());
+                assert!(weights.iter().all(|(leaf, _)| leaves.contains(leaf)));
+            }
+            // At tau 1 the heaviest leaf is the one hard routing picks.
+            bdt.leaf_weights(&data, 1.0, 0.0, &mut weights);
+            let heaviest = weights.iter().max_by(|a, b| a.1.total_cmp(&b.1)).unwrap().0;
+            assert_eq!(heaviest, bdt.leaf(&data));
+            // At tau 0 every router splits its weight evenly.
+            bdt.leaf_weights(&data, 0.0, 0.0, &mut weights);
+            assert!(weights.iter().all(|(_, w)| [0.5, 0.25, 0.125, 0.0625].iter().any(|x| (w - x).abs() < 1e-12)));
+        }
+    }
+
+    #[test]
+    fn cluster_routing_separates_groups_without_labels() {
+        // Two groups of inputs, values 0-1 or 2-3 on every feature, with
+        // coin-flip labels: only the inputs tell them apart.
+        let mut x = 99u64;
+        let mut next = |m: u64| {
+            x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (x >> 33) % m
+        };
+        let mut example = || {
+            let group = next(2) as u8;
+            let data: [u8; 6] = std::array::from_fn(|_| 2 * group + next(2) as u8);
+            let label = if next(2) == 0 { [1.0, 0.0] } else { [0.0, 1.0] };
+            (group, data, label)
+        };
+        let params = DelegationParams {
+            split_threshold: 500,
+            split_limit: 1,
+            split_rule: SplitRule::StallHigh,
+            route: RouteTarget::Cluster,
+            ..params(false)
+        };
+        let mut bdt = Bdt::new(&[4; 6], params);
+        for _ in 0..20_000 {
+            let (_, data, label) = example();
+            bdt.train(&data, &label);
+        }
+        bdt.refresh();
+        assert_eq!(bdt.split_count(), 1);
+        let mut leaves = [[0; 2]; 2];
+        for _ in 0..1000 {
+            let (group, data, _) = example();
+            leaves[group as usize][bdt.leaf(&data) - 1] += 1;
+        }
+        let pure = |[a, b]: [i32; 2]| a.max(b) as f64 / (a + b) as f64;
+        assert!(pure(leaves[0]) > 0.95 && pure(leaves[1]) > 0.95, "{leaves:?}");
+        assert_ne!(leaves[0][0] > leaves[0][1], leaves[1][0] > leaves[1][1], "{leaves:?}");
+    }
+
+    /// Inputs in two groups (feature 0 and four noisy copies of it) and a
+    /// label that follows feature 5 with 10% noise; if `flipped`, the second
+    /// group's label is the opposite, which naive Bayes can only learn
+    /// within each group.
+    fn grouped_example(next: &mut impl FnMut(u64) -> u64, flipped: bool) -> ([u8; 6], [f64; 2]) {
+        let group = next(2) as u8;
+        let mut data = [group; 6];
+        for value in &mut data[1..5] {
+            if next(10) == 0 {
+                *value = 1 - group;
+            }
+        }
+        data[5] = next(2) as u8;
+        let mut class = data[5] ^ (group & flipped as u8);
+        if next(10) == 0 {
+            class = 1 - class;
+        }
+        (data, if class == 0 { [1.0, 0.0] } else { [0.0, 1.0] })
+    }
+
+    #[test]
+    fn split_trial_keeps_only_splits_that_help() {
+        for flipped in [true, false] {
+            let mut x = 5u64;
+            let mut next = |m: u64| {
+                x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                (x >> 33) % m
+            };
+            // No splits of its own (limit 0): the test splits the root.
+            let params = DelegationParams {
+                split_threshold: 4000,
+                split_limit: 0,
+                route: RouteTarget::Cluster,
+                split_trial: Some(0.0),
+                ..params(false)
+            };
+            let mut bdt = Bdt::new(&[2; 6], params);
+            bdt.graph.split_leaf(0);
+            for _ in 0..=4000 {
+                let (data, label) = grouped_example(&mut next, flipped);
+                bdt.train(&data, &label);
+            }
+            bdt.refresh();
+            // The groups need leaves of their own only when the label flips.
+            assert_eq!(bdt.node_count(), if flipped { 3 } else { 1 }, "flipped {flipped}");
+            assert_eq!(bdt.split_count(), flipped as u32);
+            assert!(bdt.graph.nodes.iter().all(|n| n.trial.is_none()));
+        }
+    }
+
+    /// Inputs in two groups (feature 0 and a noisy copy of it) and features
+    /// 2 and 3; the label follows feature 3 with 10% noise, except in group 1
+    /// when feature 2 is 1, where it is the opposite. Cluster routing splits
+    /// by group, and the group 1 leaf, half of whose labels are flipped,
+    /// learns little; the group 0 leaf predicts the rest of group 1 better.
+    fn partly_flipped_example(next: &mut impl FnMut(u64) -> u64) -> ([u8; 4], [f64; 2]) {
+        let group = next(2) as u8;
+        let mut data = [group; 4];
+        if next(10) == 0 {
+            data[1] = 1 - group;
+        }
+        data[2] = next(2) as u8;
+        data[3] = next(2) as u8;
+        let mut class = data[3] ^ (group & data[2]);
+        if next(10) == 0 {
+            class = 1 - class;
+        }
+        (data, if class == 0 { [1.0, 0.0] } else { [0.0, 1.0] })
+    }
+
+    #[test]
+    fn leaf_share_keeps_the_leaves_closer() {
+        // Mean |difference| of the two leaves' log-odds on the same examples.
+        let disagreement = |share: f64| {
+            let mut x = 11u64;
+            let mut next = |m: u64| {
+                x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                (x >> 33) % m
+            };
+            let params =
+                DelegationParams { split_threshold: 4000, split_limit: 0, route: RouteTarget::Cluster, leaf_share: share, ..params(false) };
+            let mut bdt = Bdt::new(&[2; 4], params);
+            bdt.graph.split_leaf(0);
+            for _ in 0..20_000 {
+                let (data, label) = partly_flipped_example(&mut next);
+                bdt.train(&data, &label);
+            }
+            bdt.refresh();
+            let mut sum = 0.0;
+            for _ in 0..2000 {
+                let (data, _) = partly_flipped_example(&mut next);
+                let (mut a, mut b) = ([0.0; 2], [0.0; 2]);
+                bdt.node_predict_log(1, &data, &mut a);
+                bdt.node_predict_log(2, &data, &mut b);
+                sum += ((a[0] - a[1]) - (b[0] - b[1])).abs();
+            }
+            sum / 2000.0
+        };
+        let (alone, shared) = (disagreement(0.0), disagreement(0.5));
+        assert!(shared < 0.7 * alone, "{shared} vs {alone}");
+    }
+
+    #[test]
+    fn route_switch_moves_the_examples_a_cluster_mixes() {
+        for switch in [None, Some(3.0)] {
+            let mut x = 7u64;
+            let mut next = |m: u64| {
+                x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                (x >> 33) % m
+            };
+            // No splits of its own (limit 0): the test splits the root.
+            let params = DelegationParams {
+                split_threshold: 4000,
+                split_limit: 0,
+                route: RouteTarget::Cluster,
+                route_switch: switch,
+                ..params(false)
+            };
+            let mut bdt = Bdt::new(&[2; 4], params);
+            bdt.graph.split_leaf(0);
+            for _ in 0..20_000 {
+                let (data, label) = partly_flipped_example(&mut next);
+                bdt.train(&data, &label);
+            }
+            bdt.refresh();
+            assert_eq!(bdt.graph.nodes[0].error_routed, switch.is_some());
+            let (mut right, mut group_1) = (0, 0);
+            while group_1 < 2000 {
+                let (data, label) = partly_flipped_example(&mut next);
+                if data[0] == 1 {
+                    let mut p = [0.0; 2];
+                    bdt.predict(&data, &mut p);
+                    group_1 += 1;
+                    right += ((p[1] > p[0]) == (label[1] > 0.5)) as u32;
+                }
+            }
+            // A leaf of its own for the flipped examples predicts all of group 1.
+            let accuracy = right as f64 / group_1 as f64;
+            assert_eq!(accuracy > 0.8, switch.is_some(), "switch {switch:?}: accuracy {accuracy}");
+        }
+    }
+
+    #[test]
+    fn logistic_regression_nodes() {
+        for (leaf, router) in [(NodeKind::Lr, NodeKind::Lr), (NodeKind::Cnbp, NodeKind::Lr), (NodeKind::Lr, NodeKind::Cnbp)] {
+            let bdt = trained_with(DelegationParams { leaf, router, lr_rate: 0.1, ..params(false) });
+            assert!(bdt.split_count() > 0, "{leaf:?} leaves, {router:?} routers");
+            let back = Bdt::from_text(&bdt.to_text(), false).unwrap();
+            assert_eq!(bdt.to_text(), back.to_text());
+            assert_eq!((back.params().leaf, back.params().router, back.params().lr_rate), (leaf, router, 0.1));
+            let (mut a, mut b) = ([0.0; 2], [0.0; 2]);
+            bdt.predict(&[2, 0], &mut a);
+            back.predict(&[2, 0], &mut b);
+            assert_eq!(a, b);
+            assert!((a[0] + a[1] - 1.0).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn soft_error_targets_prefer_the_calibrated_child() {
+        // The first class is the outcome 60% of the time. Child 0 gives it
+        // 0.9 (overconfident), child 1 gives it 0.6 (calibrated: the lower
+        // expected log-loss). Child 0 is closer to the outcome 60% of the
+        // time, so the best-child target favours it; the soft target's
+        // expected share for it is .6 * .9 / 1.5 + .4 * .1 / .5 = .44.
+        let (overconfident, calibrated) = ([0.9, 0.1], [0.6, 0.4]);
+        for (error_target, expected) in [(ErrorTarget::Best, 0), (ErrorTarget::Soft, 1)] {
+            let params = DelegationParams { split_limit: 0, error: ErrorMeasure::Log, error_target, ..params(false) };
+            let mut bdt = Bdt::new(&[3, 3], params);
+            bdt.graph.split_leaf(0);
+            let (data, mut scratch) = ([1, 2], [0.0; 2]);
+            for i in 0..1000 {
+                let label = if i % 5 < 3 { [1.0, 0.0] } else { [0.0, 1.0] };
+                let errors = [log_loss(&overconfident, &label), log_loss(&calibrated, &label)];
+                // A new step, so the router's cached output is renewed.
+                bdt.graph.begin_step(&data, &label, &mut scratch);
+                bdt.graph.train_router(0, &data, &errors);
+            }
+            assert_eq!(bdt.graph.route(0, &data), expected, "{error_target:?}");
+        }
+    }
+
+    #[test]
+    fn soft_error_targets_train_cnbp_and_lr_routers() {
+        for router in [NodeKind::Cnbp, NodeKind::Lr] {
+            let params =
+                DelegationParams { router, lr_rate: 0.1, error: ErrorMeasure::Log, error_target: ErrorTarget::Soft, ..params(false) };
+            let bdt = trained_with(params);
+            assert!(bdt.split_count() > 0, "{router:?} routers");
+            let mut p = [0.0; 2];
+            bdt.predict(&[2, 0], &mut p);
+            assert!((p[0] + p[1] - 1.0).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "soft error targets need")]
+    fn soft_error_targets_need_a_log_loss() {
+        Bdt::new(&[3, 3], DelegationParams { error_target: ErrorTarget::Soft, ..params(false) });
     }
 }

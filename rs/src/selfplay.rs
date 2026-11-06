@@ -1,5 +1,6 @@
 //! Self-play: the model plays both sides, and the positions of finished games
-//! become its training data, labelled with the game's result.
+//! become its training data, labelled with the game's result or with the
+//! outcome a search by the model expects from them.
 //!
 //! Games within a round are independent, so they are played in parallel.
 //! Each game has its own seed derived from the run seed, round and game
@@ -13,17 +14,22 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rayon::prelude::*;
-use shakmaty::Position;
 use shakmaty::san::SanPlus;
+use shakmaty::{Move, Position};
 
-use crate::encoding::{self, Encoded};
+use crate::calibration::Calibration;
+use crate::classifier::Classifier;
+use crate::encoding::Encoded;
 use crate::game::{Game, GameResult};
 use crate::games::OUTCOME_FILES;
 use crate::player::{self, Player};
+use crate::search::{Search, Value};
 
 pub struct GameRecord {
     pub result: GameResult,
-    /// The position after each move, in the order played.
+    /// The moves, in the order played.
+    pub moves: Vec<Move>,
+    /// The position after each move.
     pub positions: Vec<Encoded>,
     /// The game in standard notation, e.g. "1. e4 e5 2. Nf3 ... 1-0".
     pub movetext: String,
@@ -31,10 +37,17 @@ pub struct GameRecord {
 
 impl GameRecord {
     pub fn label(&self) -> [f64; 3] {
+        let mut label = [0.0; 3];
+        label[self.class()] = 1.0;
+        label
+    }
+
+    /// The result as a class: 0 white win, 1 black win, 2 draw.
+    pub fn class(&self) -> usize {
         match self.result {
-            GameResult::WhiteWin => [1.0, 0.0, 0.0],
-            GameResult::BlackWin => [0.0, 1.0, 0.0],
-            GameResult::Draw => [0.0, 0.0, 1.0],
+            GameResult::WhiteWin => 0,
+            GameResult::BlackWin => 1,
+            GameResult::Draw => 2,
         }
     }
 }
@@ -43,6 +56,7 @@ impl GameRecord {
 pub fn play_game(white: Player, black: Player, seed: u64) -> GameRecord {
     let mut rng = StdRng::seed_from_u64(seed);
     let mut game = Game::default();
+    let mut moves = Vec::new();
     let mut positions = Vec::new();
     let mut movetext = String::new();
 
@@ -53,18 +67,19 @@ pub fn play_game(white: Player, black: Player, seed: u64) -> GameRecord {
         let pos = game.position();
         let candidates = player::candidates(pos);
         let player = if pos.turn().is_white() { white } else { black };
-        let chosen = &candidates[player::select(player, pos.turn(), &encoding::encode(pos), &candidates, &mut rng)];
+        let chosen = &candidates[player::choose(player, &game, &candidates, &mut rng)];
 
         if pos.turn().is_white() {
             write!(movetext, "{}. ", pos.fullmoves()).unwrap();
         }
         write!(movetext, "{} ", SanPlus::from_move(pos.clone(), chosen.mv)).unwrap();
+        moves.push(chosen.mv);
         positions.push(chosen.position);
         game.play(chosen.mv);
     };
 
     movetext.push_str(result.pgn());
-    GameRecord { result, positions, movetext }
+    GameRecord { result, moves, positions, movetext }
 }
 
 /// Plays a round of self-play games in parallel. Records are in game order.
@@ -87,12 +102,70 @@ pub fn play_match(a: Player, b: Player, games: usize, seed: u64) -> Vec<GameReco
         .collect()
 }
 
-/// Every position of the round labelled by its game's result, shuffled so
-/// order-sensitive models (BDT) do not see the outcomes in blocks.
-pub fn training_data(records: &[GameRecord], seed: u64, round: u64) -> Vec<(Encoded, [f64; 3])> {
+/// Each game's result as the label of each of its positions.
+pub fn result_labels(records: &[GameRecord]) -> Vec<Vec<[f64; 3]>> {
+    records.iter().map(|r| vec![r.label(); r.positions.len()]).collect()
+}
+
+/// Fits a calibration of the model's predictions for the games' positions
+/// to the games' results.
+pub fn fit_calibration(records: &[GameRecord], model: &(dyn Classifier + Sync)) -> Calibration {
+    let data: Vec<([f64; 3], usize)> = records
+        .par_iter()
+        .flat_map_iter(|r| {
+            r.positions.iter().map(move |p| {
+                let mut logs = [0.0; 3];
+                model.predict_log(p, &mut logs);
+                (logs, r.class())
+            })
+        })
+        .collect();
+    Calibration::fit(&data)
+}
+
+/// Labels each position of the games with the outcome that a `depth`-ply
+/// search by the model expects from it (`Search::expected_outcome`), mixed
+/// with the game's result: `result_weight` of the result, the rest the
+/// search's.
+pub fn search_labels(
+    records: &[GameRecord],
+    model: &(dyn Classifier + Sync),
+    calibration: Calibration,
+    depth: u32,
+    result_weight: f64,
+) -> Vec<Vec<[f64; 3]>> {
+    records
+        .par_iter()
+        .map(|r| {
+            let result = r.label();
+            let mut game = Game::default();
+            r.moves
+                .iter()
+                .map(|&m| {
+                    game.play(m);
+                    let expected = Search::new(model, &game)
+                        .valuing(Value::LogOdds, calibration)
+                        .expected_outcome(&game, depth);
+                    std::array::from_fn(|c| result_weight * result[c] + (1.0 - result_weight) * expected[c])
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// Every position of the round with its label (one per position, in game
+/// order), shuffled so order-sensitive models (BDT) do not see the outcomes
+/// in blocks.
+pub fn training_data(
+    records: &[GameRecord],
+    labels: &[Vec<[f64; 3]>],
+    seed: u64,
+    round: u64,
+) -> Vec<(Encoded, [f64; 3])> {
     let mut data: Vec<_> = records
         .iter()
-        .flat_map(|r| r.positions.iter().map(move |&p| (p, r.label())))
+        .zip(labels)
+        .flat_map(|(r, l)| r.positions.iter().copied().zip(l.iter().copied()))
         .collect();
     data.shuffle(&mut StdRng::seed_from_u64(derive_seed(seed, round, u64::MAX)));
     data
@@ -212,7 +285,7 @@ mod tests {
     #[test]
     fn same_seed_same_games_regardless_of_threads() {
         let model = Cnbp::new(3, &CATEGORIES, 1.0, false);
-        let jitter = Player { model: &model, policy: Policy::WldScoreJitter10, temperature: 0.0, route_once: false };
+        let jitter = Player::new(&model, Policy::WldScoreJitter10, 0.0);
         let one_thread = rayon::ThreadPoolBuilder::new().num_threads(1).build().unwrap();
         let a = one_thread.install(|| play_round(jitter, 6, 7, 0));
         let b = play_round(jitter, 6, 7, 0);
@@ -224,7 +297,7 @@ mod tests {
     #[test]
     fn warns_about_repeated_games() {
         let model = Cnbp::new(3, &CATEGORIES, 1.0, false);
-        let player = Player { model: &model, policy: Policy::Rand, temperature: 0.0, route_once: false };
+        let player = Player::new(&model, Policy::Rand, 0.0);
         let mut records = vec![play_game(player, player, 1), play_game(player, player, 2)];
         assert!(duplicate_warning(&records).is_none());
         records.push(play_game(player, player, 1));
@@ -234,9 +307,26 @@ mod tests {
     #[test]
     fn positions_match_moves() {
         let model = Cnbp::new(3, &CATEGORIES, 1.0, false);
-        let player = Player { model: &model, policy: Policy::Rand, temperature: 0.0, route_once: false };
+        let player = Player::new(&model, Policy::Rand, 0.0);
         let record = play_game(player, player, 1);
         let plies = record.movetext.split_whitespace().filter(|t| !t.ends_with('.')).count() - 1;
         assert_eq!(record.positions.len(), plies);
+        assert_eq!(record.moves.len(), plies);
+    }
+
+    #[test]
+    fn search_labels_end_with_the_result() {
+        let model = Cnbp::new(3, &CATEGORIES, 1.0, false);
+        let player = Player::new(&model, Policy::Rand, 0.0);
+        let records: Vec<_> = (0..20).map(|g| play_game(player, player, g)).collect();
+        let labels = search_labels(&records, &model, Calibration::NONE, 1, 0.0);
+        for (r, l) in records.iter().zip(&labels) {
+            assert_eq!(l.len(), r.positions.len());
+            // The last position is over by the rules, so its label is exact.
+            assert_eq!(*l.last().unwrap(), r.label());
+            assert!(l.iter().all(|p| (p.iter().sum::<f64>() - 1.0).abs() < 1e-9));
+        }
+        // With all the weight on the result, every position gets the result.
+        assert_eq!(search_labels(&records, &model, Calibration::NONE, 1, 1.0), result_labels(&records));
     }
 }

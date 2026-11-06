@@ -11,6 +11,9 @@ use shakmaty::{Chess, Color, Move, Position};
 
 use crate::classifier::Classifier;
 use crate::encoding::{self, Encoded};
+use crate::game::Game;
+use crate::calibration::Calibration;
+use crate::search::{Search, Value};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum Policy {
@@ -44,9 +47,21 @@ pub struct Player<'a> {
     /// Softmax temperature, in units of expected score (0..1). Only used by
     /// `WldScoreSoftmax`.
     pub temperature: f64,
-    /// Score every candidate with the sub-model the current position is
-    /// routed to (BDT), instead of routing each candidate separately.
-    pub route_once: bool,
+    /// If above 0, value moves by an alpha-beta search this many plies deep
+    /// (see `search`) instead of scoring the candidates directly. Needs a
+    /// log-odds policy.
+    pub depth: u32,
+    /// How the search values positions, and the calibration of the model's
+    /// probabilities it uses.
+    pub value: Value,
+    pub calibration: Calibration,
+}
+
+impl<'a> Player<'a> {
+    /// A player that scores the candidate moves directly, without search.
+    pub fn new(model: &'a (dyn Classifier + Sync), policy: Policy, temperature: f64) -> Self {
+        Player { model, policy, temperature, depth: 0, value: Value::LogOdds, calibration: Calibration::NONE }
+    }
 }
 
 /// A legal move and the encoding of the position it leads to.
@@ -66,22 +81,35 @@ pub fn candidates(pos: &Chess) -> Vec<Candidate> {
         .collect()
 }
 
+/// Index into `candidates`, the legal moves of the game's position in
+/// `legal_moves()` order, of the move to play.
+pub fn choose<R: RngExt>(player: Player, game: &Game, candidates: &[Candidate], rng: &mut R) -> usize {
+    let pos = game.position();
+    if player.depth == 0 || player.policy == Policy::Rand {
+        return select(player, pos.turn(), candidates, rng);
+    }
+    let values =
+        Search::new(player.model, game).valuing(player.value, player.calibration).root_values(game, player.depth);
+    match player.policy {
+        Policy::LogOddsSoftmax => softmax_sample(&values, player.temperature, rng),
+        Policy::LogOdds => {
+            let best = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            let tied: Vec<usize> = (0..values.len()).filter(|&i| values[i] == best).collect();
+            tied[rng.random_range(0..tied.len())]
+        }
+        _ => panic!("search needs the log-odds or log-odds-softmax policy, not {:?}", player.policy),
+    }
+}
+
 /// Index into `candidates` of the move to play.
 pub fn select<R: RngExt>(
     player: Player,
     turn: Color,
-    current: &Encoded,
     candidates: &[Candidate],
     rng: &mut R,
 ) -> usize {
-    let Player { model, policy, temperature, route_once } = player;
-    let predict = |c: &Candidate, out: &mut [f64]| {
-        if route_once {
-            model.predict_routed(current, &c.position, out)
-        } else {
-            model.predict(&c.position, out)
-        }
-    };
+    let Player { model, policy, temperature, .. } = player;
+    let predict = |c: &Candidate, out: &mut [f64]| model.predict(&c.position, out);
     if policy == Policy::Rand {
         return rng.random_range(0..candidates.len());
     }

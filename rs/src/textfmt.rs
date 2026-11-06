@@ -2,13 +2,19 @@
 
 use std::fmt::Display;
 use std::io;
+use std::iter::Peekable;
 use std::str::{FromStr, SplitWhitespace};
 
-pub struct Tokens<'a>(SplitWhitespace<'a>);
+pub struct Tokens<'a>(Peekable<SplitWhitespace<'a>>);
 
 impl<'a> Tokens<'a> {
     pub fn new(text: &'a str) -> Self {
-        Tokens(text.split_whitespace())
+        Tokens(text.split_whitespace().peekable())
+    }
+
+    /// The next token, without consuming it.
+    pub fn peek(&mut self) -> Option<&'a str> {
+        self.0.peek().copied()
     }
 
     pub fn next<T: FromStr>(&mut self) -> io::Result<T>

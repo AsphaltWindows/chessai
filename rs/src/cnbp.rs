@@ -26,9 +26,12 @@ pub struct Cnbp {
     class_totals: Vec<f64>,
     /// `class_num` blocks of `total_cat_vals` counts.
     class_cat_totals: Vec<f64>,
-    /// Probabilities cached from the counts, used when `use_probs` is set.
+    /// Probabilities cached from the counts, and their logs, used when
+    /// `use_probs` is set.
     class_probs: Vec<f64>,
     class_cat_probs: Vec<f64>,
+    class_logs: Vec<f64>,
+    class_cat_logs: Vec<f64>,
     fresh: bool,
 }
 
@@ -52,6 +55,8 @@ impl Cnbp {
             class_cat_totals: vec![0.0; class_num * total_cat_vals],
             class_probs: vec![0.0; class_num],
             class_cat_probs: vec![0.0; class_num * total_cat_vals],
+            class_logs: vec![0.0; class_num],
+            class_cat_logs: vec![0.0; class_num * total_cat_vals],
             fresh: false,
         };
         cnbp.refresh();
@@ -68,6 +73,12 @@ impl Cnbp {
 
     /// Adds one data point. `label` must sum to 1.
     pub fn train(&mut self, data: &[u8], label: &[f64]) {
+        self.train_weighted(data, label, 1.0);
+    }
+
+    /// Adds one data point counted `weight` times (a fraction for a partial
+    /// example). `label` must sum to 1.
+    pub fn train_weighted(&mut self, data: &[u8], label: &[f64], weight: f64) {
         let sum: f64 = label.iter().sum();
         assert!(
             (sum - 1.0).abs() <= 0.000001,
@@ -75,7 +86,7 @@ impl Cnbp {
         );
 
         for (cl, block) in self.class_cat_totals.chunks_exact_mut(self.total_cat_vals).enumerate() {
-            let l = label[cl];
+            let l = label[cl] * weight;
             self.class_totals[cl] += l;
             for (&off, &val) in self.cat_offsets.iter().zip(data) {
                 block[off + val as usize] += l;
@@ -107,12 +118,14 @@ impl Cnbp {
         for cl in 0..self.class_num {
             self.class_probs[cl] =
                 (self.class_totals[cl] + self.alpha) / (cur_total + class_num * self.alpha);
+            self.class_logs[cl] = self.class_probs[cl].ln();
 
             for cat in 0..self.categories.len() {
                 let denom = self.class_totals[cl] + self.categories[cat] as f64 * self.alpha;
                 for val in 0..self.categories[cat] {
                     let i = self.idx(cl, cat, val);
                     self.class_cat_probs[i] = (self.alpha + self.class_cat_totals[i]) / denom;
+                    self.class_cat_logs[i] = self.class_cat_probs[i].ln();
                 }
             }
         }
@@ -161,6 +174,36 @@ impl Cnbp {
         }
         for p in &mut out[..self.class_num] {
             *p /= total;
+        }
+    }
+
+    /// Writes ln P(class) + sum of ln P(value | class) over the features for
+    /// each class: the log of the unnormalised posterior. Differences between
+    /// classes are log-odds. Unlike `predict`, it cannot underflow.
+    ///
+    /// # Panics
+    /// With `use_probs`, if the model was trained since the last `refresh()`.
+    pub fn predict_log(&self, data: &[u8], out: &mut [f64]) {
+        if self.use_probs {
+            assert!(self.fresh, "cnbp trained without refresh() before predict_log()");
+            for (cl, block) in self.class_cat_logs.chunks_exact(self.total_cat_vals).enumerate() {
+                let mut l = self.class_logs[cl];
+                for (&off, &val) in self.cat_offsets.iter().zip(data) {
+                    l += block[off + val as usize];
+                }
+                out[cl] = l;
+            }
+            return;
+        }
+        let class_total: f64 = self.class_totals.iter().sum();
+        let class_num = self.class_num as f64;
+        for (cl, block) in self.class_cat_totals.chunks_exact(self.total_cat_vals).enumerate() {
+            let class_count = self.class_totals[cl];
+            let mut l = ((class_count + self.alpha) / (class_total + class_num * self.alpha)).ln();
+            for ((&off, &cat), &val) in self.cat_offsets.iter().zip(&self.categories).zip(data) {
+                l += ((block[off + val as usize] + self.alpha) / (class_count + cat as f64 * self.alpha)).ln();
+            }
+            out[cl] = l;
         }
     }
 
@@ -250,6 +293,25 @@ mod tests {
         trained(true).predict(&[1, 0], &mut p);
         trained(false).predict(&[1, 0], &mut c);
         assert!((p[0] - c[0]).abs() < 1e-12);
+    }
+
+    #[test]
+    fn log_prediction_matches() {
+        for use_probs in [false, true] {
+            let (mut p, mut l) = ([0.0; 2], [0.0; 2]);
+            trained(use_probs).predict(&[2, 1], &mut p);
+            trained(use_probs).predict_log(&[2, 1], &mut l);
+            assert!(((l[0] - l[1]) - (p[0] / p[1]).ln()).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn weighted_examples_count_their_weight() {
+        let (mut once, mut halves) = (Cnbp::new(2, &[3, 2], 1.0, false), Cnbp::new(2, &[3, 2], 1.0, false));
+        once.train(&[2, 1], &[0.25, 0.75]);
+        halves.train_weighted(&[2, 1], &[0.25, 0.75], 0.5);
+        halves.train_weighted(&[2, 1], &[0.25, 0.75], 0.5);
+        assert_eq!(once.to_text(), halves.to_text());
     }
 
     #[test]

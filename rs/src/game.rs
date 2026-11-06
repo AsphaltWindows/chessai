@@ -46,6 +46,17 @@ impl Game {
         &self.pos
     }
 
+    /// Zobrist hash of the current position.
+    pub fn hash(&self) -> Zobrist64 {
+        self.hash
+    }
+
+    /// Hashes of the positions since the last irreversible move, the current
+    /// one last.
+    pub fn history(&self) -> &[Zobrist64] {
+        &self.history
+    }
+
     pub fn play(&mut self, m: Move) {
         let irreversible = self.pos.is_irreversible(m);
         let updated = self.pos.update_zobrist_hash(self.hash, m, EnPassantMode::Legal);
