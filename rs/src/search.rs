@@ -47,6 +47,9 @@ pub struct Search<'a> {
     since: usize,
     value: Value,
     calibration: Calibration,
+    /// Whether outcomes are the model's own probabilities, as `predict`
+    /// gives them, instead of calibrated ones (see `root_outcomes`).
+    raw_outcomes: bool,
     /// Positions visited, for statistics.
     pub nodes: u64,
 }
@@ -59,6 +62,7 @@ impl<'a> Search<'a> {
             since: 0,
             value: Value::LogOdds,
             calibration: Calibration::NONE,
+            raw_outcomes: false,
             nodes: 0,
         }
     }
@@ -81,6 +85,26 @@ impl<'a> Search<'a> {
             .iter()
             .map(|&m| -self.child::<false>(pos, game.hash(), m, depth - 1, 1, f64::NEG_INFINITY, f64::INFINITY).0)
             .collect()
+    }
+
+    /// The outcome at the end of each legal move's principal variation, in
+    /// `legal_moves()` order, searching `depth` plies deep as `root_values`
+    /// does: the result if the line ends the game, else the model's own
+    /// probabilities (as `predict` gives them, uncalibrated) for the
+    /// position it ends in, as [white win, black win, draw]. At depth 1
+    /// that is the prediction for the position after the move, unless the
+    /// move ends the game.
+    pub fn root_outcomes(&mut self, game: &Game, depth: u32) -> Vec<[f64; 3]> {
+        assert!(depth >= 1, "search depth must be at least 1");
+        let raw = std::mem::replace(&mut self.raw_outcomes, true);
+        let pos = game.position();
+        let outcomes = pos
+            .legal_moves()
+            .iter()
+            .map(|&m| self.child::<true>(pos, game.hash(), m, depth - 1, 1, f64::NEG_INFINITY, f64::INFINITY).1)
+            .collect();
+        self.raw_outcomes = raw;
+        outcomes
     }
 
     /// The outcome expected from the game's position by searching `depth`
@@ -145,6 +169,13 @@ impl<'a> Search<'a> {
             return (0.0, DRAW);
         }
         if depth == 0 {
+            if OUTCOME && self.raw_outcomes && self.value == Value::LogOdds {
+                // One prediction gives both the value and the outcome.
+                let mut probs = [0.0; 3];
+                self.model.predict(&encoding::encode(pos), &mut probs);
+                let (win, loss) = if pos.turn().is_white() { (0, 1) } else { (1, 0) };
+                return (log_odds(probs[win], probs[loss]), probs);
+            }
             return (self.eval(pos), if OUTCOME { self.outcome(pos) } else { DRAW });
         }
 
@@ -184,12 +215,16 @@ impl<'a> Search<'a> {
         earlier.contains(current)
     }
 
-    /// The calibrated probabilities of [white win, black win, draw] that the
-    /// model predicts for a position.
+    /// The probabilities of [white win, black win, draw] that the model
+    /// predicts for a position: calibrated, or with `raw_outcomes` its own.
     fn outcome(&self, pos: &Chess) -> [f64; 3] {
-        let mut logs = [0.0; 3];
-        self.model.predict_log(&encoding::encode(pos), &mut logs);
-        self.calibration.probs(&logs)
+        let mut out = [0.0; 3];
+        if self.raw_outcomes {
+            self.model.predict(&encoding::encode(pos), &mut out);
+            return out;
+        }
+        self.model.predict_log(&encoding::encode(pos), &mut out);
+        self.calibration.probs(&out)
     }
 
     /// The model's value of a position for the side to move.
@@ -225,9 +260,13 @@ mod tests {
         game
     }
 
-    fn value_of(game: &Game, values: &[f64], uci: &str) -> f64 {
+    fn index_of(game: &Game, uci: &str) -> usize {
         let m = uci.parse::<UciMove>().unwrap().to_move(game.position()).unwrap();
-        values[game.position().legal_moves().iter().position(|&l| l == m).unwrap()]
+        game.position().legal_moves().iter().position(|&l| l == m).unwrap()
+    }
+
+    fn value_of(game: &Game, values: &[f64], uci: &str) -> f64 {
+        values[index_of(game, uci)]
     }
 
     #[test]
@@ -272,6 +311,27 @@ mod tests {
         let g = game(&["e2e4"]);
         let expected = Search::new(&model, &g).expected_outcome(&g, 2);
         assert!(expected.iter().zip([0.6, 0.2, 0.2]).all(|(a, b)| (a - b).abs() < 1e-12), "{expected:?}");
+    }
+
+    #[test]
+    fn root_outcomes_end_in_results_or_raw_predictions() {
+        // Black to move mates with Qh4#; every other move leads to the
+        // model's own prediction, whatever the calibration.
+        let model = Constant([0.6, 0.2, 0.2]);
+        let g = game(&["f2f3", "e7e5", "g2g4"]);
+        let calibration = Calibration { slope_winner: 2.0, ..Calibration::NONE };
+        let outcomes = Search::new(&model, &g).valuing(Value::LogOdds, calibration).root_outcomes(&g, 1);
+        let mate = index_of(&g, "d8h4");
+        for (i, outcome) in outcomes.iter().enumerate() {
+            assert_eq!(*outcome, if i == mate { BLACK_WINS } else { [0.6, 0.2, 0.2] });
+        }
+
+        // One move earlier, g2g4 lets Black mate: at depth 2 its line ends in
+        // a black win, a quiet move's in the prediction two plies on.
+        let g = game(&["f2f3", "e7e5"]);
+        let outcomes = Search::new(&model, &g).root_outcomes(&g, 2);
+        assert_eq!(outcomes[index_of(&g, "g2g4")], BLACK_WINS);
+        assert_eq!(outcomes[index_of(&g, "e2e4")], [0.6, 0.2, 0.2]);
     }
 
     #[test]

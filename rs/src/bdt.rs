@@ -25,6 +25,7 @@ use std::io;
 use std::path::Path;
 
 use crate::delegation::{DelegationParams, Graph, Kind, NodeModel, RouteTarget};
+use crate::state::{Reader, Writer};
 
 #[derive(Clone, Debug)]
 pub struct Bdt {
@@ -72,6 +73,17 @@ impl Bdt {
         self.graph.leaf(data)
     }
 
+    /// Index of the leaf that predicts the position when routed from node
+    /// `idx`.
+    pub fn leaf_from(&self, idx: usize, data: &[u8]) -> usize {
+        self.graph.leaf_from(idx, data)
+    }
+
+    /// Node `idx`'s children; empty for a leaf.
+    pub fn children(&self, idx: usize) -> &[usize] {
+        self.graph.children(idx)
+    }
+
     /// The leaves' node indices and classifiers.
     pub fn leaves(&self) -> impl Iterator<Item = (usize, &NodeModel)> {
         self.graph.leaves()
@@ -90,6 +102,11 @@ impl Bdt {
     /// Recomputes cached probabilities after training (see `Cnbp::refresh`).
     pub fn refresh(&mut self) {
         self.graph.refresh()
+    }
+
+    /// Lets every model in the tree adapt faster (see `Graph::forget`).
+    pub fn forget(&mut self, factor: f64) {
+        self.graph.forget(factor)
     }
 
     /// Adds one data point. `label` must sum to 1.
@@ -112,8 +129,8 @@ impl Bdt {
             return g.train_leaf(idx, data, label, error);
         };
         let children = children.clone();
-        if g.trial_step(idx, data, label, scratch) {
-            // The split was undone; train the node as it is now.
+        if g.trial_step(idx, data, label, scratch) || g.revise_step(idx, data, label, scratch) {
+            // The split was undone or merged; train the node as it is now.
             return self.train_node(idx, data, label, error, scratch);
         }
         if error.is_none() {
@@ -138,6 +155,13 @@ impl Bdt {
         self.graph.record_router(idx, router_error);
     }
 
+    /// Sees a round's games, each the positions in the order played, before
+    /// training on them: with shadows, measures the seams their test needs
+    /// (see `DelegationParams::revise`). Call it with the tree refreshed.
+    pub fn measure_seams<P: AsRef<[u8]>>(&mut self, games: &[&[P]]) {
+        self.graph.measure_seams(games)
+    }
+
     /// Serializes in the C text format (`bdt_to_file`).
     pub fn to_text(&self) -> String {
         self.graph.to_text()
@@ -155,11 +179,37 @@ impl Bdt {
     pub fn load(path: &Path, use_probs: bool) -> io::Result<Self> {
         Self::from_text(&std::fs::read_to_string(path)?, use_probs)
     }
+
+    /// The whole training state, unrounded, for an exact `--resume` (see
+    /// `state`).
+    pub fn to_state(&self) -> Writer {
+        let mut w = Writer::new("bdt");
+        self.graph.write_state(&mut w);
+        w
+    }
+
+    /// Reads a state written by `to_state` by a model trained with `params`
+    /// over `categories`.
+    pub fn from_state(data: &[u8], categories: &[u8], params: DelegationParams) -> io::Result<Self> {
+        let mut r = Reader::new(data, "bdt")?;
+        let graph = Graph::read_state(&mut r, categories, params)?;
+        r.finish()?;
+        Ok(Bdt { graph })
+    }
+
+    pub fn save_state(&self, path: &Path) -> io::Result<()> {
+        self.to_state().save(path)
+    }
+
+    pub fn load_state(path: &Path, categories: &[u8], params: DelegationParams) -> io::Result<Self> {
+        Self::from_state(&std::fs::read(path)?, categories, params)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cnbp::Cnbp;
     use crate::delegation::{ErrorMeasure, ErrorTarget, NodeKind, RouteTarget, SplitRule, log_loss};
 
     fn params(use_probs: bool) -> DelegationParams {
@@ -183,6 +233,10 @@ mod tests {
             split_trial: None,
             trial_error: ErrorMeasure::Abs,
             route_switch: None,
+            error_router: NodeKind::Cnbp,
+            revise: None,
+            seam_weight: 0.0,
+            reset_leaves: None,
         }
     }
 
@@ -209,6 +263,51 @@ mod tests {
         let mut out = [0.0; 2];
         bdt.predict(&[0, 1], &mut out);
         assert!((out[0] + out[1] - 1.0).abs() < 1e-12);
+    }
+
+    /// A tree read back from its state trains on exactly as the original
+    /// (`--resume`), whatever it was doing: splits, trials, error routers,
+    /// shadows and their windows. Other options are refused.
+    #[test]
+    fn state_round_trip_trains_on_identically() {
+        let base = DelegationParams { split_threshold: 40, split_limit: 6, forget_factor: 1.0, ..params(true) };
+        let variants = [
+            base.clone(),
+            DelegationParams { leaf: NodeKind::Lr, error: ErrorMeasure::Log, ..base.clone() },
+            DelegationParams { split_trial: Some(0.0), ..base.clone() },
+            DelegationParams { route: RouteTarget::Cluster, route_switch: Some(0.0), ..base.clone() },
+            DelegationParams {
+                leaf: NodeKind::Lr,
+                route: RouteTarget::Cluster,
+                route_switch: Some(0.0),
+                error_router: NodeKind::Lr,
+                ..base.clone()
+            },
+            DelegationParams { revise: Some(0.0), reset_leaves: Some(0.0), seam_weight: 0.1, ..base.clone() },
+            DelegationParams { leaf: NodeKind::Lr, router: NodeKind::Lr, revise: Some(f64::INFINITY), ..base.clone() },
+        ];
+        for params in variants {
+            let mut bdt = Bdt::new(&[3; 4], params.clone());
+            let mut split = false;
+            for round in crate::delegation::state_test_rounds() {
+                let state = bdt.to_state().into_bytes();
+                let mut back = Bdt::from_state(&state, &[3; 4], params.clone()).unwrap();
+                assert_eq!(back.to_state().into_bytes(), state);
+                assert_eq!(back.to_text(), bdt.to_text());
+                for tree in [&mut bdt, &mut back] {
+                    let games: Vec<&[[u8; 4]]> = round.iter().map(|(game, _)| game.as_slice()).collect();
+                    tree.measure_seams(&games);
+                    round.iter().for_each(|(game, label)| game.iter().for_each(|pos| tree.train(pos, label)));
+                    tree.refresh();
+                }
+                assert!(back.to_state().into_bytes() == bdt.to_state().into_bytes(), "{params:?}");
+                split |= bdt.split_count() > 0;
+            }
+            // Shadows may have replaced the branches again.
+            assert!(split, "{params:?}");
+            let other = DelegationParams { split_limit: 7, ..params };
+            assert!(Bdt::from_state(&bdt.to_state().into_bytes(), &[3; 4], other).is_err());
+        }
     }
 
     #[test]
@@ -336,6 +435,300 @@ mod tests {
         }
     }
 
+    #[test]
+    fn revision_merges_branches_that_do_not_help() {
+        for flipped in [true, false] {
+            let mut x = 5u64;
+            let mut next = |m: u64| {
+                x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                (x >> 33) % m
+            };
+            // No splits of its own (limit 0): the test splits the root.
+            let params = DelegationParams {
+                split_threshold: 4000,
+                split_limit: 0,
+                route: RouteTarget::Cluster,
+                revise: Some(0.0),
+                ..params(false)
+            };
+            let mut bdt = Bdt::new(&[2; 6], params);
+            bdt.graph.split_leaf(0);
+            // Three windows.
+            for _ in 0..=12_000 {
+                let (data, label) = grouped_example(&mut next, flipped);
+                bdt.train(&data, &label);
+            }
+            bdt.refresh();
+            // The groups need leaves of their own only when the label flips.
+            assert_eq!(bdt.node_count(), if flipped { 3 } else { 1 }, "flipped {flipped}");
+            assert_eq!(bdt.split_count(), flipped as u32);
+            assert_eq!(bdt.graph.nodes[0].revision.is_some(), flipped);
+        }
+    }
+
+    /// A cluster-routed merge tree whose root has split (the test splits it)
+    /// and whose thresholds always switch to error routing and always merge
+    /// once a window ends, so their order shows; and `train`, which feeds it
+    /// `n` examples.
+    fn switching_merge_tree(route_switch: f64) -> (Bdt, impl FnMut(&mut Bdt, u32)) {
+        let mut x = 5u64;
+        let mut next = move |m: u64| {
+            x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (x >> 33) % m
+        };
+        let params = DelegationParams {
+            split_threshold: 4000,
+            split_limit: 0,
+            route: RouteTarget::Cluster,
+            route_switch: Some(route_switch),
+            revise: Some(-1e9),
+            ..params(false)
+        };
+        let mut bdt = Bdt::new(&[2; 6], params);
+        bdt.graph.split_leaf(0);
+        let train = move |bdt: &mut Bdt, n: u32| {
+            for _ in 0..n {
+                let (data, label) = grouped_example(&mut next, true);
+                bdt.train(&data, &label);
+            }
+        };
+        (bdt, train)
+    }
+
+    fn merged(bdt: &Bdt) -> bool {
+        matches!(bdt.graph.nodes[0].kind, Kind::Leaf)
+    }
+
+    fn revision_examples(bdt: &Bdt) -> u32 {
+        bdt.graph.nodes[0].revision.as_ref().expect("a shadow").window.examples
+    }
+
+    #[test]
+    fn a_switch_to_error_routing_gets_a_full_window_before_any_merge_check() {
+        // The comparison of the routers and the shadow's window start
+        // together at the split. The routers' ends first and switches; the
+        // branch has only been cluster-routed, so the shadow's window starts
+        // afresh, and the merge check comes a full window later.
+        let (mut bdt, mut train) = switching_merge_tree(-1e9);
+        train(&mut bdt, 4000);
+        assert!(bdt.graph.nodes[0].error_routed, "the first window switches");
+        assert_eq!(revision_examples(&bdt), 0);
+        train(&mut bdt, 4000);
+        assert!(!merged(&bdt), "no merge check within a full window of error-routed examples");
+        assert_eq!(revision_examples(&bdt), 4000);
+        train(&mut bdt, 1);
+        assert!(merged(&bdt), "the next example ends the window, which merges");
+    }
+
+    #[test]
+    fn the_switch_is_decided_before_a_merge_check_on_the_same_example() {
+        for switch in [true, false] {
+            // The comparison of the routers misses the first example, so the
+            // shadow's window is full when the comparison's last example
+            // comes: the switch is decided first.
+            let (mut bdt, mut train) = switching_merge_tree(if switch { -1e9 } else { 1e9 });
+            let error_router = bdt.graph.nodes[0].error_router.take();
+            train(&mut bdt, 1);
+            bdt.graph.nodes[0].error_router = error_router;
+            train(&mut bdt, 4000);
+            assert!(!merged(&bdt), "switch {switch}");
+            assert_eq!(bdt.graph.nodes[0].error_routed, switch);
+            if switch {
+                // The window starts afresh.
+                assert_eq!(revision_examples(&bdt), 0);
+            } else {
+                // Without a switch, the window ends with the next example.
+                assert_eq!(revision_examples(&bdt), 4001);
+                train(&mut bdt, 1);
+                assert!(merged(&bdt));
+            }
+        }
+    }
+
+    #[test]
+    fn revision_merges_whole_branches_whose_seams_cost_more_than_they_gain() {
+        for seam_weight in [0.0, 100.0] {
+            let mut x = 5u64;
+            let mut next = |m: u64| {
+                x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                (x >> 33) % m
+            };
+            let params = DelegationParams {
+                split_threshold: 4000,
+                split_limit: 0,
+                route: RouteTarget::Cluster,
+                revise: Some(0.0),
+                seam_weight,
+                ..params(false)
+            };
+            let mut bdt = Bdt::new(&[2; 6], params);
+            bdt.graph.split_leaf(0);
+            // A branch within the branch.
+            bdt.graph.split_leaf(1);
+            for i in 0..=4000 {
+                if i == 2000 {
+                    // Games that alternate between the groups, which the
+                    // root's leaves predict oppositely.
+                    let games: Vec<Vec<[u8; 6]>> = (0..10)
+                        .map(|_| {
+                            (0..20u8)
+                                .map(|j| loop {
+                                    let (data, _) = grouped_example(&mut next, true);
+                                    if data[0] == j % 2 {
+                                        break data;
+                                    }
+                                })
+                                .collect()
+                        })
+                        .collect();
+                    bdt.refresh();
+                    bdt.measure_seams(&games.iter().map(|g| g.as_slice()).collect::<Vec<_>>());
+                }
+                let (data, label) = grouped_example(&mut next, true);
+                bdt.train(&data, &label);
+            }
+            bdt.refresh();
+            let merged = seam_weight > 0.0;
+            assert_eq!(bdt.node_count(), if merged { 1 } else { 5 }, "seam weight {seam_weight}");
+            assert_eq!(bdt.split_count(), if merged { 0 } else { 2 });
+        }
+    }
+
+    #[test]
+    fn reset_leaves_replaces_a_leaf_worse_than_the_shadow() {
+        for reset_leaves in [None, Some(0.0)] {
+            let mut x = 11u64;
+            let mut next = |m: u64| {
+                x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                (x >> 33) % m
+            };
+            let params = DelegationParams {
+                split_threshold: 1000,
+                split_limit: 0,
+                route: RouteTarget::Cluster,
+                reset_leaves,
+                ..params(false)
+            };
+            let mut bdt = Bdt::new(&[2; 6], params);
+            for _ in 0..2000 {
+                let (data, label) = grouped_example(&mut next, false);
+                bdt.train(&data, &label);
+            }
+            bdt.graph.split_leaf(0);
+            // Leaf 2 learns the opposite labels.
+            for _ in 0..5000 {
+                let (data, label) = grouped_example(&mut next, false);
+                bdt.graph.nodes[2].classifier.train(&data, &[label[1], label[0]]);
+            }
+            for _ in 0..4000 {
+                let (data, label) = grouped_example(&mut next, false);
+                bdt.train(&data, &label);
+            }
+            bdt.refresh();
+            let mut right = 0;
+            for _ in 0..1000 {
+                let (data, label) = grouped_example(&mut next, false);
+                let mut p = [0.0; 2];
+                bdt.graph.nodes[2].classifier.predict(&data, &mut p);
+                right += ((p[1] > p[0]) == (label[1] > 0.5)) as u32;
+            }
+            assert_eq!(right > 800, reset_leaves.is_some(), "{reset_leaves:?}: {right} of 1000 right");
+            assert_eq!(bdt.node_count(), 3);
+        }
+    }
+
+    #[test]
+    fn seams_are_measured_where_games_cross_between_leaves() {
+        let params = DelegationParams { split_limit: 0, revise: Some(f64::INFINITY), ..params(false) };
+        let mut bdt = Bdt::new(&[2, 2], params);
+        bdt.graph.split_leaf(0);
+        let (a, b) = ([0u8, 0], [1u8, 1]);
+        // Route a to leaf 1 and b to leaf 2, which predict differently.
+        let mut scratch = [0.0; 2];
+        for _ in 0..50 {
+            for (data, errors) in [(a, [0.0, 1.0]), (b, [1.0, 0.0])] {
+                bdt.graph.begin_step(&data, &[1.0, 0.0], &mut scratch);
+                bdt.graph.train_router(0, &data, &errors);
+            }
+        }
+        bdt.graph.nodes[1].classifier.train(&a, &[1.0, 0.0]);
+        bdt.graph.nodes[2].classifier.train(&b, &[0.0, 1.0]);
+        bdt.refresh();
+        assert_eq!((bdt.leaf(&a), bdt.leaf(&b)), (1, 2));
+        bdt.measure_seams(&[&[a, b, b, a][..]]);
+        let v = |leaf, data: &[u8; 2]| bdt.graph.white_log_odds(leaf, data);
+        let expected = (v(2, &b) - v(1, &b)).abs() + (v(1, &a) - v(2, &a)).abs();
+        let revision = bdt.graph.nodes[0].revision.as_ref().unwrap();
+        assert_eq!((revision.positions, revision.crossings), (4, 2));
+        assert!((revision.seams - expected).abs() < 1e-12 && expected > 0.1, "{} vs {expected}", revision.seams);
+    }
+
+    #[test]
+    fn routing_from_a_child_stays_in_its_subtree() {
+        let tree = trained(false);
+        assert!(!tree.children(0).is_empty());
+        for data in [[0, 0], [0, 2], [1, 1], [2, 0], [2, 2]] {
+            assert_eq!(tree.leaf_from(0, &data), tree.leaf(&data));
+            for &child in tree.children(0) {
+                let mut subtree = vec![child];
+                let mut i = 0;
+                while i < subtree.len() {
+                    subtree.extend_from_slice(tree.children(subtree[i]));
+                    i += 1;
+                }
+                let leaf = tree.leaf_from(child, &data);
+                assert!(subtree.contains(&leaf) && tree.children(leaf).is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn a_tree_that_has_not_split_forgets_like_its_leaf_alone() {
+        let mut flat = Cnbp::new(2, &[3, 3], 1.0, true);
+        let mut tree = Bdt::new(&[3, 3], DelegationParams { split_limit: 0, ..params(true) });
+        for round in 0..3u8 {
+            for i in 0..30u8 {
+                let (data, label) = if (i + round) % 3 == 0 { ([0, i % 3], [1.0, 0.0]) } else { ([2, i % 3], [0.3, 0.7]) };
+                flat.train(&data, &label);
+                tree.train(&data, &label);
+            }
+            flat.forget(1.5);
+            tree.forget(1.5);
+            flat.refresh();
+            tree.refresh();
+        }
+        assert_eq!(tree.split_count(), 0);
+        for data in [[0, 0], [0, 2], [1, 1], [2, 0], [2, 2]] {
+            let (mut p, mut q) = ([0.0; 2], [0.0; 2]);
+            flat.predict(&data, &mut p);
+            tree.predict(&data, &mut q);
+            assert_eq!(p, q);
+        }
+    }
+
+    #[test]
+    fn forgetting_reaches_error_routers_and_shadows() {
+        let p = DelegationParams {
+            route: RouteTarget::Cluster,
+            route_switch: Some(f64::INFINITY),
+            revise: Some(f64::INFINITY),
+            ..params(false)
+        };
+        let tree = trained_with(p);
+        let mut forgotten = tree.clone();
+        forgotten.forget(4.0);
+        let (before, after) = (&tree.graph.nodes[0], &forgotten.graph.nodes[0]);
+        assert!(before.error_router.is_some() && before.revision.is_some());
+        assert_ne!(format!("{:?}", before.error_router), format!("{:?}", after.error_router));
+        assert_ne!(format!("{:?}", before.revision), format!("{:?}", after.revision));
+    }
+
+    #[test]
+    fn shadows_that_only_compare_do_not_change_training() {
+        let logging = DelegationParams { revise: Some(f64::INFINITY), reset_leaves: Some(f64::INFINITY), ..params(false) };
+        assert_eq!(trained_with(logging).to_text(), trained(false).to_text());
+    }
+
     /// Inputs in two groups (feature 0 and a noisy copy of it) and features
     /// 2 and 3; the label follows feature 3 with 10% noise, except in group 1
     /// when feature 2 is 1, where it is the opposite. Cluster routing splits
@@ -390,7 +783,7 @@ mod tests {
 
     #[test]
     fn route_switch_moves_the_examples_a_cluster_mixes() {
-        for switch in [None, Some(3.0)] {
+        for (switch, error_router) in [(None, NodeKind::Cnbp), (Some(3.0), NodeKind::Cnbp), (Some(3.0), NodeKind::Lr)] {
             let mut x = 7u64;
             let mut next = |m: u64| {
                 x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
@@ -402,6 +795,7 @@ mod tests {
                 split_limit: 0,
                 route: RouteTarget::Cluster,
                 route_switch: switch,
+                error_router,
                 ..params(false)
             };
             let mut bdt = Bdt::new(&[2; 4], params);
@@ -412,6 +806,8 @@ mod tests {
             }
             bdt.refresh();
             assert_eq!(bdt.graph.nodes[0].error_routed, switch.is_some());
+            // A switched delegator's router is its error router.
+            assert_eq!(bdt.graph.nodes[0].classifier.kind(), if switch.is_some() { error_router } else { NodeKind::Cnbp });
             let (mut right, mut group_1) = (0, 0);
             while group_1 < 2000 {
                 let (data, label) = partly_flipped_example(&mut next);
@@ -424,7 +820,7 @@ mod tests {
             }
             // A leaf of its own for the flipped examples predicts all of group 1.
             let accuracy = right as f64 / group_1 as f64;
-            assert_eq!(accuracy > 0.8, switch.is_some(), "switch {switch:?}: accuracy {accuracy}");
+            assert_eq!(accuracy > 0.8, switch.is_some(), "switch {switch:?}, {error_router:?}: accuracy {accuracy}");
         }
     }
 

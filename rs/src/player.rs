@@ -49,7 +49,9 @@ pub struct Player<'a> {
     pub temperature: f64,
     /// If above 0, value moves by an alpha-beta search this many plies deep
     /// (see `search`) instead of scoring the candidates directly. Needs a
-    /// log-odds policy.
+    /// log-odds policy, which uses the searched values, or an expected-score
+    /// one (`WldScore` and its jittered versions), which scores each move by
+    /// the expected score at the end of its principal variation.
     pub depth: u32,
     /// How the search values positions, and the calibration of the model's
     /// probabilities it uses.
@@ -88,16 +90,28 @@ pub fn choose<R: RngExt>(player: Player, game: &Game, candidates: &[Candidate], 
     if player.depth == 0 || player.policy == Policy::Rand {
         return select(player, pos.turn(), candidates, rng);
     }
-    let values =
-        Search::new(player.model, game).valuing(player.value, player.calibration).root_values(game, player.depth);
+    let mut search = Search::new(player.model, game).valuing(player.value, player.calibration);
     match player.policy {
-        Policy::LogOddsSoftmax => softmax_sample(&values, player.temperature, rng),
+        Policy::LogOddsSoftmax => softmax_sample(&search.root_values(game, player.depth), player.temperature, rng),
         Policy::LogOdds => {
+            let values = search.root_values(game, player.depth);
             let best = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
             let tied: Vec<usize> = (0..values.len()).filter(|&i| values[i] == best).collect();
             tied[rng.random_range(0..tied.len())]
         }
-        _ => panic!("search needs the log-odds or log-odds-softmax policy, not {:?}", player.policy),
+        Policy::WldScore | Policy::WldScoreJitter10 | Policy::WldScoreJitter20 => {
+            // As without search, but a move is worth the expected score at
+            // the end of its principal variation: at depth 1 the same
+            // score, unless the move ends the game.
+            let win = if pos.turn().is_white() { 0 } else { 1 };
+            let keys: Vec<(f64, f64)> = search
+                .root_outcomes(game, player.depth)
+                .iter()
+                .map(|outcome| score_key(player.policy, outcome[win] + outcome[2] / 2.0, rng))
+                .collect();
+            pick_best(&keys, rng)
+        }
+        _ => panic!("search needs a log-odds or expected-score policy, not {:?}", player.policy),
     }
 }
 
@@ -135,23 +149,43 @@ pub fn select<R: RngExt>(
         return softmax_sample(&values, temperature, rng);
     }
 
+    let keys: Vec<(f64, f64)> = candidates
+        .iter()
+        .map(|c| {
+            predict(c, &mut scores);
+            let expected = scores[win] + scores[2] / 2.0;
+            match policy {
+                Policy::WldScore | Policy::WldScoreJitter10 | Policy::WldScoreJitter20 => {
+                    score_key(policy, expected, rng)
+                }
+                Policy::LogOdds => (0.0, log_odds(scores[win], scores[loss])),
+                Policy::WldWd if scores[win] > scores[loss] => (1.0, scores[win]),
+                Policy::WldWd => (0.0, scores[2]),
+                Policy::Rand | Policy::WldScoreSoftmax | Policy::LogOddsSoftmax => unreachable!(),
+            }
+        })
+        .collect();
+    pick_best(&keys, rng)
+}
+
+/// The key of a move whose expected score for the side to move is
+/// `expected`, under an expected-score policy; the jittered ones draw a
+/// random factor.
+fn score_key<R: RngExt>(policy: Policy, expected: f64, rng: &mut R) -> (f64, f64) {
+    match policy {
+        Policy::WldScore => (0.0, expected),
+        Policy::WldScoreJitter10 => (0.0, expected * (1.0 + rng.random_range(-0.1..=0.1))),
+        Policy::WldScoreJitter20 => (0.0, expected * (1.0 + rng.random_range(-0.2..=0.2))),
+        _ => unreachable!("not an expected-score policy: {policy:?}"),
+    }
+}
+
+/// Index of the move with the largest key, ties broken at random. Moves are
+/// compared by (tier, value), larger is better.
+fn pick_best<R: RngExt>(keys: &[(f64, f64)], rng: &mut R) -> usize {
     let mut best_key = (f64::NEG_INFINITY, f64::NEG_INFINITY);
     let mut best = Vec::new();
-
-    for (i, c) in candidates.iter().enumerate() {
-        predict(c, &mut scores);
-        let expected = scores[win] + scores[2] / 2.0;
-        // Moves are compared by (tier, value), larger is better.
-        let key = match policy {
-            Policy::WldScore => (0.0, expected),
-            Policy::WldScoreJitter10 => (0.0, expected * (1.0 + rng.random_range(-0.1..=0.1))),
-            Policy::WldScoreJitter20 => (0.0, expected * (1.0 + rng.random_range(-0.2..=0.2))),
-            Policy::LogOdds => (0.0, log_odds(scores[win], scores[loss])),
-            Policy::WldWd if scores[win] > scores[loss] => (1.0, scores[win]),
-            Policy::WldWd => (0.0, scores[2]),
-            Policy::Rand | Policy::WldScoreSoftmax | Policy::LogOddsSoftmax => unreachable!(),
-        };
-
+    for (i, &key) in keys.iter().enumerate() {
         if key > best_key {
             best_key = key;
             best.clear();
@@ -160,7 +194,6 @@ pub fn select<R: RngExt>(
             best.push(i);
         }
     }
-
     best[rng.random_range(0..best.len())]
 }
 
@@ -188,8 +221,74 @@ fn softmax_sample<R: RngExt>(values: &[f64], temperature: f64, rng: &mut R) -> u
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::encoding::CATEGORIES;
+    use crate::logreg::Logreg;
     use rand::SeedableRng;
     use rand::rngs::StdRng;
+    use shakmaty::EnPassantMode;
+    use shakmaty::zobrist::Zobrist64;
+
+    /// Whether the search takes the position after `m` as the end of the
+    /// game: mate, stalemate, insufficient material, the 50-move rule, or a
+    /// repetition of a position since the last irreversible move.
+    fn ends_search(game: &Game, m: Move) -> bool {
+        let pos = game.position();
+        let mut next = pos.clone();
+        next.play_unchecked(m);
+        let repeats =
+            !pos.is_irreversible(m) && game.history().contains(&next.zobrist_hash::<Zobrist64>(EnPassantMode::Legal));
+        next.legal_moves().is_empty() || next.is_insufficient_material() || next.halfmoves() >= 100 || repeats
+    }
+
+    #[test]
+    fn jitter_at_depth_1_chooses_as_at_depth_0_unless_a_move_ends_the_game() {
+        // Random weights, so that moves score differently.
+        let mut model = Logreg::new(3, &CATEGORIES, 0.1);
+        model.randomize(7, 0.3);
+        let depth0 = Player::new(&model, Policy::WldScoreJitter10, 0.0);
+        let depth1 = Player { depth: 1, ..depth0 };
+        let exact = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+        let (mut same, mut ending) = (0, 0);
+        for g in 0..10 {
+            // The positions of a depth-0 jitter game, each chosen from by
+            // both players with the same random numbers.
+            let record = crate::selfplay::play_game(depth0, depth0, g);
+            let mut game = Game::default();
+            for (ply, &m) in record.moves.iter().enumerate() {
+                let pos = game.position();
+                let candidates = candidates(pos);
+                let seed = g * 10_000 + ply as u64;
+                let (mut rng0, mut rng1) = (StdRng::seed_from_u64(seed), StdRng::seed_from_u64(seed));
+                let chosen0 = select(depth0, pos.turn(), &candidates, &mut rng0);
+                let chosen1 = choose(depth1, &game, &candidates, &mut rng1);
+
+                // Each move's outcome is the result if it ends the game,
+                // else the model's prediction for the position after it.
+                let outcomes = Search::new(&model, &game).root_outcomes(&game, 1);
+                let mut ends = false;
+                for (c, outcome) in candidates.iter().zip(&outcomes) {
+                    if ends_search(&game, c.mv) {
+                        ends = true;
+                        assert!(exact.contains(outcome), "{outcome:?}");
+                    } else {
+                        let mut predicted = [0.0; 3];
+                        model.predict(&c.position, &mut predicted);
+                        assert_eq!(*outcome, predicted);
+                    }
+                }
+                if ends {
+                    ending += 1;
+                } else {
+                    // The same move, after the same random draws.
+                    assert_eq!(chosen0, chosen1, "game {g} ply {ply}");
+                    assert_eq!(rng0.random::<u64>(), rng1.random::<u64>(), "game {g} ply {ply}");
+                    same += 1;
+                }
+                game.play(m);
+            }
+        }
+        assert!(same > 1000 && ending > 10, "{same} positions without a game-ending move, {ending} with");
+    }
 
     #[test]
     fn softmax_follows_temperature() {

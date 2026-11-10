@@ -12,7 +12,8 @@ use std::fmt::Write as _;
 use std::io;
 use std::path::Path;
 
-use crate::textfmt::Tokens;
+use crate::state::{Reader, Writer};
+use crate::textfmt::{Tokens, invalid};
 
 #[derive(Clone, Debug)]
 pub struct Cnbp {
@@ -67,8 +68,78 @@ impl Cnbp {
         self.class_num
     }
 
+    pub fn alpha(&self) -> f64 {
+        self.alpha
+    }
+
+    pub fn use_probs(&self) -> bool {
+        self.use_probs
+    }
+
     fn idx(&self, class: usize, cat: usize, val: u8) -> usize {
         class * self.total_cat_vals + self.cat_offsets[cat] + val as usize
+    }
+
+    /// A model with these counts (see `class_counts` and `cat_counts`).
+    pub(crate) fn with_counts(
+        class_num: usize,
+        categories: &[u8],
+        alpha: f64,
+        use_probs: bool,
+        class_totals: Vec<f64>,
+        class_cat_totals: Vec<f64>,
+    ) -> io::Result<Self> {
+        let mut cnbp = Cnbp::new(class_num, categories, alpha, use_probs);
+        if class_totals.len() != cnbp.class_totals.len() || class_cat_totals.len() != cnbp.class_cat_totals.len() {
+            return Err(invalid("CNBP counts of the wrong shape"));
+        }
+        cnbp.class_totals = class_totals;
+        cnbp.class_cat_totals = class_cat_totals;
+        cnbp.fresh = false;
+        cnbp.refresh();
+        Ok(cnbp)
+    }
+
+    pub(crate) fn categories(&self) -> &[u8] {
+        &self.categories
+    }
+
+    /// Each class's count (weight trained on).
+    pub(crate) fn class_counts(&self) -> &[f64] {
+        &self.class_totals
+    }
+
+    /// `class_num` blocks of every feature's value counts, feature `cat`'s
+    /// values starting at `cat_offset(cat)` within a block.
+    pub(crate) fn cat_counts(&self) -> &[f64] {
+        &self.class_cat_totals
+    }
+
+    pub(crate) fn cat_offset(&self, cat: usize) -> usize {
+        self.cat_offsets[cat]
+    }
+
+    pub(crate) fn total_cat_vals(&self) -> usize {
+        self.total_cat_vals
+    }
+
+    /// The cached P(class) and its log (`use_probs`, after `refresh`).
+    pub(crate) fn class_prob(&self, class: usize) -> f64 {
+        self.class_probs[class]
+    }
+
+    pub(crate) fn class_log(&self, class: usize) -> f64 {
+        self.class_logs[class]
+    }
+
+    /// The cached P(value | class) of feature `cat` and its log (`use_probs`,
+    /// after `refresh`).
+    pub(crate) fn cat_prob(&self, class: usize, cat: usize, val: u8) -> f64 {
+        self.class_cat_probs[self.idx(class, cat, val)]
+    }
+
+    pub(crate) fn cat_log(&self, class: usize, cat: usize, val: u8) -> f64 {
+        self.class_cat_logs[self.idx(class, cat, val)]
     }
 
     /// Adds one data point. `label` must sum to 1.
@@ -259,6 +330,40 @@ impl Cnbp {
 
     pub fn load(path: &Path, use_probs: bool) -> io::Result<Self> {
         Self::from_text(&std::fs::read_to_string(path)?, use_probs)
+    }
+
+    /// Writes the whole model, unrounded, for a tree's state file (see
+    /// `state`).
+    pub(crate) fn write_state(&self, w: &mut Writer) {
+        w.usize(self.class_num);
+        w.f64(self.alpha);
+        w.bool(self.use_probs);
+        w.u8s(&self.categories);
+        w.f64s(&self.class_totals);
+        w.f64s(&self.class_cat_totals);
+        w.bool(self.fresh);
+    }
+
+    /// Reads a model written by `write_state`. Its cached probabilities are
+    /// recomputed from the counts if they were fresh; stale ones are never
+    /// read (`predict` panics on them).
+    pub(crate) fn read_state(r: &mut Reader) -> io::Result<Self> {
+        let class_num = r.usize()?;
+        let alpha = r.f64()?;
+        let use_probs = r.bool()?;
+        let categories = r.u8s()?;
+        let mut cnbp = Cnbp::new(class_num, &categories, alpha, use_probs);
+        let (totals, cat_totals) = (r.f64s()?, r.f64s()?);
+        if totals.len() != cnbp.class_totals.len() || cat_totals.len() != cnbp.class_cat_totals.len() {
+            return Err(invalid("CNBP state of the wrong shape"));
+        }
+        cnbp.class_totals = totals;
+        cnbp.class_cat_totals = cat_totals;
+        cnbp.fresh = false;
+        if r.bool()? {
+            cnbp.refresh();
+        }
+        Ok(cnbp)
     }
 }
 

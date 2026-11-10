@@ -18,12 +18,15 @@ use chessai::cnbp::Cnbp;
 use chessai::logreg::Logreg;
 use chessai::moe::Moe;
 use chessai::encoding::{self, CATEGORIES, Encoded};
+use chessai::fm::Fm;
+use chessai::ht::{Criterion, Ht, HtParams};
 use chessai::game::Game;
 use chessai::games;
 use chessai::game::GameResult;
 use chessai::player::{self, Player, Policy};
 use chessai::search::Value;
 use chessai::selfplay;
+use chessai::tan::{self, Tan, TanOptions};
 use chessai::tournament;
 
 #[derive(Parser)]
@@ -60,7 +63,8 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
         /// Search depth of player A in plies (0: score the moves directly;
-        /// 1 or more: alpha-beta search, needs a log-odds policy).
+        /// 1 or more: alpha-beta search, needs a log-odds policy or an
+        /// expected-score one: wld-score and its jittered versions).
         #[arg(long, default_value_t = 0)]
         a_depth: u32,
         #[arg(long, default_value_t = 0)]
@@ -87,7 +91,9 @@ enum Command {
     /// head-to-head table (head_to_head.md/.csv) and the ratings after each
     /// tournament (elo_history.csv) are rewritten. Running again with the
     /// same OUT continues where it stopped, or only rewrites the tables;
-    /// players added to PLAYERS first play the earlier tournaments' games.
+    /// players added to PLAYERS first play the earlier tournaments' games
+    /// (unless --no-catch-up). Every player with games in OUT/games.csv must
+    /// be in PLAYERS or in --retired.
     Tournament {
         players: PathBuf,
         out: PathBuf,
@@ -109,12 +115,35 @@ enum Command {
         #[arg(long, default_value_t = 8.0)]
         k: f64,
         /// Virtual draws per pairing in the maximum-likelihood ratings, so
-        /// perfect scores give finite ratings.
+        /// perfect scores give finite ratings. 0 for pure maximum likelihood:
+        /// players whose rating does not exist (a perfect or a zero score, or
+        /// no results linking them both ways to the anchor) are listed as
+        /// unrated.
         #[arg(long, default_value_t = 1.0)]
         prior_draws: f64,
         /// The player rated 0 in the tables (default: the field's mean).
         #[arg(long)]
         anchor: Option<String>,
+        /// Don't play the earlier tournaments' games for the players added
+        /// to PLAYERS since: each tournament is a round-robin of the players
+        /// listed at the time.
+        #[arg(long)]
+        no_catch_up: bool,
+        /// Retired players, listed as in PLAYERS: they play no more games,
+        /// but their games in OUT/games.csv stay in the ratings, where they
+        /// are marked as retired. Their models are not loaded.
+        #[arg(long)]
+        retired: Option<PathBuf>,
+        /// Also write every game played, to train on: the game of tournament
+        /// T (from 0, as in games.csv) between WHITE and BLACK (the players'
+        /// names) goes to DIR/round{T}/{WHITE}~{BLACK}/, in the self-play
+        /// round format (its positions in white_wins.games, black_wins.games
+        /// or draws.games by result, its moves in human.games). `train DIR`
+        /// trains on whole tournaments, one per round; for a chosen subset,
+        /// make round directories of links to the chosen games' directories.
+        /// Games already in OUT/games.csv are not replayed, so not saved.
+        #[arg(long)]
+        save_games: Option<PathBuf>,
     },
 
     /// Train a model by self-play: each round plays games in parallel, writes
@@ -149,7 +178,10 @@ enum Command {
         #[arg(long)]
         no_games: bool,
         /// Search depth for choosing moves (0: score the moves directly; 1 or
-        /// more: alpha-beta search, needs a log-odds policy).
+        /// more: alpha-beta search, needs a log-odds policy or an
+        /// expected-score one: wld-score and its jittered versions, which
+        /// score each move by the expected score at the end of its principal
+        /// variation).
         #[arg(long, default_value_t = 0)]
         depth: u32,
         /// Label each position with the outcome a search this deep by the
@@ -172,10 +204,24 @@ enum Command {
         /// (1: all rounds alike).
         #[arg(long, default_value_t = 1.0)]
         round_forget: f64,
+        /// After round N's training, also divide the counts or sums by
+        /// ((N+2)/(N+1))^this, so the games of round s weigh ((s+1)/(N+1))^this
+        /// at round N: rounds fade with the run's age, with no time scale to
+        /// choose. A start model's games count as the round before the first
+        /// (0: off).
+        #[arg(long, default_value_t = 0.0)]
+        age_forget: f64,
         /// Continue the run in OUT from its last saved model, as if it had
-        /// not stopped (CNBP and LR only; give the same options and seed).
+        /// not stopped (give the same options and seed; --rounds counts from
+        /// the run's start). Trees resume from the state files of their last
+        /// two versions (see --keep-states); a mixture from round 2 on.
         #[arg(long)]
         resume: bool,
+        /// Trees also save their whole training state beside each model, as
+        /// {model}N.state, for --resume (see `state`); keep the last this
+        /// many (0: all). --resume needs the last 2.
+        #[arg(long, default_value_t = 2)]
+        keep_states: u64,
         /// Start from this saved model instead of an untrained one: a CNBP
         /// file for cnbp, an LR file for lr and moe (as every expert), a file
         /// of the --leaf kind for bdt and bdd (as the root leaf).
@@ -185,11 +231,15 @@ enum Command {
         params: ModelArgs,
     },
 
-    /// Train a model on existing round directories (from self-play, a ladder
-    /// or an arena) instead of its own games. Round N's positions are
-    /// shuffled and trained on, then the model is saved as {model}{N+1}.model.
+    /// Train a model on existing round directories (from self-play, a ladder,
+    /// an arena or `tournament --save-games`) instead of its own games. Round
+    /// N's positions are shuffled and trained on, then the model is saved as
+    /// {model}{N+1}.model (a tree's last also as {model}{N+1}.state, for
+    /// --start).
     Train {
-        /// Directory containing round0/, round1/, ...
+        /// Directory containing round0/, round1/, ..., each holding positions
+        /// in the round format or game directories (`tournament
+        /// --save-games`), whose positions are trained on together.
         games: PathBuf,
         /// Directory for the saved models.
         out: PathBuf,
@@ -201,6 +251,16 @@ enum Command {
         /// Seed for shuffling each round's positions.
         #[arg(long, default_value_t = 0)]
         seed: u64,
+        /// Train this saved model further instead of an untrained one: a
+        /// model file of the --model kind for cnbp, lr, fm and moe (forgotten
+        /// by --init-forget), the state file saved beside a tree's model for
+        /// bdt, bdd and ht ({model}N.state, by self-play or train; give the
+        /// options it was trained with), for tan its state file or a model
+        /// file with its state file beside it (forgotten by --init-forget). --rounds still counts GAMES' rounds
+        /// from round0, and the model after round N is still saved as
+        /// {model}{N+1}.model, whatever the start model's number.
+        #[arg(long)]
+        start: Option<PathBuf>,
         #[command(flatten)]
         params: ModelArgs,
     },
@@ -263,12 +323,28 @@ enum Command {
         leaf: Option<usize>,
     },
 
-    /// Write each leaf of a delegation model (`bdt:PATH` or `bdd:PATH`) to
+    /// Write each leaf of a tree (`bdt:PATH`, `bdd:PATH` or `ht:PATH`) to
     /// OUT/leaf{N}.model, N being its node index, as a standalone CNBP or LR
     /// model (load it as `cnbp:` or `lr:`).
     Leaves {
         model: String,
         out: PathBuf,
+        #[arg(long)]
+        use_probs: bool,
+    },
+
+    /// How well a tree's routers route (`bdt:PATH`), on the decisive positions
+    /// of labelled games (a round directory). For each delegator and each
+    /// child it sends positions to: the winner log-loss of every child's
+    /// subtree on those positions, with the tree's log-odds recalibrated by
+    /// one scale and offset fitted here. A row whose smallest loss is not its
+    /// own child's sends positions to a child that predicts them worse than a
+    /// sibling; the regret is what sending each row to its best child would
+    /// save. Then the pairs of leaves whose log-odds differ least over all the
+    /// positions (near-duplicates).
+    Routing {
+        model: String,
+        games: PathBuf,
         #[arg(long)]
         use_probs: bool,
     },
@@ -358,6 +434,17 @@ enum ModelKind {
     /// Mixture of logistic-regression experts with a logistic-regression
     /// gate; load it as `moe:PATH`.
     Moe,
+    /// Factorization machine: logistic regression plus learned pairwise
+    /// interactions of the features; load it as `fm:PATH`.
+    Fm,
+    /// Hoeffding tree: one feature-value test per internal node, CNBP or LR
+    /// leaves (--leaf), split when the Hoeffding bound allows; load it as
+    /// `ht:PATH`.
+    Ht,
+    /// Tree-augmented naive Bayes: CNBP whose features each also condition
+    /// on a parent feature, the Chow-Liu tree of their pair counts (see
+    /// `tan`); load it as `tan:PATH`. It trains on from its state file.
+    Tan,
 }
 
 #[derive(clap::Args, Clone, Debug)]
@@ -365,6 +452,19 @@ struct ModelArgs {
     /// Laplace smoothing.
     #[arg(long, default_value_t = 1.0)]
     alpha: f64,
+    /// TAN: weight m of naive Bayes's estimate in each feature's
+    /// m-estimate given its parent's value (in games with --tan-games).
+    #[arg(long, default_value_t = tan::DEFAULT_M)]
+    tan_m: f64,
+    /// TAN: m = λ N instead of --tan-m, N the positions counted so far, so
+    /// that a parent value's own evidence keeps its weight as the counts
+    /// grow.
+    #[arg(long)]
+    tan_lambda: Option<f64>,
+    /// TAN: count the pairs in games (each game once) and keep only the
+    /// significant edges (an experiment; see `tan`).
+    #[arg(long)]
+    tan_games: bool,
     /// Predict from cached probabilities (faster) instead of raw counts.
     #[arg(long)]
     use_probs: bool,
@@ -385,12 +485,22 @@ struct ModelArgs {
     /// from switching sharply between experts.
     #[arg(long, default_value_t = 0.0)]
     moe_gate_l2: f64,
+    /// Factorization machine: length of each feature value's interaction
+    /// vector (per class).
+    #[arg(long, default_value_t = 8)]
+    fm_factors: usize,
+    /// Factorization machine: the vectors start uniform in [-scale, scale].
+    #[arg(long, default_value_t = 0.01)]
+    fm_scale: f64,
+    /// Factorization machine: seed of the vectors' starting values.
+    #[arg(long, default_value_t = 1)]
+    fm_seed: u64,
     /// A model started from a saved one (--init): divide its counts (CNBP)
     /// or AdaGrad sums (LR, every expert of a mixture) by this, so it adapts
     /// faster.
     #[arg(long, default_value_t = 1.0)]
     init_forget: f64,
-    /// BDT and BDD: the leaves' classifier.
+    /// BDT, BDD and Hoeffding tree: the leaves' classifier.
     #[arg(long, value_enum, default_value_t = NodeKind::Cnbp)]
     leaf: NodeKind,
     /// BDT and BDD: the delegators' routers' classifier.
@@ -447,9 +557,107 @@ struct ModelArgs {
     /// --split-threshold examples (inf: compare and log only).
     #[arg(long)]
     route_switch: Option<f64>,
+    /// BDT and BDD with --route-switch: the error routers' classifier
+    /// (default: --router's).
+    #[arg(long, value_enum)]
+    error_router: Option<NodeKind>,
+    /// BDT: revisable structure. Every delegator keeps a shadow, the leaf it
+    /// was before it split, trained since on every example through it. After
+    /// every --split-threshold examples through the delegator, its branch is
+    /// merged back into the shadow (as a leaf, which may split again) if the
+    /// branch's mean gain over the shadow by --trial-error, less
+    /// --seam-weight times its seams, is below minus this many standard
+    /// errors (inf: compare and log only). Seams are measured on self-play's
+    /// games.
+    #[arg(long)]
+    revise: Option<f64>,
+    /// BDT with --revise: the weight of a branch's seams per position through
+    /// its delegator, a seam being the difference in white's log-odds (nats)
+    /// of a position between the leaf it is in and the leaf of the position
+    /// before it, for moves between two of the branch's leaves.
+    #[arg(long, default_value_t = 0.0)]
+    seam_weight: f64,
+    /// BDT: reset a leaf to a copy of its delegator's shadow (see --revise)
+    /// when, over --split-threshold examples routed to it, its mean gain over
+    /// the shadow by --trial-error is below minus this many standard errors
+    /// (inf: compare and log only).
+    #[arg(long)]
+    reset_leaves: Option<f64>,
+    /// Hoeffding tree: a split is wrong with probability at most this.
+    #[arg(long, default_value_t = HtParams::default().delta)]
+    ht_delta: f64,
+    /// Hoeffding tree: split on the best test once the Hoeffding bound
+    /// (bits) is below this, however close the runner-up.
+    #[arg(long, default_value_t = HtParams::default().tie)]
+    ht_tie: f64,
+    /// Hoeffding tree: positions a leaf sees between split checks.
+    #[arg(long, default_value_t = HtParams::default().grace)]
+    ht_grace: f64,
+    /// Hoeffding tree: positions the bound counts as one independent sample
+    /// (the positions of a game share its result).
+    #[arg(long, default_value_t = HtParams::default().positions_per_sample)]
+    ht_positions_per_sample: f64,
+    /// Hoeffding tree: most leaves (default: no limit).
+    #[arg(long)]
+    ht_max_leaves: Option<usize>,
+    /// Hoeffding tree: split on a tie only if the best test's gain is above
+    /// the bound too (beats not splitting with confidence 1 - delta).
+    #[arg(long)]
+    ht_pre_prune: bool,
+    /// Hoeffding tree: how a leaf chooses its test and decides to split:
+    /// information gain about the result by the Hoeffding bound, or (with
+    /// --leaf lr) the gain of refitting the leaf's weights on each side of
+    /// the test, chosen on half of the games and checked on the other half.
+    #[arg(long, value_enum, default_value_t = Criterion::InfoGain)]
+    ht_criterion: Criterion,
+    /// Hoeffding tree, model gain: split when the best test gains more than
+    /// this many nats per position on the held-out half of the games.
+    #[arg(long, default_value_t = HtParams::default().gain_threshold)]
+    ht_gain_threshold: f64,
+    /// Hoeffding tree, model gain: the L2 penalty of the Newton steps that
+    /// estimate the gain (a position adds p(1 - p) per class to a weight's
+    /// second derivative).
+    #[arg(long, default_value_t = HtParams::default().lambda)]
+    ht_lambda: f64,
+    /// Hoeffding tree, model gain: the fraction of games whose positions the
+    /// split statistics keep, chosen by a hash of the game.
+    #[arg(long, default_value_t = HtParams::default().sample)]
+    ht_sample: f64,
 }
 
 impl ModelArgs {
+    fn tan_options(&self) -> TanOptions {
+        TanOptions { m: self.tan_lambda.unwrap_or(self.tan_m), relative: self.tan_lambda.is_some(), games: self.tan_games }
+    }
+
+    /// A new factorization machine with these options.
+    fn fresh_fm(&self) -> Fm {
+        Fm::new(3, &CATEGORIES, self.fm_factors, self.lr_rate, self.fm_scale, self.fm_seed)
+    }
+
+    /// A new Hoeffding tree of one leaf, `root`, with these options.
+    fn ht(&self, root: NodeModel) -> Result<Ht> {
+        if self.ht_criterion == Criterion::ModelGain && !matches!(root, NodeModel::Lr(_)) {
+            bail!("--ht-criterion model-gain needs --leaf lr");
+        }
+        Ok(Ht::new(root, &CATEGORIES, self.ht_params()))
+    }
+
+    fn ht_params(&self) -> HtParams {
+        HtParams {
+            delta: self.ht_delta,
+            tie: self.ht_tie,
+            grace: self.ht_grace,
+            positions_per_sample: self.ht_positions_per_sample,
+            max_leaves: self.ht_max_leaves.unwrap_or(usize::MAX),
+            pre_prune: self.ht_pre_prune,
+            criterion: self.ht_criterion,
+            gain_threshold: self.ht_gain_threshold,
+            lambda: self.ht_lambda,
+            sample: self.ht_sample,
+        }
+    }
+
     fn delegation_params(&self) -> DelegationParams {
         DelegationParams {
             class_num: 3,
@@ -471,6 +679,10 @@ impl ModelArgs {
             split_trial: self.split_trial,
             trial_error: self.trial_error,
             route_switch: self.route_switch,
+            error_router: self.error_router.unwrap_or(self.router),
+            revise: self.revise,
+            seam_weight: self.seam_weight,
+            reset_leaves: self.reset_leaves,
         }
     }
 }
@@ -484,6 +696,9 @@ enum LoadedModel {
     Cnbp(Cnbp),
     Lr(Logreg),
     Moe(Moe),
+    Fm(Fm),
+    Ht(Ht),
+    Tan(Tan),
     Bdt(Bdt),
     Bdd(Bdd),
     HashMix(HashMix),
@@ -657,6 +872,9 @@ impl LoadedModel {
             "cnbp" => LoadedModel::Cnbp(Cnbp::load(path, use_probs).with_context(|| format!("loading {path:?}"))?),
             "lr" => LoadedModel::Lr(Logreg::load(path).with_context(|| format!("loading {path:?}"))?),
             "moe" => LoadedModel::Moe(Moe::load(path).with_context(|| format!("loading {path:?}"))?),
+            "fm" => LoadedModel::Fm(Fm::load(path).with_context(|| format!("loading {path:?}"))?),
+            "ht" => LoadedModel::Ht(Ht::load(path, use_probs).with_context(|| format!("loading {path:?}"))?),
+            "tan" => LoadedModel::Tan(Tan::load(path, use_probs).with_context(|| format!("loading {path:?}"))?),
             "bdt" => LoadedModel::Bdt(Bdt::load(path, use_probs).with_context(|| format!("loading {path:?}"))?),
             "bdd" => LoadedModel::Bdd(Bdd::load(path, use_probs).with_context(|| format!("loading {path:?}"))?),
             "hashmix" => LoadedModel::HashMix(HashMix(
@@ -681,7 +899,7 @@ impl LoadedModel {
                 let inner = LoadedModel::load(inner, use_probs)?;
                 LoadedModel::Calibrated(Calibrated::fit(inner, Path::new(games), true, Some(tau))?)
             }
-            _ => bail!("unknown model kind {kind:?}, expected cnbp, lr, moe, bdt, bdd, cal, leafcal or blend"),
+            _ => bail!("unknown model kind {kind:?}, expected cnbp, lr, moe, fm, ht, tan, bdt, bdd, cal, leafcal or blend"),
         })
     }
 
@@ -691,6 +909,7 @@ impl LoadedModel {
         match self {
             LoadedModel::Bdt(m) => m.leaf(data),
             LoadedModel::Bdd(m) => m.leaf(data),
+            LoadedModel::Ht(m) => m.leaf(data),
             _ => 0,
         }
     }
@@ -701,6 +920,11 @@ impl LoadedModel {
         match self {
             LoadedModel::Bdt(m) => m.leaf_weights(data, tau, 1e-3, out),
             LoadedModel::Bdd(m) => m.leaf_weights(data, tau, 1e-3, out),
+            // Its tests are hard: all weight on the position's leaf.
+            LoadedModel::Ht(m) => {
+                out.clear();
+                out.push((m.leaf(data), 1.0));
+            }
             _ => {
                 out.clear();
                 out.push((0, 1.0));
@@ -713,6 +937,7 @@ impl LoadedModel {
         match self {
             LoadedModel::Bdt(m) => m.node_predict_log(leaf, data, out),
             LoadedModel::Bdd(m) => m.node_predict_log(leaf, data, out),
+            LoadedModel::Ht(m) => m.node_predict_log(leaf, data, out),
             _ => self.classifier().predict_log(data, out),
         }
     }
@@ -722,6 +947,9 @@ impl LoadedModel {
             LoadedModel::Cnbp(m) => m,
             LoadedModel::Lr(m) => m,
             LoadedModel::Moe(m) => m,
+            LoadedModel::Fm(m) => m,
+            LoadedModel::Ht(m) => m,
+            LoadedModel::Tan(m) => m,
             LoadedModel::Bdt(m) => m,
             LoadedModel::Bdd(m) => m,
             LoadedModel::HashMix(m) => m,
@@ -730,11 +958,16 @@ impl LoadedModel {
         }
     }
 
-    fn player(&self, policy: Policy, temperature: f64) -> Player<'_> {
-        let model = self.classifier();
-        // A random player chooses moves at random whatever the policy.
-        let policy = if matches!(self, LoadedModel::Uniform(_)) { Policy::Rand } else { policy };
-        Player::new(model, policy, temperature)
+    /// The model's player at a search depth. Without search, a random model
+    /// (`rand`) chooses moves at random whatever the policy. With search it
+    /// plays like any other model, valuing every position the same unless
+    /// the game is over: at depth 1 it takes a mate in one, at depth 2 it
+    /// also avoids allowing one.
+    fn player(&self, policy: Policy, temperature: f64, depth: u32) -> Player<'_> {
+        let random = matches!(self, LoadedModel::Uniform(_)) && depth == 0;
+        let mut player = Player::new(self.classifier(), if random { Policy::Rand } else { policy }, temperature);
+        player.depth = depth;
+        player
     }
 }
 
@@ -752,7 +985,8 @@ fn arena(
     (a_calibration, b_calibration): (Option<String>, Option<String>),
 ) -> Result<()> {
     let (model_a, model_b) = (LoadedModel::load(a, use_probs)?, LoadedModel::load(b, use_probs)?);
-    let (mut player_a, mut player_b) = (model_a.player(a_policy, temperature), model_b.player(b_policy, temperature));
+    let (mut player_a, mut player_b) =
+        (model_a.player(a_policy, temperature, a_depth), model_b.player(b_policy, temperature, b_depth));
     for (player, depth, value, calibration) in
         [(&mut player_a, a_depth, a_value, a_calibration), (&mut player_b, b_depth, b_value, b_calibration)]
     {
@@ -805,6 +1039,7 @@ fn tournament(
     temperature: f64,
     use_probs: bool,
     anchor: Option<String>,
+    retired: Option<&Path>,
     mut opts: tournament::Options,
 ) -> Result<()> {
     let text = std::fs::read_to_string(players).with_context(|| format!("reading {players:?}"))?;
@@ -829,11 +1064,23 @@ fn tournament(
     if entries.len() < 2 {
         bail!("a tournament needs at least two players");
     }
+    let mut retired_names: Vec<String> = Vec::new();
+    if let Some(path) = retired {
+        let text = std::fs::read_to_string(path).with_context(|| format!("reading {path:?}"))?;
+        for line in text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')) {
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            let [name, depth, _] = fields[..] else { bail!("{path:?}: expected NAME DEPTH SPEC, got {line:?}") };
+            depth.parse::<u32>().with_context(|| format!("depth in {line:?}"))?;
+            if entries.iter().any(|&(n, _, _)| n == name) || retired_names.iter().any(|n| n == name) {
+                bail!("player {name} is listed twice (or both listed and retired)");
+            }
+            retired_names.push(name.to_string());
+        }
+    }
     let models = specs.iter().map(|s| LoadedModel::load(s, use_probs)).collect::<Result<Vec<_>>>()?;
     let mut entrants = Vec::new();
     for &(name, depth, model) in &entries {
-        let mut player = models[model].player(policy, temperature);
-        player.depth = depth;
+        let player = models[model].player(policy, temperature, depth);
         check_depth(&player)?;
         entrants.push(tournament::Entrant { name: name.to_string(), player });
     }
@@ -844,15 +1091,27 @@ fn tournament(
     std::fs::create_dir_all(out)?;
     std::fs::write(out.join("players.txt"), &text)?;
     let n = entrants.len();
-    println!("tournament: {n} players, {} games per tournament, seed {}", n * (n - 1), opts.seed);
-    tournament::run(&entrants, out, &opts)?;
+    let also = if retired_names.is_empty() { String::new() } else { format!(" ({} retired)", retired_names.len()) };
+    println!("tournament: {n} players{also}, {} games per tournament, seed {}", n * (n - 1), opts.seed);
+    tournament::run(&entrants, &retired_names, out, &opts)?;
     Ok(())
 }
 
-/// Search values moves in log-odds, so it needs a log-odds policy.
+/// Search values moves in log-odds, which the log-odds policies use, or by
+/// the outcome at the end of their principal variation, which the
+/// expected-score ones use.
 fn check_depth(player: &Player) -> Result<()> {
-    if player.depth > 0 && !matches!(player.policy, Policy::LogOdds | Policy::LogOddsSoftmax | Policy::Rand) {
-        bail!("search (depth > 0) needs the log-odds or log-odds-softmax policy, not {:?}", player.policy);
+    let searchable = matches!(
+        player.policy,
+        Policy::LogOdds
+            | Policy::LogOddsSoftmax
+            | Policy::WldScore
+            | Policy::WldScoreJitter10
+            | Policy::WldScoreJitter20
+            | Policy::Rand
+    );
+    if player.depth > 0 && !searchable {
+        bail!("search (depth > 0) needs a log-odds or expected-score policy, not {:?}", player.policy);
     }
     if player.depth == 0 && player.value != Value::LogOdds {
         bail!("the {:?} value is only used by search (depth > 0)", player.value);
@@ -904,6 +1163,9 @@ fn main() -> Result<()> {
             k,
             prior_draws,
             anchor,
+            no_catch_up,
+            retired,
+            save_games,
         } => tournament(
             &players,
             &out,
@@ -911,7 +1173,8 @@ fn main() -> Result<()> {
             temperature,
             use_probs,
             anchor,
-            tournament::Options { tournaments, seed, k, prior_draws, anchor: None },
+            retired.as_deref(),
+            tournament::Options { tournaments, seed, k, prior_draws, anchor: None, catch_up: !no_catch_up, save_games },
         ),
         Command::SelfPlay {
             out,
@@ -929,10 +1192,15 @@ fn main() -> Result<()> {
             label_result,
             label_model,
             round_forget,
+            age_forget,
             resume,
+            keep_states,
             init,
             params,
         } => {
+            if keep_states == 1 {
+                bail!("--keep-states 1 would delete the state of the version before the last, which --resume needs");
+            }
             if let Some(threads) = threads {
                 rayon::ThreadPoolBuilder::new().num_threads(threads).build_global()?;
             }
@@ -952,6 +1220,8 @@ fn main() -> Result<()> {
                 label_result,
                 label_model: label_model.map(|spec| LoadedModel::load(&spec, params.use_probs)).transpose()?,
                 round_forget,
+                age_forget,
+                keep_states,
             };
             let fresh = || Cnbp::new(3, &CATEGORIES, params.alpha, params.use_probs);
             let initial = || -> Result<Cnbp> {
@@ -1002,7 +1272,85 @@ fn main() -> Result<()> {
                     }
                     run.run("moe", Moe::load(&saved(start))?, Moe::load(&saved(start - 1))?, start)
                 }
-                _ if resume => bail!("--resume works only for cnbp, lr and moe, whose models hold all their state"),
+                ModelKind::Fm if resume => {
+                    let saved = |n: u64| run.out.join(format!("fm{n}.model"));
+                    let start = (1..).take_while(|&n| saved(n).exists()).last().context("no saved models to resume")?;
+                    let fresh = || params.fresh_fm();
+                    let load = |n: u64| if n == 0 { Ok(fresh()) } else { Fm::load(&saved(n)) };
+                    run.run("fm", load(start)?, load(start - 1)?, start)
+                }
+                // TAN's model files lack its pair counts: it resumes from its
+                // state files, like the trees.
+                ModelKind::Tan if resume => {
+                    let saved = |n: u64| run.out.join(format!("tan{n}.model"));
+                    let start = (1..).take_while(|&n| saved(n).exists()).last().context("no saved models to resume")?;
+                    let load = |n: u64| -> Result<Tan> {
+                        let path = run.out.join(format!("tan{n}.state"));
+                        if !path.exists() {
+                            bail!("{path:?} is missing: a TAN resumes from the states of its last two versions");
+                        }
+                        Tan::load_state(&path, params.alpha, params.tan_options(), params.use_probs)
+                            .with_context(|| format!("loading the state of tan{n}"))
+                    };
+                    run.run("tan", load(start)?, load(start - 1)?, start)
+                }
+                ModelKind::Tan => {
+                    if init.is_some() {
+                        bail!("a TAN starts from scratch (no --init)");
+                    }
+                    let model = Tan::new(3, &CATEGORIES, params.alpha, params.tan_options(), params.use_probs);
+                    run.run("tan", model.clone(), model, 0)
+                }
+                // Trees resume from their state files, which the model files
+                // lack (see `state`); version 0's is saved at the start.
+                ModelKind::Bdt | ModelKind::Bdd | ModelKind::Ht if resume => {
+                    let name = format!("{model:?}").to_lowercase();
+                    let saved = |n: u64| run.out.join(format!("{name}{n}.model"));
+                    let start = (1..).take_while(|&n| saved(n).exists()).last().context("no saved models to resume")?;
+                    let state = |n: u64| -> Result<PathBuf> {
+                        let path = run.out.join(format!("{name}{n}.state"));
+                        if !path.exists() {
+                            bail!("{path:?} is missing: a tree resumes from the states of its last two versions");
+                        }
+                        Ok(path)
+                    };
+                    let context = |n: u64| format!("loading the state of {name}{n}");
+                    match model {
+                        ModelKind::Bdt => {
+                            let load = |n: u64| -> Result<Bdt> {
+                                Bdt::load_state(&state(n)?, &CATEGORIES, params.delegation_params())
+                                    .with_context(|| context(n))
+                            };
+                            run.run("bdt", load(start)?, load(start - 1)?, start)
+                        }
+                        ModelKind::Bdd => {
+                            let load = |n: u64| -> Result<Bdd> {
+                                Bdd::load_state(&state(n)?, &CATEGORIES, params.delegation_params())
+                                    .with_context(|| context(n))
+                            };
+                            run.run("bdd", load(start)?, load(start - 1)?, start)
+                        }
+                        _ => {
+                            let root = tree_root()?;
+                            let load = |n: u64| -> Result<Ht> {
+                                Ht::load_state(&state(n)?, &root, &CATEGORIES, params.ht_params())
+                                    .with_context(|| context(n))
+                            };
+                            run.run("ht", load(start)?, load(start - 1)?, start)
+                        }
+                    }
+                }
+                ModelKind::Fm => {
+                    if init.is_some() {
+                        bail!("a factorization machine starts from scratch (no --init)");
+                    }
+                    let model = params.fresh_fm();
+                    run.run("fm", model.clone(), model, 0)
+                }
+                ModelKind::Ht => {
+                    let model = params.ht(tree_root()?)?;
+                    run.run("ht", model.clone(), model, 0)
+                }
                 ModelKind::Bdt => {
                     let model = Bdt::starting_from(tree_root()?, &CATEGORIES, params.delegation_params());
                     run.run("bdt", model.clone(), model, 0)
@@ -1050,33 +1398,101 @@ fn main() -> Result<()> {
                 }
             }
         }
-        Command::Train { games, out, model, rounds, seed, params } => match model {
-            ModelKind::Cnbp => {
-                train_rounds(&games, &out, rounds, seed, "cnbp", Cnbp::new(3, &CATEGORIES, params.alpha, params.use_probs))
+        Command::Train { games, out, model, rounds, seed, start, params } => {
+            // A flat model's --start: its model file, forgotten by --init-forget.
+            fn flat<M: Classifier>(
+                start: Option<&Path>,
+                forget: f64,
+                load: impl FnOnce(&Path) -> std::io::Result<M>,
+            ) -> Result<Option<M>> {
+                let Some(path) = start else { return Ok(None) };
+                let mut model = load(path).with_context(|| format!("loading {path:?}"))?;
+                if forget != 1.0 {
+                    model.forget(forget);
+                }
+                Ok(Some(model))
             }
-            ModelKind::Bdt => train_rounds(&games, &out, rounds, seed, "bdt", Bdt::new(&CATEGORIES, params.delegation_params())),
-            ModelKind::Bdd => train_rounds(&games, &out, rounds, seed, "bdd", Bdd::new(&CATEGORIES, params.delegation_params())),
-            ModelKind::Lr => train_rounds(&games, &out, rounds, seed, "lr", Logreg::new(3, &CATEGORIES, params.lr_rate)),
-            ModelKind::Moe => train_rounds(
-                &games,
-                &out,
-                rounds,
-                seed,
-                "moe",
-                Moe::new(&CATEGORIES, params.moe_experts, params.lr_rate, params.moe_gate_scale, params.moe_seed)
-                    .with_gate_l2(params.moe_gate_l2),
-            ),
-        },
+            let (forget, start) = (params.init_forget, start.as_deref());
+            let tree_context = || format!("loading the state {:?}", start.unwrap());
+            if start.is_some() && forget != 1.0 && matches!(model, ModelKind::Bdt | ModelKind::Bdd | ModelKind::Ht) {
+                bail!("--init-forget applies to the --start of cnbp, lr, fm and moe, not of trees");
+            }
+            match model {
+                ModelKind::Cnbp => {
+                    let model = flat(start, forget, |p| Cnbp::load(p, params.use_probs))?
+                        .unwrap_or_else(|| Cnbp::new(3, &CATEGORIES, params.alpha, params.use_probs));
+                    train_rounds(&games, &out, rounds, seed, "cnbp", model)
+                }
+                ModelKind::Lr => {
+                    let model = flat(start, forget, Logreg::load)?
+                        .unwrap_or_else(|| Logreg::new(3, &CATEGORIES, params.lr_rate));
+                    train_rounds(&games, &out, rounds, seed, "lr", model)
+                }
+                // Its state file: given, or the one beside the given model file.
+                ModelKind::Tan => {
+                    let model = flat(start, forget, |p| Tan::load_start(p, params.alpha, params.tan_options(), params.use_probs))?
+                        .unwrap_or_else(|| Tan::new(3, &CATEGORIES, params.alpha, params.tan_options(), params.use_probs));
+                    train_rounds(&games, &out, rounds, seed, "tan", model)
+                }
+                ModelKind::Fm => {
+                    let model = flat(start, forget, Fm::load)?.unwrap_or_else(|| params.fresh_fm());
+                    train_rounds(&games, &out, rounds, seed, "fm", model)
+                }
+                ModelKind::Moe => {
+                    let model = flat(start, forget, Moe::load)?.unwrap_or_else(|| {
+                        Moe::new(
+                            &CATEGORIES,
+                            params.moe_experts,
+                            params.lr_rate,
+                            params.moe_gate_scale,
+                            params.moe_seed,
+                        )
+                        .with_gate_l2(params.moe_gate_l2)
+                    });
+                    train_rounds(&games, &out, rounds, seed, "moe", model)
+                }
+                ModelKind::Bdt => {
+                    let model = match start {
+                        Some(path) => {
+                            Bdt::load_state(path, &CATEGORIES, params.delegation_params()).with_context(tree_context)?
+                        }
+                        None => Bdt::new(&CATEGORIES, params.delegation_params()),
+                    };
+                    train_rounds(&games, &out, rounds, seed, "bdt", model)
+                }
+                ModelKind::Bdd => {
+                    let model = match start {
+                        Some(path) => {
+                            Bdd::load_state(path, &CATEGORIES, params.delegation_params()).with_context(tree_context)?
+                        }
+                        None => Bdd::new(&CATEGORIES, params.delegation_params()),
+                    };
+                    train_rounds(&games, &out, rounds, seed, "bdd", model)
+                }
+                ModelKind::Ht => {
+                    let root = params.delegation_params().new_classifier(params.leaf, 3, &CATEGORIES);
+                    let model = match start {
+                        Some(path) => {
+                            Ht::load_state(path, &root, &CATEGORIES, params.ht_params()).with_context(tree_context)?
+                        }
+                        None => params.ht(root)?,
+                    };
+                    train_rounds(&games, &out, rounds, seed, "ht", model)
+                }
+            }
+        }
         Command::PolicyStats { model, games, policy, temperature, temperatures, use_probs, seed } => {
             policy_stats(&model, games, policy, temperature, &temperatures, use_probs, seed)
         }
         Command::Calibration { model, games, use_probs } => calibration(&model, &games, use_probs),
+        Command::Routing { model, games, use_probs } => routing(&model, &games, use_probs),
         Command::Leaves { model, out, use_probs } => {
             let model = LoadedModel::load(&model, use_probs)?;
             let leaves: Vec<_> = match &model {
                 LoadedModel::Bdt(m) => m.leaves().collect(),
                 LoadedModel::Bdd(m) => m.leaves().collect(),
-                _ => bail!("only bdt and bdd models have leaves"),
+                LoadedModel::Ht(m) => m.leaves().collect(),
+                _ => bail!("only bdt, bdd and ht models have leaves"),
             };
             std::fs::create_dir_all(&out)?;
             for (idx, leaf) in leaves {
@@ -1135,6 +1551,10 @@ fn main() -> Result<()> {
                 split_trial: None,
                 trial_error: ErrorMeasure::Winner,
                 route_switch: None,
+                error_router: NodeKind::Cnbp,
+                revise: None,
+                seam_weight: 0.0,
+                reset_leaves: None,
             };
             bench_classifier(
                 "bdt",
@@ -1153,15 +1573,40 @@ fn train_rounds<M: Classifier>(games: &Path, out: &Path, rounds: u64, seed: u64,
     std::fs::create_dir_all(out)?;
     for round in 0..rounds {
         let dir = games.join(format!("round{round}"));
-        let mut data = games::read_labelled(&dir).with_context(|| format!("reading {}", dir.display()))?;
-        data.shuffle(&mut StdRng::seed_from_u64(selfplay::derive_seed(seed, round, u64::MAX)));
-        let start = Instant::now();
-        for (pos, label) in &data {
-            model.train(pos, label);
+        let seed = selfplay::derive_seed(seed, round, u64::MAX);
+        let start;
+        let positions;
+        if model.needs_games() {
+            // As self-play trains it: the round's games, then their positions
+            // shuffled, each with its game's id.
+            let round_games = games::read_round_games(&dir).with_context(|| format!("reading {}", dir.display()))?;
+            let mut data: Vec<_> = (round_games.iter().enumerate())
+                .flat_map(|(g, game)| game.iter().map(move |&(p, l)| (p, l, round << 32 | g as u64)))
+                .collect();
+            data.shuffle(&mut StdRng::seed_from_u64(seed));
+            start = Instant::now();
+            let played: Vec<Vec<Encoded>> = round_games.iter().map(|g| g.iter().map(|&(p, _)| p).collect()).collect();
+            model.observe_games(&played.iter().map(Vec::as_slice).collect::<Vec<_>>());
+            for (pos, label, game) in &data {
+                model.train_in_game(pos, label, *game);
+            }
+            positions = data.len();
+        } else {
+            let mut data = games::read_round(&dir).with_context(|| format!("reading {}", dir.display()))?;
+            data.shuffle(&mut StdRng::seed_from_u64(seed));
+            start = Instant::now();
+            for (pos, label) in &data {
+                model.train(pos, label);
+            }
+            positions = data.len();
         }
         model.refresh();
         model.save(&out.join(format!("{name}{}.model", round + 1)))?;
-        println!("round {round}: {} positions, train {:.2}s", data.len(), start.elapsed().as_secs_f64());
+        println!("round {round}: {positions} positions, train {:.2}s", start.elapsed().as_secs_f64());
+    }
+    // A tree's state, to train it further (--start).
+    if rounds > 0 {
+        model.save_state(&out.join(format!("{name}{rounds}.state")))?;
     }
     Ok(())
 }
@@ -1176,7 +1621,7 @@ fn policy_stats(
     seed: u64,
 ) -> Result<()> {
     let model = LoadedModel::load(model, use_probs)?;
-    let player = model.player(policy, temperature);
+    let player = model.player(policy, temperature, 0);
     let mut rng = StdRng::seed_from_u64(seed);
     let (mut positions, mut jitter_off) = (0usize, 0usize);
     let mut softmax_off = vec![0.0; temperatures.len()];
@@ -1266,6 +1711,143 @@ fn policy_stats(
     for (off, t) in softmax_off.iter().zip(temperatures) {
         println!("softmax T={t}: plays a non-top move {:.1}% of the time", 100.0 * off / positions as f64);
     }
+    Ok(())
+}
+
+/// Winner log-loss of white log-odds `v` for a game white won (`y` 1) or lost
+/// (`y` -1).
+fn winner_loss(v: f64, y: f64) -> f64 {
+    let z = y * v;
+    if z > 0.0 { (-z).exp().ln_1p() } else { -z + z.exp().ln_1p() }
+}
+
+/// See `Command::Routing`.
+fn routing(spec: &str, games: &Path, use_probs: bool) -> Result<()> {
+    let LoadedModel::Bdt(bdt) = LoadedModel::load(spec, use_probs)? else { bail!("routing needs a bdt: model") };
+    let data = games::read_labelled(games)?;
+    let raw_odds = |leaf: usize, pos: &[u8]| {
+        let mut out = [0.0; 3];
+        bdt.node_predict_log(leaf, pos, &mut out);
+        out[0] - out[1]
+    };
+    let decisive: Vec<(&[u8], f64)> = data
+        .iter()
+        .filter(|(_, label)| label[2] == 0.0)
+        .map(|(pos, label)| (&pos[..], if label[0] == 1.0 { 1.0 } else { -1.0 }))
+        .collect();
+    if decisive.is_empty() {
+        bail!("no decisive positions in {games:?}");
+    }
+
+    // One scale and offset for the whole tree's log-odds, by Newton's method.
+    let tree_odds: Vec<f64> = decisive.iter().map(|(pos, _)| raw_odds(bdt.leaf(pos), pos)).collect();
+    let (mut a, mut b) = (1.0, 0.0);
+    for _ in 0..50 {
+        let (mut ga, mut gb, mut haa, mut hab, mut hbb) = (0.0, 0.0, 0.0, 0.0, 0.0);
+        for ((_, y), v) in decisive.iter().zip(&tree_odds) {
+            let s = 1.0 / (1.0 + (y * (a * v + b)).exp());
+            ga -= s * y * v;
+            gb -= s * y;
+            let w = s * (1.0 - s);
+            haa += w * v * v;
+            hab += w * v;
+            hbb += w;
+        }
+        let det = haa * hbb - hab * hab;
+        if det.abs() < 1e-300 {
+            break;
+        }
+        let (da, db) = ((hbb * ga - hab * gb) / det, (haa * gb - hab * ga) / det);
+        a -= da;
+        b -= db;
+        if da.abs() + db.abs() < 1e-10 {
+            break;
+        }
+    }
+    let odds = |leaf: usize, pos: &[u8]| a * raw_odds(leaf, pos) + b;
+    let tree_loss = decisive.iter().zip(&tree_odds).map(|((_, y), v)| winner_loss(a * v + b, *y)).sum::<f64>();
+    println!(
+        "{} decisive positions; the tree's log-odds recalibrated by scale {a:.4}, offset {b:+.4}: winner log-loss {:.4}",
+        decisive.len(),
+        tree_loss / decisive.len() as f64
+    );
+
+    // Per delegator, per child routed to: positions, and each child's summed loss.
+    let mut rows: Vec<Vec<(f64, Vec<f64>)>> = (0..bdt.node_count())
+        .map(|idx| vec![(0.0, vec![0.0; bdt.children(idx).len()]); bdt.children(idx).len()])
+        .collect();
+    let mut oracle = vec![0.0; bdt.node_count()];
+    for (pos, y) in &decisive {
+        let mut idx = 0;
+        while !bdt.children(idx).is_empty() {
+            let children = bdt.children(idx);
+            let leaves: Vec<usize> = children.iter().map(|&child| bdt.leaf_from(child, pos)).collect();
+            let losses: Vec<f64> = leaves.iter().map(|&leaf| winner_loss(odds(leaf, pos), *y)).collect();
+            let routed = bdt.leaf_from(idx, pos);
+            let picked = leaves.iter().position(|&leaf| leaf == routed).expect("the routed leaf is under a child");
+            let row = &mut rows[idx][picked];
+            row.0 += 1.0;
+            row.1.iter_mut().zip(&losses).for_each(|(sum, loss)| *sum += loss);
+            oracle[idx] += losses[picked] - losses.iter().cloned().fold(f64::INFINITY, f64::min);
+            idx = children[picked];
+        }
+    }
+    for (idx, rows) in rows.iter().enumerate() {
+        let n: f64 = rows.iter().map(|row| row.0).sum();
+        if n == 0.0 {
+            continue;
+        }
+        let regret: f64 = rows
+            .iter()
+            .enumerate()
+            .filter(|(_, row)| row.0 > 0.0)
+            .map(|(k, row)| row.1[k] - row.1.iter().cloned().fold(f64::INFINITY, f64::min))
+            .sum();
+        let children = bdt.children(idx).iter().map(|c| c.to_string()).collect::<Vec<_>>().join(" ");
+        println!(
+            "delegator {idx} (children {children}): {n} positions; regret {:.4} per position ({:.4} against each position's best child)",
+            regret / n,
+            oracle[idx] / n
+        );
+        for (k, row) in rows.iter().enumerate() {
+            if row.0 == 0.0 {
+                continue;
+            }
+            let cells: Vec<String> = row
+                .1
+                .iter()
+                .enumerate()
+                .map(|(j, sum)| if j == k { format!("[{:.4}]", sum / row.0) } else { format!("{:.4}", sum / row.0) })
+                .collect();
+            println!("  to {} ({:.1}%): {}", bdt.children(idx)[k], 100.0 * row.0 / n, cells.join(" "));
+        }
+    }
+
+    // Near-duplicate leaves: mean absolute difference of their log-odds.
+    let leaves: Vec<usize> = bdt.leaves().map(|(idx, _)| idx).collect();
+    let mut sums = vec![0.0; leaves.len() * leaves.len()];
+    let mut values = vec![0.0; leaves.len()];
+    for (pos, _) in &data {
+        values.iter_mut().zip(&leaves).for_each(|(v, &leaf)| *v = odds(leaf, pos));
+        for i in 0..leaves.len() {
+            for j in i + 1..leaves.len() {
+                sums[i * leaves.len() + j] += (values[i] - values[j]).abs();
+            }
+        }
+    }
+    let mut pairs: Vec<(f64, usize, usize)> = (0..leaves.len())
+        .flat_map(|i| (i + 1..leaves.len()).map(move |j| (i, j)))
+        .map(|(i, j)| (sums[i * leaves.len() + j] / data.len() as f64, leaves[i], leaves[j]))
+        .collect();
+    pairs.sort_by(|x, y| x.0.total_cmp(&y.0));
+    let shown: Vec<String> = pairs.iter().take(8).map(|(d, i, j)| format!("{i}-{j} {d:.3}")).collect();
+    println!(
+        "{} leaves, mean |log-odds difference| of a pair over {} positions {:.3}; closest: {}",
+        leaves.len(),
+        data.len(),
+        pairs.iter().map(|p| p.0).sum::<f64>() / pairs.len().max(1) as f64,
+        shown.join(", ")
+    );
     Ok(())
 }
 
@@ -1418,7 +2000,7 @@ fn rank_test(
 ) -> Result<()> {
     use rayon::prelude::*;
     let source = LoadedModel::load(source, use_probs)?;
-    let player = source.player(playout_policy, 0.1);
+    let player = source.player(playout_policy, 0.1, 0);
 
     // Sample positions at a random ply of games played by the source.
     let mut rng = StdRng::seed_from_u64(seed);
@@ -1751,6 +2333,8 @@ struct SelfPlayRun {
     label_result: f64,
     label_model: Option<LoadedModel>,
     round_forget: f64,
+    age_forget: f64,
+    keep_states: u64,
 }
 
 impl SelfPlayRun {
@@ -1783,6 +2367,8 @@ impl SelfPlayRun {
         }
         if start > 0 {
             println!("resuming at round {start}");
+        } else {
+            self.save_state(&model, name, 0)?;
         }
 
         for round in start..self.rounds {
@@ -1846,16 +2432,21 @@ impl SelfPlayRun {
                 selfplay::result_labels(&records)
             };
             let start = Instant::now();
+            model.observe_games(&records.iter().map(|r| r.positions.as_slice()).collect::<Vec<_>>());
             let data = selfplay::training_data(&records, &labels, self.seed, round);
-            for (pos, label) in &data {
-                model.train(pos, label);
+            for (pos, label, game) in &data {
+                model.train_in_game(pos, label, *game);
             }
             if self.round_forget != 1.0 {
                 model.forget(self.round_forget);
             }
+            if self.age_forget != 0.0 {
+                model.forget(((round + 2) as f64 / (round + 1) as f64).powf(self.age_forget));
+            }
             model.refresh();
             let train_secs = start.elapsed().as_secs_f64();
             model.save(&self.out.join(format!("{name}{}.model", round + 1)))?;
+            self.save_state(&model, name, round + 1)?;
 
             println!(
                 "round {round}: +{w} -{b} ={d}, {} plies, play {play_secs:.2}s ({:.0} plies/s), train {train_secs:.2}s",
@@ -1867,5 +2458,66 @@ impl SelfPlayRun {
             }
         }
         Ok(())
+    }
+
+    /// Saves version `v`'s training state, if the model keeps any beyond its
+    /// model file (see `state`), and deletes the state --keep-states drops.
+    fn save_state<M: Classifier>(&self, model: &M, name: &str, v: u64) -> Result<()> {
+        if model.save_state(&self.out.join(format!("{name}{v}.state")))?
+            && self.keep_states > 0
+            && v >= self.keep_states
+        {
+            match std::fs::remove_file(self.out.join(format!("{name}{}.state", v - self.keep_states))) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn game(moves: &[&str]) -> Game {
+        let mut game = Game::default();
+        for uci in moves {
+            let m = uci.parse::<UciMove>().unwrap().to_move(game.position()).unwrap();
+            game.play(m);
+        }
+        game
+    }
+
+    /// The moves `player` chooses in the game's position over 200 seeds, by
+    /// their index in `legal_moves()`.
+    fn choices(player: Player, game: &Game) -> Vec<usize> {
+        let candidates = player::candidates(game.position());
+        (0..200).map(|seed| player::choose(player, game, &candidates, &mut StdRng::seed_from_u64(seed))).collect()
+    }
+
+    fn index_of(game: &Game, uci: &str) -> usize {
+        let m = uci.parse::<UciMove>().unwrap().to_move(game.position()).unwrap();
+        game.position().legal_moves().iter().position(|&l| l == m).unwrap()
+    }
+
+    #[test]
+    fn random_players_search_like_the_others() {
+        let random = LoadedModel::Uniform(Uniform);
+        // Black to move can mate with Qh4#: at depth 1 it always does, with
+        // the tournament's policy or the arena's.
+        let g = game(&["f2f3", "e7e5", "g2g4"]);
+        let mate = index_of(&g, "d8h4");
+        for policy in [Policy::LogOddsSoftmax, Policy::WldScoreJitter10] {
+            assert!(choices(random.player(policy, 0.1, 1), &g).iter().all(|&c| c == mate));
+        }
+        // Without search it plays at random, as before.
+        assert!(choices(random.player(Policy::LogOddsSoftmax, 0.1, 0), &g).iter().any(|&c| c != mate));
+        // At depth 2 it never lets Black mate (g2g4), but otherwise picks
+        // moves at random.
+        let g = game(&["f2f3", "e7e5"]);
+        let picked = choices(random.player(Policy::LogOddsSoftmax, 0.1, 2), &g);
+        assert!(!picked.contains(&index_of(&g, "g2g4")));
+        assert!(picked.iter().collect::<std::collections::HashSet<_>>().len() > 5);
     }
 }

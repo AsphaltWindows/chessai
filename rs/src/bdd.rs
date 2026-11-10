@@ -21,6 +21,7 @@ use std::io;
 use std::path::Path;
 
 use crate::delegation::{DelegationParams, Graph, Kind, NodeModel, RouteTarget, Trial, at_least};
+use crate::state::{Reader, Writer};
 
 #[derive(Clone, Debug)]
 pub struct Bdd {
@@ -29,13 +30,22 @@ pub struct Bdd {
 
 impl Bdd {
     pub fn new(categories: &[u8], params: DelegationParams) -> Self {
-        Bdd { graph: Graph::new(categories, params) }
+        Bdd { graph: Graph::new(categories, Self::checked(params)) }
     }
 
     /// A single leaf that starts as `root`, a classifier of the leaves' kind,
     /// instead of an untrained one.
     pub fn starting_from(root: NodeModel, categories: &[u8], params: DelegationParams) -> Self {
-        Bdd { graph: Graph::starting_from(root, categories, params) }
+        Bdd { graph: Graph::starting_from(root, categories, Self::checked(params)) }
+    }
+
+    /// Revisable structure is for trees: a DAG's branches share nodes.
+    fn checked(params: DelegationParams) -> DelegationParams {
+        assert!(
+            params.revise.is_none() && params.reset_leaves.is_none(),
+            "revisable structure (revise, reset_leaves) is for BDTs only"
+        );
+        params
     }
 
     pub fn params(&self) -> &DelegationParams {
@@ -254,6 +264,31 @@ impl Bdd {
     pub fn load(path: &Path, use_probs: bool) -> io::Result<Self> {
         Self::from_text(&std::fs::read_to_string(path)?, use_probs)
     }
+
+    /// The whole training state, unrounded, for an exact `--resume` (see
+    /// `state`).
+    pub fn to_state(&self) -> Writer {
+        let mut w = Writer::new("bdd");
+        self.graph.write_state(&mut w);
+        w
+    }
+
+    /// Reads a state written by `to_state` by a model trained with `params`
+    /// over `categories`.
+    pub fn from_state(data: &[u8], categories: &[u8], params: DelegationParams) -> io::Result<Self> {
+        let mut r = Reader::new(data, "bdd")?;
+        let graph = Graph::read_state(&mut r, categories, params)?;
+        r.finish()?;
+        Ok(Bdd { graph })
+    }
+
+    pub fn save_state(&self, path: &Path) -> io::Result<()> {
+        self.to_state().save(path)
+    }
+
+    pub fn load_state(path: &Path, categories: &[u8], params: DelegationParams) -> io::Result<Self> {
+        Self::from_state(&std::fs::read(path)?, categories, params)
+    }
 }
 
 #[cfg(test)]
@@ -276,6 +311,58 @@ mod tests {
                 (data, label)
             })
             .collect()
+    }
+
+    /// As BDT's test: a tree read back from its state trains on exactly as
+    /// the original.
+    #[test]
+    fn state_round_trip_trains_on_identically() {
+        let base = DelegationParams {
+            class_num: 2,
+            branch_factor: 2,
+            split_threshold: 40,
+            split_limit: 6,
+            forget_factor: 1.0,
+            nb_alpha: 1.0,
+            use_probs: true,
+            leaf: NodeKind::Cnbp,
+            router: NodeKind::Cnbp,
+            lr_rate: 0.05,
+            error: ErrorMeasure::Abs,
+            split_z: 0.0,
+            split_rule: SplitRule::Worse,
+            route: RouteTarget::Error,
+            error_target: ErrorTarget::Best,
+            leaf_share: 0.0,
+            split_trial: None,
+            trial_error: ErrorMeasure::Abs,
+            route_switch: None,
+            error_router: NodeKind::Cnbp,
+            revise: None,
+            seam_weight: 0.0,
+            reset_leaves: None,
+        };
+        let variants = [
+            base.clone(),
+            DelegationParams { leaf: NodeKind::Lr, split_trial: Some(0.0), ..base.clone() },
+            DelegationParams { route: RouteTarget::Cluster, route_switch: Some(0.0), ..base.clone() },
+        ];
+        for params in variants {
+            let mut bdd = Bdd::new(&[3; 4], params.clone());
+            for round in crate::delegation::state_test_rounds() {
+                let state = bdd.to_state().into_bytes();
+                let mut back = Bdd::from_state(&state, &[3; 4], params.clone()).unwrap();
+                assert_eq!(back.to_state().into_bytes(), state);
+                assert_eq!(back.to_text(), bdd.to_text());
+                for tree in [&mut bdd, &mut back] {
+                    round.iter().for_each(|(game, label)| game.iter().for_each(|pos| tree.train(pos, label)));
+                    tree.refresh();
+                }
+                assert!(back.to_state().into_bytes() == bdd.to_state().into_bytes(), "{params:?}");
+            }
+            assert!(bdd.split_count() > 0, "{params:?}");
+            assert!(crate::bdt::Bdt::from_state(&bdd.to_state().into_bytes(), &[3; 4], params).is_err());
+        }
     }
 
     #[test]
@@ -301,6 +388,10 @@ mod tests {
             split_trial: None,
             trial_error: ErrorMeasure::Abs,
             route_switch: None,
+            error_router: NodeKind::Cnbp,
+            revise: None,
+            seam_weight: 0.0,
+            reset_leaves: None,
         };
         let data = noisy(4000);
         let mut bdd = Bdd::new(&[3, 3, 3, 3], params);
@@ -353,6 +444,10 @@ mod tests {
             split_trial: None,
             trial_error: ErrorMeasure::Abs,
             route_switch: None,
+            error_router: NodeKind::Cnbp,
+            revise: None,
+            seam_weight: 0.0,
+            reset_leaves: None,
         };
         let mut bdd = Bdd::new(&[3, 3, 3, 3], params);
         for (data, label) in noisy(20_000) {

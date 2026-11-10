@@ -12,6 +12,7 @@ use std::fmt::Write as _;
 use std::io;
 use std::path::Path;
 
+use crate::state::{Reader, Writer};
 use crate::textfmt::{Tokens, invalid};
 
 #[derive(Clone, Debug)]
@@ -136,6 +137,30 @@ impl Logreg {
 
     pub fn load(path: &Path) -> io::Result<Self> {
         Self::from_text(&std::fs::read_to_string(path)?)
+    }
+
+    /// Writes the whole model for a tree's state file (see `state`).
+    pub(crate) fn write_state(&self, w: &mut Writer) {
+        w.usize(self.class_num);
+        w.f64(self.rate);
+        w.u8s(&self.categories);
+        w.f64s(&self.weights);
+        w.f64s(&self.squares);
+    }
+
+    /// Reads a model written by `write_state`.
+    pub(crate) fn read_state(r: &mut Reader) -> io::Result<Self> {
+        let class_num = r.usize()?;
+        let rate = r.f64()?;
+        let categories = r.u8s()?;
+        let mut model = Logreg::new(class_num, &categories, rate);
+        let (weights, squares) = (r.f64s()?, r.f64s()?);
+        if weights.len() != model.weights.len() || squares.len() != model.squares.len() {
+            return Err(invalid("logistic regression state of the wrong shape"));
+        }
+        model.weights = weights;
+        model.squares = squares;
+        Ok(model)
     }
 
     pub fn class_num(&self) -> usize {

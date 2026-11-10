@@ -15,6 +15,7 @@ use std::io;
 
 use crate::cnbp::Cnbp;
 use crate::logreg::Logreg;
+use crate::state::{Reader, Writer};
 use crate::textfmt::{Tokens, invalid};
 
 /// How the error of a prediction is measured, for the split check and the
@@ -171,10 +172,41 @@ impl NodeModel {
 
     /// A CNBP as its counts (the C format's node), a logistic regression as
     /// its own text format, which starts with the word "logreg".
-    fn write(&self, s: &mut String) {
+    pub(crate) fn write(&self, s: &mut String) {
         match self {
             NodeModel::Cnbp(m) => m.write_counts(s),
             NodeModel::Lr(m) => s.push_str(&m.to_text()),
+        }
+    }
+
+    /// The kind and settings, which a resumed run's options must match.
+    pub(crate) fn options(&self) -> String {
+        match self {
+            NodeModel::Cnbp(m) => format!("cnbp alpha {} use_probs {}", m.alpha(), m.use_probs()),
+            NodeModel::Lr(m) => format!("lr rate {}", m.rate()),
+        }
+    }
+
+    /// Writes the classifier, unrounded, for a state file (see `state`).
+    pub(crate) fn write_state(&self, w: &mut Writer) {
+        match self {
+            NodeModel::Cnbp(m) => {
+                w.u8(0);
+                m.write_state(w)
+            }
+            NodeModel::Lr(m) => {
+                w.u8(1);
+                m.write_state(w)
+            }
+        }
+    }
+
+    /// Reads a classifier written by `write_state`.
+    pub(crate) fn read_state(r: &mut Reader) -> io::Result<Self> {
+        match r.u8()? {
+            0 => Ok(NodeModel::Cnbp(Cnbp::read_state(r)?)),
+            1 => Ok(NodeModel::Lr(Logreg::read_state(r)?)),
+            k => Err(invalid(format!("unknown classifier {k} in state file"))),
         }
     }
 }
@@ -246,6 +278,42 @@ pub struct DelegationParams {
     /// delegator saves its error router, but a loaded model trains it as a
     /// cluster router); None when loading.
     pub route_switch: Option<f64>,
+    /// Classifier of the error routers beside cluster routers
+    /// (`route_switch`); a delegator that switches keeps its error router as
+    /// its router. Not saved in model files; when loading, the routers'.
+    pub error_router: NodeKind,
+    /// Revisable structure: every delegator keeps a shadow, the leaf it was
+    /// before it split (forgotten like its children), which trains on every
+    /// example through the delegator and predicts it beside the branch.
+    /// After every `split_threshold` examples through the delegator, the
+    /// branch's mean gain over the shadow (in `trial_error`; with the
+    /// standard error of 20 blocks, as for `route_switch`), less
+    /// `seam_weight` times its seams, is compared with this many standard
+    /// errors below 0: if lower, the shadow takes the branch's place as a
+    /// leaf, which may split again, and the branch's splits no longer count
+    /// towards `split_limit`. A delegator that switches to error routing
+    /// (`route_switch`) starts its windows afresh, so the branch is judged
+    /// only on error-routed examples; the shadow goes on as before.
+    /// Infinity compares and logs only; None: no shadows unless
+    /// `reset_leaves` needs them. BDT only. Neither this nor the shadows are
+    /// saved in model files; None when loading.
+    pub revise: Option<f64>,
+    /// The weight of a branch's seams in `revise`'s test. A seam is the
+    /// difference in white's log-odds (nats) of the position after a move
+    /// between the leaf it is in and the leaf of the position before, for
+    /// moves between two of the branch's leaves; their absolute values are
+    /// summed over the games of the window's rounds (measured before
+    /// training on them, see `Graph::measure_seams`) and divided by the
+    /// positions through the delegator. Not saved in model files; 0 when
+    /// loading.
+    pub seam_weight: f64,
+    /// With shadows (see `revise`): reset a leaf to a copy of its
+    /// delegator's shadow (forgotten like a split's children) when, over a
+    /// window of `split_threshold` examples the delegator routes to it, its
+    /// mean gain over the shadow is below this many standard errors below 0.
+    /// Infinity compares and logs only. None: no resets. Not saved in model
+    /// files; None when loading.
+    pub reset_leaves: Option<f64>,
 }
 
 impl DelegationParams {
@@ -314,6 +382,8 @@ pub(crate) struct Node {
     pub error_router: Option<Box<ErrorRouter>>,
     /// Whether this delegator switched to error routing. Not saved.
     pub error_routed: bool,
+    /// A delegator's shadow (see `DelegationParams::revise`). Not saved.
+    pub revision: Option<Box<Revision>>,
 }
 
 /// A split on trial (see `DelegationParams::split_trial`).
@@ -397,6 +467,70 @@ impl GainWindow {
             self.block = 0.0;
         }
     }
+
+    /// The mean gain of the finished blocks and its standard error from
+    /// theirs, and the standard error from single examples, which
+    /// understates the noise of correlated examples.
+    fn stats(&self) -> (f64, f64, f64) {
+        let blocks = self.blocks as f64;
+        let mean = self.block_sum / blocks;
+        let se = ((self.block_sum_sq / blocks - mean * mean).max(0.0) / (blocks - 1.0)).sqrt();
+        let n = self.examples as f64;
+        let example_se = ((self.sum_sq / n - (self.sum / n).powi(2)).max(0.0) / n).sqrt();
+        (mean, se, example_se)
+    }
+}
+
+/// A delegator's shadow, and the windows that compare its branch and its
+/// leaf children with it (see `DelegationParams::revise`).
+#[derive(Clone, Debug)]
+pub(crate) struct Revision {
+    /// The leaf the delegator was before it split, forgotten like the
+    /// children it split into, and trained since on every example through
+    /// the delegator.
+    pub shadow: NodeModel,
+    /// Examples the shadow trained on.
+    pub trained: u32,
+    /// Per example through the delegator, the error (`trial_error`) of the
+    /// shadow's prediction minus that of the branch's.
+    pub window: GainWindow,
+    /// The same per child, over the examples routed to it while it is a
+    /// leaf.
+    pub leaf_windows: Vec<GainWindow>,
+    /// The branch's seams in the window's rounds (see `Graph::
+    /// measure_seams`): positions through the delegator, moves between two
+    /// of its leaves, and the sum of their absolute seams.
+    pub positions: u64,
+    pub crossings: u64,
+    pub seams: f64,
+    /// Seams per position of the last window that measured any, for windows
+    /// shorter than a round that measure none.
+    pub last_seams: f64,
+}
+
+impl Revision {
+    /// Starts the windows and the seams afresh, as at the split, keeping the
+    /// shadow and its training: after a switch to error routing, the branch
+    /// and its leaves are judged on error-routed examples only.
+    fn restart(&mut self) {
+        let branch_factor = self.leaf_windows.len();
+        self.window = GainWindow::default();
+        self.leaf_windows = vec![GainWindow::default(); branch_factor];
+        (self.positions, self.crossings, self.seams, self.last_seams) = (0, 0, 0.0, 0.0);
+    }
+
+    fn new(shadow: NodeModel, branch_factor: usize) -> Box<Self> {
+        Box::new(Revision {
+            shadow,
+            trained: 0,
+            window: GainWindow::default(),
+            leaf_windows: vec![GainWindow::default(); branch_factor],
+            positions: 0,
+            crossings: 0,
+            seams: 0.0,
+            last_seams: 0.0,
+        })
+    }
 }
 
 impl Node {
@@ -418,6 +552,7 @@ impl Node {
             trial: None,
             error_router: None,
             error_routed: false,
+            revision: None,
         }
     }
 
@@ -480,6 +615,10 @@ impl Graph {
                 "soft error targets need error routers that judge by a log-loss (log or winner)"
             );
         }
+        assert!(
+            params.split_trial.is_none() || (params.revise.is_none() && params.reset_leaves.is_none()),
+            "split trials and revisable structure (revise, reset_leaves) are exclusive"
+        );
         let root = Node::new(Kind::Leaf, params.new_classifier(params.leaf, params.class_num, categories));
         Graph {
             categories: categories.to_vec(),
@@ -558,12 +697,43 @@ impl Graph {
 
     /// Index of the leaf that predicts the position.
     pub fn leaf(&self, data: &[u8]) -> usize {
-        let mut idx = 0;
+        self.leaf_from(0, data)
+    }
+
+    /// Index of the leaf that predicts the position when routed from node
+    /// `idx`.
+    pub fn leaf_from(&self, mut idx: usize, data: &[u8]) -> usize {
         loop {
             let node = &self.nodes[idx];
             match &node.kind {
                 Kind::Leaf => return idx,
                 Kind::Branch { children } => idx = children[best_child(&node.classifier, data)],
+            }
+        }
+    }
+
+    /// Node `idx`'s children; empty for a leaf.
+    pub fn children(&self, idx: usize) -> &[usize] {
+        match &self.nodes[idx].kind {
+            Kind::Leaf => &[],
+            Kind::Branch { children } => children,
+        }
+    }
+
+    /// Divides every model in the graph by `factor` (see `NodeModel::forget`):
+    /// the nodes' classifiers, error routers and the shadows of trials and
+    /// revisions, so the whole graph adapts faster while predicting the same.
+    pub fn forget(&mut self, factor: f64) {
+        for node in &mut self.nodes {
+            node.classifier.forget(factor);
+            if let Some(trial) = &mut node.trial {
+                trial.shadow.forget(factor);
+            }
+            if let Some(error_router) = &mut node.error_router {
+                error_router.router.forget(factor);
+            }
+            if let Some(revision) = &mut node.revision {
+                revision.shadow.forget(factor);
             }
         }
     }
@@ -818,18 +988,16 @@ impl Graph {
     fn end_router_window(&mut self, idx: usize) {
         let error_router = self.nodes[idx].error_router.as_mut().expect("a window without an error router");
         let w = std::mem::take(&mut error_router.window);
-        let blocks = w.blocks as f64;
-        let mean = w.block_sum / blocks;
-        let se = ((w.block_sum_sq / blocks - mean * mean).max(0.0) / (blocks - 1.0)).sqrt();
-        let n = w.examples as f64;
-        let example_se = ((w.sum_sq / n - (w.sum / n).powi(2)).max(0.0) / n).sqrt();
+        let (mean, se, example_se) = w.stats();
         let switch = mean > self.params.route_switch.unwrap_or(f64::INFINITY) * se;
+        let restart = switch && self.nodes[idx].revision.is_some();
         eprintln!(
-            "routers of delegator {idx}: error router's gain {mean:+.7} per example (standard error {se:.7} over {} blocks, {example_se:.7} per example), picks differ on {} of {} judged examples{}",
+            "routers of delegator {idx}: error router's gain {mean:+.7} per example (standard error {se:.7} over {} blocks, {example_se:.7} per example), picks differ on {} of {} judged examples{}{}",
             w.blocks,
             w.differ,
             w.judged,
-            if switch { "; switched to error routing" } else { "" }
+            if switch { "; switched to error routing" } else { "" },
+            if restart { "; its shadow's windows start afresh" } else { "" }
         );
         if switch {
             let error_router = self.nodes[idx].error_router.take().unwrap();
@@ -837,14 +1005,32 @@ impl Graph {
             node.classifier = error_router.router;
             node.cache_step = 0;
             node.error_routed = true;
+            // The branch has been cluster-routed so far: judge it against its
+            // shadow on a full window of error-routed examples (see
+            // `DelegationParams::revise`).
+            if let Some(revision) = &mut node.revision {
+                revision.restart();
+            }
         }
+    }
+
+    /// Whether this example ends the window of delegator `idx`'s comparison
+    /// of its routers (see `train_cluster_router`, which adds the examples
+    /// that are scored).
+    fn router_window_ends(&self, idx: usize, label: &[f64]) -> bool {
+        self.params.route == RouteTarget::Cluster
+            && self.scored(label)
+            && self.nodes[idx].error_router.as_ref().is_some_and(|e| e.window.examples + 1 >= self.params.split_threshold)
     }
 
     /// The error router of a new cluster-routed delegator, if any (see
     /// `DelegationParams::route_switch`).
     pub fn new_error_router(&self) -> Option<Box<ErrorRouter>> {
         let wanted = self.params.route == RouteTarget::Cluster && self.params.route_switch.is_some();
-        wanted.then(|| Box::new(ErrorRouter { router: self.new_router(), window: GainWindow::default() }))
+        wanted.then(|| {
+            let router = self.params.new_classifier(self.params.error_router, self.params.branch_factor, &self.categories);
+            Box::new(ErrorRouter { router, window: GainWindow::default() })
+        })
     }
 
     pub fn record_router(&mut self, idx: usize, router_error: f64) {
@@ -871,6 +1057,11 @@ impl Graph {
             shadow.forget(self.params.forget_factor);
             Trial::new(shadow, None, 0, made.clone())
         });
+        let revision = self.revising().then(|| {
+            let mut shadow = self.nodes[idx].classifier.clone();
+            shadow.forget(self.params.forget_factor);
+            Revision::new(shadow, self.params.branch_factor)
+        });
 
         let router = self.new_router();
         let error_router = self.new_error_router();
@@ -884,7 +1075,208 @@ impl Graph {
         node.trial = trial;
         node.error_router = error_router;
         node.error_routed = false;
+        node.revision = revision;
         self.split_number += 1;
+    }
+
+    /// Whether delegators keep shadows (see `DelegationParams::revise`).
+    fn revising(&self) -> bool {
+        self.params.revise.is_some() || self.params.reset_leaves.is_some()
+    }
+
+    /// For a delegator with a shadow (see `DelegationParams::revise`), at the
+    /// start of its part of a training step: ends the window once it has
+    /// seen `split_threshold` examples, merging the branch into the shadow
+    /// if it failed; otherwise scores the example's prediction by the branch
+    /// against the shadow's, as the routed child's too if it is a leaf (see
+    /// `DelegationParams::reset_leaves`), and trains the shadow. Returns
+    /// whether the branch was merged, which changes the node. If this
+    /// example also ends the comparison of the delegator's routers, that
+    /// decision comes first: a switch restarts the window, and otherwise it
+    /// ends with the next example.
+    pub fn revise_step(&mut self, idx: usize, data: &[u8], label: &[f64], scratch: &mut [f64]) -> bool {
+        let Some(mut revision) = self.nodes[idx].revision.take() else { return false };
+        let due = revision.window.examples >= self.params.split_threshold && !self.router_window_ends(idx, label);
+        if due && self.end_revision_window(idx, &mut revision) {
+            self.merge(idx, *revision);
+            return true;
+        }
+        let block_len = (self.params.split_threshold / 20).max(1);
+        let judge = self.params.trial_error;
+        let judged = judge != ErrorMeasure::Winner || label[0] + label[1] > 0.0;
+        let mut gain = 0.0;
+        if judged {
+            self.predict_training(idx, data, scratch);
+            let branch_error = measure(judge, scratch, label);
+            revision.shadow.predict_training(data, scratch);
+            gain = measure(judge, scratch, label) - branch_error;
+            revision.window.judged += 1;
+        }
+        revision.window.add(gain, block_len);
+
+        // The child that predicts the example, as in `predict_training`.
+        let slot = self.route(idx, data);
+        let Kind::Branch { children } = &self.nodes[idx].kind else { unreachable!() };
+        if matches!(self.nodes[children[slot]].kind, Kind::Leaf) {
+            let window = &mut revision.leaf_windows[slot];
+            window.judged += judged as u32;
+            window.add(gain, block_len);
+            if window.examples >= self.params.split_threshold {
+                self.end_leaf_window(idx, slot, &mut revision);
+            }
+        } else if revision.leaf_windows[slot].examples > 0 {
+            // The leaf split; its window is no longer the child's.
+            revision.leaf_windows[slot] = GainWindow::default();
+        }
+        revision.shadow.train(data, label);
+        revision.trained += 1;
+        self.nodes[idx].revision = Some(revision);
+        false
+    }
+
+    /// Ends the window of delegator `idx`'s comparison with its shadow: logs
+    /// it and returns whether the branch failed (see `DelegationParams::
+    /// revise`); if not, starts a new window.
+    fn end_revision_window(&mut self, idx: usize, revision: &mut Revision) -> bool {
+        let (mean, se, example_se) = revision.window.stats();
+        let seams = if revision.positions > 0 { revision.seams / revision.positions as f64 } else { revision.last_seams };
+        let net = mean - self.params.seam_weight * seams;
+        let merge = self.params.revise.is_some_and(|z| net < -z * se);
+        eprintln!(
+            "revision of delegator {idx}: gain {mean:+.7} per example (standard error {se:.7} over {} blocks, {example_se:.7} per example), seams {seams:.5} per position ({} moves across leaves in {} positions), net {net:+.7}{}",
+            revision.window.blocks,
+            revision.crossings,
+            revision.positions,
+            if merge { "; merging" } else { "" }
+        );
+        if !merge {
+            revision.window = GainWindow::default();
+            (revision.positions, revision.crossings, revision.seams, revision.last_seams) = (0, 0, 0.0, seams);
+        }
+        merge
+    }
+
+    /// Ends the window of the leaf child in `slot` of delegator `idx`: logs
+    /// it, and resets the leaf to a copy of the shadow if it failed (see
+    /// `DelegationParams::reset_leaves`).
+    fn end_leaf_window(&mut self, idx: usize, slot: usize, revision: &mut Revision) {
+        let window = std::mem::take(&mut revision.leaf_windows[slot]);
+        let (mean, se, example_se) = window.stats();
+        let reset = self.params.reset_leaves.is_some_and(|z| mean < -z * se);
+        let Kind::Branch { children } = &self.nodes[idx].kind else { unreachable!() };
+        let leaf = children[slot];
+        eprintln!(
+            "leaf {leaf} of delegator {idx}: gain over the shadow {mean:+.7} per example (standard error {se:.7} over {} blocks, {example_se:.7} per example){}",
+            window.blocks,
+            if reset { "; reset to the shadow" } else { "" }
+        );
+        if reset {
+            let mut classifier = revision.shadow.clone();
+            classifier.forget(self.params.forget_factor);
+            let node = &mut self.nodes[leaf];
+            node.classifier = classifier;
+            node.cache_step = 0;
+            node.num_trained_total = 0;
+            node.error_total = 0.0;
+            node.forget_window();
+            self.open_window(leaf);
+        }
+    }
+
+    /// Puts delegator `idx`'s shadow in its branch's place, as a leaf; the
+    /// branch's nodes are removed (see `dead`) and its splits no longer
+    /// count.
+    fn merge(&mut self, idx: usize, revision: Revision) {
+        let Kind::Branch { children } = &self.nodes[idx].kind else { unreachable!("merging a leaf") };
+        let mut stack = children.clone();
+        let mut splits = 1;
+        while let Some(n) = stack.pop() {
+            self.dead.push(n);
+            if let Kind::Branch { children } = &self.nodes[n].kind {
+                splits += 1;
+                stack.extend(children);
+            }
+        }
+        eprintln!("merged delegator {idx}'s branch into its shadow, undoing {splits} splits");
+        let class_num = self.params.class_num;
+        let node = &mut self.nodes[idx];
+        node.kind = Kind::Leaf;
+        node.classifier = revision.shadow;
+        node.cache = vec![0.0; class_num];
+        node.cache_step = 0;
+        node.num_trained_total = revision.trained;
+        node.error_total = 0.0;
+        node.trial = None;
+        node.error_router = None;
+        node.error_routed = false;
+        node.forget_window();
+        self.open_window(idx);
+        self.split_number -= splits;
+    }
+
+    /// With shadows (see `DelegationParams::revise`), measures the seams of
+    /// a round's games, each the positions in the order played, for every
+    /// delegator: the positions through it, and for each move between two
+    /// of its leaves the seam, the difference in white's log-odds of the
+    /// position after the move between the leaf it is in and the leaf of
+    /// the position before. Call it with the model refreshed, before
+    /// training on the games.
+    pub fn measure_seams<P: AsRef<[u8]>>(&mut self, games: &[&[P]]) {
+        if !self.revising() {
+            return;
+        }
+        self.remove_dead();
+        let n = self.nodes.len();
+        let (mut positions, mut crossings, mut seams) = (vec![0u64; n], vec![0u64; n], vec![0.0; n]);
+        let (mut path, mut previous) = (Vec::new(), Vec::new());
+        for game in games {
+            for (i, position) in game.iter().enumerate() {
+                let data = position.as_ref();
+                self.path(data, &mut path);
+                let (&leaf, delegators) = path.split_last().expect("a path has a leaf");
+                delegators.iter().for_each(|&d| positions[d] += 1);
+                let before = previous.last().copied().filter(|_| i > 0);
+                if let Some(before) = before.filter(|&b| b != leaf) {
+                    let seam = (self.white_log_odds(leaf, data) - self.white_log_odds(before, data)).abs();
+                    // The delegators above both leaves: the paths' common start.
+                    for (&d, _) in path.iter().zip(&previous).take_while(|(a, b)| a == b) {
+                        crossings[d] += 1;
+                        seams[d] += seam;
+                    }
+                }
+                std::mem::swap(&mut path, &mut previous);
+            }
+        }
+        for (i, node) in self.nodes.iter_mut().enumerate() {
+            if let Some(revision) = &mut node.revision {
+                revision.positions += positions[i];
+                revision.crossings += crossings[i];
+                revision.seams += seams[i];
+            }
+        }
+    }
+
+    /// The nodes from the root to the leaf that predicts the position.
+    fn path(&self, data: &[u8], out: &mut Vec<usize>) {
+        out.clear();
+        let mut idx = 0;
+        loop {
+            out.push(idx);
+            let node = &self.nodes[idx];
+            match &node.kind {
+                Kind::Leaf => return,
+                Kind::Branch { children } => idx = children[best_child(&node.classifier, data)],
+            }
+        }
+    }
+
+    /// White's log-odds by node `idx`'s classifier: ln P(white wins) - ln
+    /// P(black wins), for classes [white win, black win, ...].
+    pub(crate) fn white_log_odds(&self, idx: usize, data: &[u8]) -> f64 {
+        let mut logs = [0.0; 256];
+        let logs = &mut logs[..self.params.class_num];
+        self.nodes[idx].classifier.predict_log(data, logs);
+        logs[0] - logs[1]
     }
 
     /// For a node whose split is on trial (see `DelegationParams::
@@ -1197,6 +1589,10 @@ impl Graph {
             split_trial: None,
             trial_error: ErrorMeasure::Winner,
             route_switch: None,
+            error_router: router,
+            revise: None,
+            seam_weight: 0.0,
+            reset_leaves: None,
         };
         Ok(Graph {
             categories,
@@ -1209,6 +1605,221 @@ impl Graph {
             dead: Vec::new(),
         })
     }
+}
+
+/// The whole training state of a delegation model, for `--resume` (see
+/// `state`): everything `to_text` saves, unrounded, and what it does not:
+/// the windows' sums of squares and running totals, trials, error routers,
+/// which delegators switched to them, shadows and their windows, the step
+/// count and the model's and routers' running errors. Each node's
+/// prediction cache is not saved: it is only valid within a training step,
+/// and the state is saved between steps.
+impl Graph {
+    pub fn write_state(&self, w: &mut Writer) {
+        w.str(&format!("{:?}", self.params));
+        w.u8s(&self.categories);
+        w.u32(self.split_number);
+        w.u64(self.step);
+        write_running(w, self.model_errors);
+        write_running(w, self.router_errors);
+        w.usizes(&self.dead);
+        w.usize(self.nodes.len());
+        for node in &self.nodes {
+            match &node.kind {
+                Kind::Leaf => w.u8(0),
+                Kind::Branch { children } => {
+                    w.u8(1);
+                    w.usizes(children);
+                }
+            }
+            node.classifier.write_state(w);
+            w.u32(node.num_trained_total);
+            w.u32(node.num_trained_last);
+            for x in [node.error_total, node.error_last, node.error_prev, node.error_sq_last, node.error_prev_se2] {
+                w.f64(x);
+            }
+            write_running(w, node.window_model);
+            write_running(w, node.window_routers);
+            w.bool(node.trial.is_some());
+            if let Some(trial) = &node.trial {
+                trial.shadow.write_state(w);
+                w.bool(trial.children.is_some());
+                if let Some(children) = &trial.children {
+                    w.usizes(children);
+                }
+                w.u32(trial.trained_before);
+                w.usizes(&trial.made);
+                w.u32(trial.examples);
+                w.u32(trial.n);
+                w.f64(trial.sum);
+                w.f64(trial.sum_sq);
+            }
+            w.bool(node.error_router.is_some());
+            if let Some(error_router) = &node.error_router {
+                error_router.router.write_state(w);
+                write_window(w, &error_router.window);
+            }
+            w.bool(node.error_routed);
+            w.bool(node.revision.is_some());
+            if let Some(revision) = &node.revision {
+                revision.shadow.write_state(w);
+                w.u32(revision.trained);
+                write_window(w, &revision.window);
+                w.usize(revision.leaf_windows.len());
+                revision.leaf_windows.iter().for_each(|window| write_window(w, window));
+                w.u64(revision.positions);
+                w.u64(revision.crossings);
+                w.f64(revision.seams);
+                w.f64(revision.last_seams);
+            }
+        }
+    }
+
+    /// Reads a state written by `write_state` by a model trained with
+    /// `params` (checked) over `categories`.
+    pub fn read_state(r: &mut Reader, categories: &[u8], params: DelegationParams) -> io::Result<Self> {
+        r.expect_str("options", &format!("{params:?}"))?;
+        if r.u8s()? != categories {
+            return Err(invalid("the state's features differ from this run's"));
+        }
+        let split_number = r.u32()?;
+        let step = r.u64()?;
+        let model_errors = read_running(r)?;
+        let router_errors = read_running(r)?;
+        let dead = r.usizes()?;
+        let node_num = r.usize()?;
+        let mut nodes = Vec::with_capacity(node_num.min(1 << 16));
+        for _ in 0..node_num {
+            let kind = match r.u8()? {
+                0 => Kind::Leaf,
+                1 => Kind::Branch { children: r.usizes()? },
+                k => return Err(invalid(format!("unknown node kind {k} in state file"))),
+            };
+            let classifier = NodeModel::read_state(r)?;
+            let mut node = Node::new(kind, classifier);
+            node.num_trained_total = r.u32()?;
+            node.num_trained_last = r.u32()?;
+            node.error_total = r.f64()?;
+            node.error_last = r.f64()?;
+            node.error_prev = r.f64()?;
+            node.error_sq_last = r.f64()?;
+            node.error_prev_se2 = r.f64()?;
+            node.window_model = read_running(r)?;
+            node.window_routers = read_running(r)?;
+            if r.bool()? {
+                let shadow = NodeModel::read_state(r)?;
+                let children = if r.bool()? { Some(r.usizes()?) } else { None };
+                let trained_before = r.u32()?;
+                let made = r.usizes()?;
+                let mut trial = Trial::new(shadow, children, trained_before, made);
+                trial.examples = r.u32()?;
+                trial.n = r.u32()?;
+                trial.sum = r.f64()?;
+                trial.sum_sq = r.f64()?;
+                node.trial = Some(trial);
+            }
+            if r.bool()? {
+                let router = NodeModel::read_state(r)?;
+                node.error_router = Some(Box::new(ErrorRouter { router, window: read_window(r)? }));
+            }
+            node.error_routed = r.bool()?;
+            if r.bool()? {
+                let shadow = NodeModel::read_state(r)?;
+                let mut revision = Revision::new(shadow, 0);
+                revision.trained = r.u32()?;
+                revision.window = read_window(r)?;
+                let windows = r.usize()?;
+                revision.leaf_windows = (0..windows).map(|_| read_window(r)).collect::<io::Result<_>>()?;
+                revision.positions = r.u64()?;
+                revision.crossings = r.u64()?;
+                revision.seams = r.f64()?;
+                revision.last_seams = r.f64()?;
+                node.revision = Some(revision);
+            }
+            nodes.push(node);
+        }
+        let in_range = |&i: &usize| i < node_num;
+        for node in &nodes {
+            let children = match &node.kind {
+                Kind::Branch { children } => children.as_slice(),
+                Kind::Leaf => &[],
+            };
+            let trial_nodes = node.trial.iter().flat_map(|t| t.made.iter().chain(t.children.iter().flatten()));
+            if !children.iter().chain(trial_nodes).chain(&dead).all(in_range) {
+                return Err(invalid("a node of the state refers to a node out of range"));
+            }
+        }
+        Ok(Graph {
+            categories: categories.to_vec(),
+            params,
+            split_number,
+            nodes,
+            step,
+            model_errors,
+            router_errors,
+            dead,
+        })
+    }
+}
+
+/// Six rounds of 12 games for the state tests: walks over 4 features of 3
+/// values that change one at a time, labelled by a noisy function of where
+/// they start.
+#[cfg(test)]
+pub(crate) fn state_test_rounds() -> Vec<Vec<(Vec<[u8; 4]>, [f64; 2])>> {
+    let mut x = 7u64;
+    let mut next = |m: u64| {
+        x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        (x >> 33) % m
+    };
+    let mut game = || {
+        let mut pos: [u8; 4] = std::array::from_fn(|_| next(3) as u8);
+        let p = if pos[0] == pos[1] { 0.85 } else { 0.25 };
+        let label = if (next(1000) as f64) < 1000.0 * p { [1.0, 0.0] } else { [0.0, 1.0] };
+        let mut positions = Vec::with_capacity(15);
+        for _ in 0..15 {
+            positions.push(pos);
+            let feature = next(4) as usize;
+            pos[feature] = next(3) as u8;
+        }
+        (positions, label)
+    };
+    (0..6).map(|_| (0..12).map(|_| game()).collect()).collect()
+}
+
+fn write_running(w: &mut Writer, running: Running) {
+    w.f64(running.sum);
+    w.u64(running.count);
+}
+
+fn read_running(r: &mut Reader) -> io::Result<Running> {
+    Ok(Running { sum: r.f64()?, count: r.u64()? })
+}
+
+fn write_window(w: &mut Writer, window: &GainWindow) {
+    for x in [window.examples, window.judged, window.differ] {
+        w.u32(x);
+    }
+    for x in [window.sum, window.sum_sq, window.block] {
+        w.f64(x);
+    }
+    w.u32(window.blocks);
+    w.f64(window.block_sum);
+    w.f64(window.block_sum_sq);
+}
+
+fn read_window(r: &mut Reader) -> io::Result<GainWindow> {
+    Ok(GainWindow {
+        examples: r.u32()?,
+        judged: r.u32()?,
+        differ: r.u32()?,
+        sum: r.f64()?,
+        sum_sq: r.f64()?,
+        block: r.f64()?,
+        blocks: r.u32()?,
+        block_sum: r.f64()?,
+        block_sum_sq: r.f64()?,
+    })
 }
 
 /// Whether a window's mean error is at least `mean`, the mean over the same

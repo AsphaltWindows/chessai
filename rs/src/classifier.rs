@@ -3,11 +3,15 @@
 use std::io;
 use std::path::Path;
 
+use crate::fm::Fm;
 use crate::bdd::Bdd;
 use crate::bdt::Bdt;
 use crate::cnbp::Cnbp;
+use crate::encoding::Encoded;
+use crate::ht::Ht;
 use crate::logreg::Logreg;
 use crate::moe::Moe;
+use crate::tan::Tan;
 
 pub trait Classifier {
     /// Adds one data point. `label` is a distribution over classes.
@@ -27,6 +31,28 @@ pub trait Classifier {
     /// counts (CNBP) or AdaGrad sums (LR, a mixture's experts) by `factor`.
     fn forget(&mut self, _factor: f64) {
         unimplemented!("this model cannot forget")
+    }
+    /// Sees a round's games, each the positions in the order played, before
+    /// training on them; delegation trees measure their seams (see
+    /// `Bdt::measure_seams`), other models ignore them.
+    fn observe_games(&mut self, _games: &[&[Encoded]]) {}
+    /// `train` for a position of game `game`, an id the game's positions
+    /// share; models that sample or hold out whole games (the Hoeffding
+    /// tree's model gain) use it.
+    fn train_in_game(&mut self, data: &[u8], label: &[f64], _game: u64) {
+        self.train(data, label)
+    }
+    /// Writes what training needs beyond the model file to `path`, for an
+    /// exact `--resume` (see `state`), and returns true; models whose files
+    /// hold all their state write nothing and return false.
+    fn save_state(&self, _path: &Path) -> io::Result<bool> {
+        Ok(false)
+    }
+    /// Whether it trains only on whole games (`observe_games`, then
+    /// `train_in_game`), so that `train` must give it a round's games, not
+    /// just their positions (TAN, whose pair counts count games).
+    fn needs_games(&self) -> bool {
+        false
     }
 }
 
@@ -51,6 +77,41 @@ impl Classifier for Cnbp {
     }
 }
 
+impl Classifier for Tan {
+    fn train(&mut self, data: &[u8], label: &[f64]) {
+        Tan::train(self, data, label)
+    }
+    fn refresh(&mut self) {
+        Tan::refresh(self)
+    }
+    fn predict(&self, data: &[u8], out: &mut [f64]) {
+        Tan::predict(self, data, out)
+    }
+    fn predict_log(&self, data: &[u8], out: &mut [f64]) {
+        Tan::predict_log(self, data, out)
+    }
+    fn save(&self, path: &Path) -> io::Result<()> {
+        Tan::save(self, path)
+    }
+    /// Every pair count, which the model file lacks (see `tan`).
+    fn save_state(&self, path: &Path) -> io::Result<bool> {
+        Tan::save_state(self, path)?;
+        Ok(true)
+    }
+    fn forget(&mut self, factor: f64) {
+        Tan::forget(self, factor)
+    }
+    fn observe_games(&mut self, games: &[&[Encoded]]) {
+        Tan::observe_games(self, games)
+    }
+    fn train_in_game(&mut self, data: &[u8], label: &[f64], game: u64) {
+        Tan::train_in_game(self, data, label, game)
+    }
+    fn needs_games(&self) -> bool {
+        self.options().games
+    }
+}
+
 impl Classifier for Bdt {
     fn train(&mut self, data: &[u8], label: &[f64]) {
         Bdt::train(self, data, label)
@@ -66,6 +127,16 @@ impl Classifier for Bdt {
     }
     fn save(&self, path: &Path) -> io::Result<()> {
         Bdt::save(self, path)
+    }
+    fn save_state(&self, path: &Path) -> io::Result<bool> {
+        Bdt::save_state(self, path)?;
+        Ok(true)
+    }
+    fn forget(&mut self, factor: f64) {
+        Bdt::forget(self, factor)
+    }
+    fn observe_games(&mut self, games: &[&[Encoded]]) {
+        Bdt::measure_seams(self, games)
     }
 }
 
@@ -85,6 +156,10 @@ impl Classifier for Bdd {
     fn save(&self, path: &Path) -> io::Result<()> {
         Bdd::save(self, path)
     }
+    fn save_state(&self, path: &Path) -> io::Result<bool> {
+        Bdd::save_state(self, path)?;
+        Ok(true)
+    }
 }
 
 impl Classifier for Logreg {
@@ -103,6 +178,56 @@ impl Classifier for Logreg {
     }
     fn forget(&mut self, factor: f64) {
         Logreg::forget(self, factor)
+    }
+}
+
+impl Classifier for Fm {
+    fn train(&mut self, data: &[u8], label: &[f64]) {
+        Fm::train(self, data, label)
+    }
+    fn refresh(&mut self) {}
+    fn predict(&self, data: &[u8], out: &mut [f64]) {
+        Fm::predict(self, data, out)
+    }
+    fn predict_log(&self, data: &[u8], out: &mut [f64]) {
+        Fm::predict_log(self, data, out)
+    }
+    fn save(&self, path: &Path) -> io::Result<()> {
+        Fm::save(self, path)
+    }
+    fn forget(&mut self, factor: f64) {
+        Fm::forget(self, factor)
+    }
+}
+
+impl Classifier for Ht {
+    fn train(&mut self, data: &[u8], label: &[f64]) {
+        Ht::train(self, data, label)
+    }
+    fn refresh(&mut self) {
+        Ht::refresh(self)
+    }
+    fn predict(&self, data: &[u8], out: &mut [f64]) {
+        Ht::predict(self, data, out)
+    }
+    fn predict_log(&self, data: &[u8], out: &mut [f64]) {
+        Ht::predict_log(self, data, out)
+    }
+    fn save(&self, path: &Path) -> io::Result<()> {
+        Ht::save(self, path)
+    }
+    fn save_state(&self, path: &Path) -> io::Result<bool> {
+        Ht::save_state(self, path)?;
+        Ok(true)
+    }
+    fn forget(&mut self, factor: f64) {
+        Ht::forget(self, factor)
+    }
+    fn observe_games(&mut self, games: &[&[Encoded]]) {
+        Ht::observe_games(self, games)
+    }
+    fn train_in_game(&mut self, data: &[u8], label: &[f64], game: u64) {
+        Ht::train_in_game(self, data, label, game)
     }
 }
 

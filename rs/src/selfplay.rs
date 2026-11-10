@@ -154,18 +154,22 @@ pub fn search_labels(
 }
 
 /// Every position of the round with its label (one per position, in game
-/// order), shuffled so order-sensitive models (BDT) do not see the outcomes
-/// in blocks.
+/// order) and its game's id (the round times 2^32 plus the game's index),
+/// shuffled so order-sensitive models (BDT) do not see the outcomes in
+/// blocks.
 pub fn training_data(
     records: &[GameRecord],
     labels: &[Vec<[f64; 3]>],
     seed: u64,
     round: u64,
-) -> Vec<(Encoded, [f64; 3])> {
+) -> Vec<(Encoded, [f64; 3], u64)> {
     let mut data: Vec<_> = records
         .iter()
         .zip(labels)
-        .flat_map(|(r, l)| r.positions.iter().copied().zip(l.iter().copied()))
+        .enumerate()
+        .flat_map(|(g, (r, l))| {
+            r.positions.iter().copied().zip(l.iter().copied()).map(move |(p, l)| (p, l, round << 32 | g as u64))
+        })
         .collect();
     data.shuffle(&mut StdRng::seed_from_u64(derive_seed(seed, round, u64::MAX)));
     data
@@ -268,7 +272,7 @@ pub fn derive_seed(seed: u64, round: u64, game: u64) -> u64 {
     splitmix64(splitmix64(seed ^ splitmix64(round)) ^ game)
 }
 
-fn splitmix64(mut x: u64) -> u64 {
+pub(crate) fn splitmix64(mut x: u64) -> u64 {
     x = x.wrapping_add(0x9E37_79B9_7F4A_7C15);
     x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
     x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
