@@ -1,0 +1,55 @@
+# Cycle 14
+
+**Own-games step, pooled over the lineages: 39 gates, +17314 -15049 =6637, score 52.9%, Elo +20.2 ± 3.1; kept 26 of 39.**
+
+All cycles so far: 463 gates, +212873 -177791 =72336, score 53.8%, Elo +26.4 ± 0.9; kept 329 of 463.
+
+2026-11-07 00:24: budget 240 CPU s per qualified lineage, measured in the loop: each job measured its CPU per game over its first rounds (at least 5% of the budget), then ran the rounds that fill the budget; round sizes d0 1000, d1 860, d2 40, d3 10, d4 10.
+League: retired 58 players to retired.txt (their games stay in the fit), added 58.
+Tournament: 5 double round-robins of the 83 active players (34030 games) in 3.8 min, 34030 games saved.
+
+Elo: the lineage's 2-ply entry (its entries at other plies play for information and as opponents); previous: its predecessor's, in the same fit; vs refs: Elo minus the mean Elo of random, random-1, random-2 in this fit. Only players that stay in the field link one cycle's fit to the next, and through cycle 4 those were the random players alone (every lineage entered a new version each cycle), so comparisons across cycles are weak. From cycle 5, random-3 and random-4 (random moves searched 3 and 4 plies deep) play every cycle as references too and link the fits better; they stay out of that mean, so that vs refs keeps its meaning.
+
+Decisions: each lineage's current version is compared with its peak, the best of its earlier versions at ply 2 in this fit, retired ones included (peak and peak version; Elo scale). A qualified lineage more than 2 standard errors of that difference below its peak gets a strike, and 2 in a row make it dormant; otherwise its strikes reset (new peak: above it; ok: within range). A dormant lineage doesn't self-play but keeps its own-games step and gate, and re-qualifies when its current version beats its peak from before it went dormant (in parentheses: the best of its versions up to the one that went dormant, so versions made while dormant never raise that bar) by more than 2 standard errors. The ± in a decision is that many standard errors, from the fit's covariance, which carries the shift a whole cycle shares. The predecessor (previous) is shown for information only; until the peak rule replaced it (see README.md), a new version below its predecessor got a strike.
+
+| lineage | status | version | self-play | CPU s | Elo | ± | previous | peak | peak version | vs refs | decision | own games (positions) | gate | next |
+|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|---:|
+| F-L-c | qualified | 2535 | 147 x 1000 | 263 | 1676 | 44 | 1656 | 1706 | v2247 | 1524 | ok (-30 ± 61 vs peak v2247; predecessor +20) | 1530 (124109) | +426 -411 =163, 50.7%, +5 ± 20: kept | 2536 |
+| F-L-d0soft-c | dormant | 2009 |  |  | 1654 | 43 | 1595 | 1667 (1667) | v1619 (v1619) | 1503 | dormant (-12 ± 63 vs peak v1619 before dormancy at v2006, at 1515 vs refs; needs > +63) | 1530 (127661) | +470 -383 =147, 54.4%, +30 ± 20: kept | 2010 |
+| F-L-d1jit-c | dormant | 1763 | 156 x 860 | 270 | 1564 | 41 | 1556 | 1714 | v1451 | 1413 | dormant (strike 2; -150 ± 59 vs peak v1451; predecessor +8) | 1530 (138189) | +523 -308 =169, 60.8%, +76 ± 20: kept | 1764 |
+| F-L-d1play-c | qualified | 2506 | 150 x 860 | 258 | 1524 | 40 | 1515 | 1577 | v1269 | 1372 | ok (-54 ± 63 vs peak v1269; predecessor +8) | 1530 (141959) | +502 -359 =139, 57.1%, +50 ± 20: kept | 2507 |
+| F-L-d2play-c | dormant | 1012 |  |  | 1746 | 26 |  | 1771 (1742) | v1011 (v818) | 1595 | dormant (+4 ± 75 vs peak v818 before dormancy at v1009, at 1591 vs refs; needs > +75) | 1530 (132169) | +474 -385 =141, 54.4%, +31 ± 20: kept | 1013 |
+| F-L-d2mix-c | dormant | 750 |  |  | 1732 | 18 |  | 1748 (1748) | v591 (v591) | 1581 | dormant (-16 ± 76 vs peak v591 before dormancy at v750, at 1597 vs refs; needs > +76) | 1530 (133392) | +403 -376 =221, 51.3%, +9 ± 19: kept | 751 |
+| F-L-d2jit-c | qualified | 1994 | 119 x 40 | 238 | 1790 | 49 | 1772 | 1817 | v1651 | 1639 | ok (-26 ± 71 vs peak v1651; predecessor +18) | 1530 (132830) | +336 -466 =198, 43.5%, -45 ± 19: reverted | 1994 |
+| F-N-c | qualified | 1440 | 131 x 1000 | 229 | 1462 | 40 | 1458 | 1493 | v1061 | 1311 | ok (-31 ± 55 vs peak v1061; predecessor +4) | 1530 (125188) | +411 -434 =155, 48.9%, -8 ± 20: reverted | 1440 |
+| MoE-c | dormant | 367 | 30 x 1000 | 256 | 1433 | 39 | 1362 | 1738 | v300 | 1282 | dormant (strike 2; -305 ± 59 vs peak v300; predecessor +71) | 1530 (130366) | +659 -255 =86, 70.2%, +149 ± 22: kept | 368 |
+| FM-c | qualified | 378 | 23 x 1000 | 250 | 1333 | 39 | 1333 | 1386 | v331 | 1182 | ok (-52 ± 54 vs peak v331; predecessor +1) | 1530 (134582) | +602 -245 =153, 67.8%, +130 ± 21: kept | 379 |
+| TAN-c | dormant | 928 | 110 x 1000 | 242 | 1201 | 38 | 1178 | 1256 | v507 | 1049 | dormant (strike 2; -56 ± 54 vs peak v507; predecessor +22) | 1530 (134315) | +491 -386 =123, 55.2%, +37 ± 20: kept | 929 |
+| T-L-Ne-c | dormant | 557 |  |  | 1612 | 31 |  | 1626 (1620) | v556 (v483) | 1460 | dormant (-8 ± 57 vs peak v483 before dormancy at v555, at 1469 vs refs; needs > +57) | 1530 (125885) | +421 -442 =137, 48.9%, -7 ± 20: reverted | 557 |
+| T-L-Ne-merge-c | dormant | 794 |  |  | 1718 | 28 |  | 1721 (1672) | v792 (v700) | 1567 | dormant (+46 ± 58 vs peak v700 before dormancy at v790, at 1521 vs refs; needs > +58) | 1530 (120181) | +424 -427 =149, 49.9%, -1 ± 20: reverted | 794 |
+| T-L-Nc-c | qualified | 636 | 40 x 1000 | 240 | 1632 | 42 | 1600 | 1665 | v516 | 1481 | ok (-33 ± 60 vs peak v516; predecessor +33) | 1530 (128748) | +395 -414 =191, 49.0%, -7 ± 19: reverted | 636 |
+| T-L-Nc-merge-c | dormant | 1628 |  |  | 1673 | 44 | 1632 | 1707 (1707) | v833 (v833) | 1522 | dormant (-34 ± 67 vs peak v833 before dormancy at v1626, at 1556 vs refs; needs > +67) | 1530 (124082) | +455 -407 =138, 52.4%, +17 ± 20: kept | 1629 |
+| T-L-LLs-c | dormant | 647 | 34 x 1000 | 272 | 1562 | 41 | 1487 | 1650 | v540 | 1411 | dormant (strike 2; -88 ± 58 vs peak v540; predecessor +75) | 1530 (131933) | +460 -349 =191, 55.5%, +39 ± 20: kept | 648 |
+| T-L-LLs-merge-c | qualified | 1481 | 62 x 1000 | 317 | 1604 | 42 | 1546 | 1625 | v1251 | 1452 | ok (-21 ± 59 vs peak v1251; predecessor +58) | 1530 (124601) | +451 -396 =153, 52.8%, +19 ± 20: kept | 1482 |
+| T-L-NLs-c | qualified | 870 | 37 x 1000 | 233 | 1560 | 41 | 1557 | 1585 | v571 | 1409 | ok (-25 ± 61 vs peak v571; predecessor +3) | 1530 (131447) | +374 -434 =192, 47.0%, -21 ± 19: reverted | 870 |
+| T-L-NLs-merge-c | dormant | 994 |  |  | 1575 | 19 |  | 1664 (1664) | v641 (v641) | 1423 | dormant (-89 ± 72 vs peak v641 before dormancy at v994, at 1513 vs refs; needs > +72) | 1530 (131970) | +383 -425 =192, 47.9%, -15 ± 19: reverted | 994 |
+| T-L-NNs-c | qualified | 856 | 34 x 1000 | 206 | 1579 | 41 | 1588 | 1622 | v561 | 1428 | ok (-43 ± 62 vs peak v561; predecessor -9) | 1530 (127018) | +451 -402 =147, 52.4%, +17 ± 20: kept | 857 |
+| T-L-NNs-merge-c | dormant | 1065 |  |  | 1714 | 45 | 1675 | 1722 (1722) | v818 (v818) | 1563 | dormant (-8 ± 66 vs peak v818 before dormancy at v1062, at 1571 vs refs; needs > +66) | 1530 (128287) | +450 -410 =140, 52.0%, +14 ± 20: kept | 1066 |
+| T-L-Le-c | qualified | 778 | 37 x 1000 | 303 | 1591 | 41 | 1575 | 1606 | v696 | 1439 | ok (-15 ± 57 vs peak v696; predecessor +15) | 1530 (127422) | +526 -346 =128, 59.0%, +63 ± 20: kept | 779 |
+| T-L-Le-merge-c | qualified | 1857 | 143 x 1000 | 306 | 1710 | 45 | 1605 | 1677 | v1083 | 1559 | new peak (+33 ± 66 over v1083; predecessor +105) | 1530 (121079) | +486 -384 =130, 55.1%, +36 ± 20: kept | 1858 |
+| T-N-Ne-c | dormant | 633 |  |  | 1307 | 22 |  | 1389 (1389) | v574 (v574) | 1156 | dormant (-81 ± 47 vs peak v574 before dormancy at v633, at 1237 vs refs; needs > +47) | 1530 (126976) | +454 -408 =138, 52.3%, +16 ± 20: kept | 634 |
+| T-N-Ne-merge-c | dormant | 702 |  |  | 1429 | 39 | 1421 | 1465 (1426) | v699 (v500) | 1278 | dormant (+3 ± 80 vs peak v500 before dormancy at v695, at 1274 vs refs; needs > +80) | 1530 (122863) | +418 -413 =169, 50.2%, +2 ± 20: kept | 703 |
+| T-N-Nc-c | dormant | 475 |  |  | 1401 | 25 |  | 1408 (1380) | v472 (v390) | 1249 | dormant (+21 ± 74 vs peak v390 before dormancy at v471, at 1228 vs refs; needs > +74) | 1530 (124896) | +412 -429 =159, 49.1%, -6 ± 20: reverted | 475 |
+| T-N-Nc-merge-c | dormant | 632 |  |  | 1463 | 30 |  | 1467 (1460) | v631 (v628) | 1311 | dormant (+3 ± 45 vs peak v628 before dormancy at v628, at 1308 vs refs; needs > +45) | 1530 (121511) | +396 -398 =206, 49.9%, -1 ± 19: reverted | 632 |
+| T-N-NNs-c | dormant | 539 |  |  | 1189 | 24 |  | 1251 (1251) | v452 (v452) | 1037 | dormant (-63 ± 52 vs peak v452 before dormancy at v536, at 1100 vs refs; needs > +52) | 1530 (131881) | +374 -464 =162, 45.5%, -31 ± 20: reverted | 539 |
+| T-N-NNs-merge-c | dormant | 998 |  |  | 1381 | 29 |  | 1485 (1485) | v855 (v855) | 1230 | dormant (-104 ± 51 vs peak v855 before dormancy at v997, at 1333 vs refs; needs > +51) | 1530 (125856) | +362 -420 =218, 47.1%, -20 ± 19: reverted | 998 |
+| T-N-Le-merge-c | qualified | 536 | 59 x 1000 | 281 | 1399 | 39 | 1391 | 1404 | v341 | 1247 | ok (-6 ± 54 vs peak v341; predecessor +8) | 1530 (123028) | +434 -389 =177, 52.2%, +16 ± 20: kept | 537 |
+| T-N-Lc-merge-c | dormant | 364 | 36 x 1000 | 222 | 1400 | 39 | 1379 | 1456 | v287 | 1249 | dormant (strike 2; -55 ± 54 vs peak v287; predecessor +21) | 1530 (124358) | +437 -405 =158, 51.6%, +11 ± 20: kept | 365 |
+| T-N-LLs-merge-c | qualified | 469 | 64 x 1000 | 140 | 1387 | 39 | 905 | 1309 | v213 | 1236 | new peak (+78 ± 54 over v213; predecessor +482) | 1530 (125638) | +421 -418 =161, 50.1%, +1 ± 20: kept | 470 |
+| T-N-NLs-merge-c | qualified | 469 | 50 x 1000 | 133 | 1380 | 39 | 958 | 1381 | v287 | 1229 | ok (-1 ± 54 vs peak v287; predecessor +423) | 1530 (126085) | +418 -422 =160, 49.8%, -1 ± 20: reverted | 469 |
+| T-N-LNs-merge-c | dormant | 410 | 64 x 1000 | 308 | 956 | 37 | 1305 | 1366 | v270 | 805 | dormant (strike 2; -409 ± 52 vs peak v270; predecessor -349) | 1530 (144634) | +566 -300 =134, 63.3%, +95 ± 21: kept | 411 |
+| F-N-d2jit-c | qualified | 509 | 119 x 40 | 251 | 1183 | 38 | 1193 | 1193 | v389 | 1031 | ok (-11 ± 51 vs peak v389; predecessor -11) | 1530 (137319) | +453 -346 =201, 55.4%, +37 ± 19: kept | 510 |
+| T-N-NNs-merge-d2jit-c | qualified | 323 | 127 x 40 | 287 | 1105 | 37 | 1043 | 1043 | v195 | 954 | new peak (+62 ± 50 over v195; predecessor +62) | 1530 (139711) | +590 -279 =131, 65.5%, +112 ± 21: kept | 324 |
+| F-L-d4mix-c | qualified | 14 | 8 x 10 | 229 | 504 | 49 | 390 | 390 | v5 | 352 | new peak (+114 ± 73 over v5; predecessor +114) | 1530 (128911) | +155 -279 =566, 43.8%, -43 ± 14: reverted | 14 |
+| T-L-H-c | dormant | 1245 |  |  | 1677 | 44 | 1651 | 1659 (1652) | v1243 (v970) | 1525 | dormant (+25 ± 66 vs peak v970 before dormancy at v1240, at 1501 vs refs; needs > +66) | 1530 (125386) | +429 -427 =144, 50.1%, +1 ± 20: kept | 1246 |
+| T-N-H-c | dormant | 1729 |  |  | 1257 | 38 | 1290 | 1378 (1378) | v1104 (v1104) | 1105 | dormant (-122 ± 59 vs peak v1104 before dormancy at v1728, at 1227 vs refs; needs > +59) | 1530 (129927) | +422 -408 =170, 50.7%, +5 ± 20: kept | 1730 |

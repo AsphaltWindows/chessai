@@ -1,0 +1,170 @@
+{
+  "root": "/home/iv/dev/chessai",
+  "registry": "cycles/champ/lineages.txt",
+  "costs": "cycles/champ/costs.csv",
+  "runs_dir": "cycles/runs",
+  "state": "cycles/champ/state.json",
+  "log_csv": "cycles/champ/cycles.csv",
+  "totals_csv": "cycles/champ/totals.csv",
+  "log_dir": "cycles/champ",
+  "league_dir": "selfplay/league-champ",
+  "league_py": "cycles/champ/league.py",
+  "tournament": {
+    "binary": "models/from-scratch/bin/chessai-hybrid4",
+    "flags": [
+      "--reports-last",
+      "--sparse-fit"
+    ],
+    "round_robins_per_cycle": 5,
+    "entry_depths": [
+      1,
+      2
+    ],
+    "qualify_depth": 2,
+    "seed": 1,
+    "retired": "selfplay/league-champ/retired.txt"
+  },
+  "league_setup": {
+    "add_players": [
+      "random-1 1 rand",
+      "random-2 2 rand",
+      "random-3 3 rand",
+      "ref-d4mix43-1 1 cal:/home/iv/dev/chessai/games/heldout-lr-d2-s555/round0:lr:/home/iv/dev/chessai/cycles/champ/refs/F-L-d4mix-c-lr43.model"
+    ],
+    "add_models": [
+      {
+        "name": "ref-d4mix43",
+        "archetype": "F-L",
+        "variant": "reference (never trains): F-L-d4mix-c v43, at ply 1 only, in random-4's place",
+        "games": "own (vN vs vN-1)",
+        "moves": "softmax0.3",
+        "train_depth": "4",
+        "labels": "50/50 result + d2 search",
+        "init": "scratch",
+        "rounds": "v43 (first run)",
+        "seed": "21",
+        "calibrated": "yes",
+        "run_dir": "cycles/runs/F-L-d4mix-c",
+        "script": "cycles/champ/cycle.py"
+      }
+    ],
+    "copy_files": {
+      "cycles/champ/refs/F-L-d4mix-c-lr43.model": "cycles/runs/F-L-d4mix-c/lr43.model"
+    }
+  },
+  "references": [
+    "random",
+    "random-1",
+    "random-2",
+    "random-3",
+    "ref-d4mix43-1"
+  ],
+  "rel_references": [
+    "random",
+    "random-1",
+    "random-2"
+  ],
+  "seed_from": {
+    "league_dir": "selfplay/league-cycles"
+  },
+  "cycle_budget_cpu_s": 3600,
+  "patience_cpu_s": 1920,
+  "champion_se": 2.0,
+  "revive_se": 2.0,
+  "global_every": 25,
+  "milestones": {
+    "step": 100,
+    "window": 10,
+    "reference_window": 50
+  },
+  "round_anchor_games": 1000,
+  "jobs": 2,
+  "threads_per_job": 4,
+  "nice": 10,
+  "heldout": {
+    "lr": "games/heldout-lr-d2-s555/round0",
+    "cnbp": "games/heldout-cnbp-d2-s555/round0"
+  },
+  "calibration": "own",
+  "own_calibration": {
+    "dir": "cycles/champ/owncal",
+    "seed_dirs": [
+      "models/from-scratch/leaguecal/games"
+    ],
+    "games": 600,
+    "depth": 1,
+    "seed": 5,
+    "policy": "log-odds-softmax",
+    "temperature": 0.1
+  },
+  "own_games": {
+    "enabled": true,
+    "binary": "models/from-scratch/bin/chessai-cyc5-labels",
+    "binary_by_lineage": {
+      "T-L-Nc-fresh-c": "models/from-scratch/bin/chessai-resid4",
+      "T-L-Ne-fresh-c": "models/from-scratch/bin/chessai-resid4",
+      "T-L-Le-fresh-c": "models/from-scratch/bin/chessai-resid4",
+      "T-N-Nc-fresh-c": "models/from-scratch/bin/chessai-resid4",
+      "T-L-Ne-pre-c": "models/from-scratch/bin/chessai-presplit",
+      "T-L-Le-pre-c": "models/from-scratch/bin/chessai-presplit",
+      "D-L-Nc-c": "models/from-scratch/bin/chessai-dag",
+      "F-P-c": "models/from-scratch/bin/chessai-probit",
+      "F-P-tau0-c": "models/from-scratch/bin/chessai-probit",
+      "F-P-tau0-d2jit-c": "models/from-scratch/bin/chessai-probit",
+      "M-N4-L-c": "models/from-scratch/bin/chessai-nbmix2",
+      "M-L4-N-c": "models/from-scratch/bin/chessai-nbmix2",
+      "M-N4-N-c": "models/from-scratch/bin/chessai-nbmix2",
+      "T-L-Te-merge-c": "models/from-scratch/bin/chessai-tanroute2",
+      "T-L-Ne-share-c": "models/from-scratch/bin/chessai-lrshare",
+      "T-L-Le-share3-c": "models/from-scratch/bin/chessai-sparsefit",
+      "T-L-Nc-share-c": "models/from-scratch/bin/chessai-lrshare",
+      "T-L-Ne-share3-c": "models/from-scratch/bin/chessai-sparsefit",
+      "T-L-Te-c": "models/from-scratch/bin/chessai-tanroute2",
+      "T-L-Nc-share-merge-c": "models/from-scratch/bin/chessai-lrshare",
+      "T-L-Le-bal-c": "models/from-scratch/bin/chessai-bal",
+      "T-L-Ne-bal-c": "models/from-scratch/bin/chessai-bal",
+      "T-L-Nc-share-l10-c": "models/from-scratch/bin/chessai-lrshare",
+      "D-L-Ne-lreg-c": "models/from-scratch/bin/chessai-bddfix",
+      "D-L-Ne-skip-c": "models/from-scratch/bin/chessai-bddfix",
+      "D-L-Ne-rf16-c": "models/from-scratch/bin/chessai-bddfix",
+      "D-L-Ne-skill-c": "models/from-scratch/bin/chessai-bddtrig2",
+      "M-LP-L-c": "models/from-scratch/bin/chessai-hybrid",
+      "M-LP-L-hard-c": "models/from-scratch/bin/chessai-hybrid",
+      "M-LP-L-d2jit-c": "models/from-scratch/bin/chessai-hybrid",
+      "M-LP-L-win-c": "models/from-scratch/bin/chessai-hybrid3",
+      "M-L4-L-hard-c": "models/from-scratch/bin/chessai-hybrid3"
+    },
+    "opponents": "lineages",
+    "pools_dir": "cycles/champ/pools",
+    "keep_pools": false
+  },
+  "gate": {
+    "games": 100,
+    "depth": 2,
+    "threshold": 0.5,
+    "seed": 1
+  },
+  "measure": {
+    "dir": "cycles/champ/.measure",
+    "rounds": 2,
+    "games_by_depth": {
+      "0": 1000,
+      "1": 1000,
+      "2": 200,
+      "3": 50,
+      "4": 10
+    },
+    "games_by_kind": {
+      "moe": 300,
+      "fm": 300
+    },
+    "round_rule_binary": "models/from-scratch/bin/chessai-cyc",
+    "reference_runs": {
+      "lr": "models/from-scratch/F-L-s21",
+      "cnbp": "models/from-scratch/F-N-s11",
+      "moe": "models/from-scratch/moe-s21",
+      "fm": "models/from-scratch/F-FM-s21",
+      "probit": "models/from-scratch/probit/selfplay/F-P-s21"
+    }
+  }
+}

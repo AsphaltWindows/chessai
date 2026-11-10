@@ -1,0 +1,212 @@
+# Cycle lineages (2026-11-06): one line per lineage, fields separated by " | ":
+#   name | archetype | binary | source | heldout | steps | flags
+# - name: the lineage; its league entries are <name>-v<N>-<ply> at the plies in config.json's entry_depths (1 and
+#   2). Every name ends in -c (for "cycles"), so that none collides with the old models' names.
+# - binary: relative to /home/iv/dev/chessai unless absolute; it runs the lineage's self-play. A lineage whose binary
+#   doesn't exist is skipped ("waiting for binary").
+# - source: scratch, continue:<run dir> (hard-links that run's models into the lineage's own run dir and resumes from
+#   its last version; the original run is never written) or init:<model file> (first cycle starts from that model).
+# - heldout: calibration set of the league entries and the gate: lr, cnbp, a path, or - for none.
+# - steps: own (after each tournament, train once on the lineage's games against lineage entries, kept only if it
+#   scores at least 50% against the model it started from) or - for none. Flip it per lineage here; own_games.enabled
+#   in config.json switches it off for all.
+# - flags: the self-play recipe without --rounds, --games, --threads, --resume and --init, which the driver adds. Keep
+#   the seed fixed: a lineage trained over several cycles is the same run as one trained straight through.
+# The round size comes from the training depth (costs.csv), never from the flags.
+#
+# The user's design: every lineage starts from scratch with seed 21, so lineages differ only in their recipe. The
+# cycles' league (selfplay/league-cycles) holds only the lineages and the random players; the old models stay in the
+# old league, selfplay/league, as an archive.
+#
+F-L-c | F-L | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model lr --use-probs --seed 21 --vs-previous --no-games
+F-L-d0soft-c | F-L | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model lr --use-probs --seed 21 --vs-previous --no-games --policy log-odds-softmax --temperature 0.3
+F-L-d1jit-c | F-L | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model lr --use-probs --seed 21 --vs-previous --no-games --depth 1
+F-L-d1play-c | F-L | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model lr --use-probs --seed 21 --vs-previous --no-games --policy log-odds-softmax --temperature 0.3 --depth 1
+F-L-d2play-c | F-L | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model lr --use-probs --seed 21 --vs-previous --no-games --policy log-odds-softmax --temperature 0.3 --depth 2
+F-L-d2mix-c | F-L | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model lr --use-probs --seed 21 --vs-previous --no-games --policy log-odds-softmax --temperature 0.3 --depth 2 --label-depth 2 --label-result 0.5
+F-L-d2jit-c | F-L | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model lr --use-probs --seed 21 --vs-previous --no-games --depth 2
+F-N-c | F-N | models/from-scratch/bin/chessai-cyc5 | scratch | cnbp | own | --model cnbp --use-probs --seed 21 --vs-previous --no-games
+MoE-c | MoE | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model moe --moe-experts 4 --use-probs --seed 21 --vs-previous --no-games
+FM-c | FM | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model fm --use-probs --seed 21 --vs-previous --no-games
+#
+# From cycle 25 (the user, 2026-11-07): F-P, an online Bayesian ordinal probit regression over the logistic
+# regression's features, trained by assumed-density filtering, from scratch on chessai-probit (the probit agent's
+# binary: chessai-resid4's source plus probit/probit.patch; for every other kind it gave chessai-resid4's output in
+# the agent's checks, and chessai-cyc5's in the tournament). Its file probitN.model holds all its training state, so
+# the driver resumes it and starts its own step from it, as for LR. Its own step trains and gates with chessai-probit
+# (own_games.binary_by_lineage in config.json), and from cycle 25 the tournament plays every entry with chessai-probit
+# (config.json's tournament binary).
+F-P-c | F-P | models/from-scratch/bin/chessai-probit | scratch | lr | own | --model probit --use-probs --seed 21 --vs-previous --no-games
+#
+# From cycle 38 (the user, 2026-11-07, the probit agent's proposal): F-P-tau0-c, F-P-c's line plus --probit-tau 0, its
+# one factor: the posterior's dynamics noise tau is 0 instead of 1e-5. Each position adds tau^2 to the variance of
+# every weight it uses, so at tau 1e-5 the weights' variance floors at about 2 tau, which caps the filter's memory at
+# about one round (~200k positions), and F-P-c's v1646 already sits at that floor; at tau 0 the variance keeps
+# shrinking like 1/n and the model averages over all its data. The agent's brief check
+# (models/from-scratch/probit/tau/summary.txt): chessai-probit from scratch, seed 21, 1000 games a round, each variant
+# at the same cumulative CPU as a tau 1e-5 baseline, d2 arenas of 2 x 1000 games calibrated on heldout-lr-d2-s555,
+# default jitter10. Tau 0 beat the baseline by 73 Elo at its v100, 48 at v200 and 85 (71 to 99) at v300 (94 and 76 on
+# the two seeds); tau 1e-6 by 48, 47 and 63. A larger tau loses badly: 1e-4 by 415 and 421, 1e-3 by 512 and 561 (a
+# control confirmed the arena: the baseline against itself 10, and with the sides swapped 389, mirroring the 415). The
+# model files store tau, so the own step's train --start keeps it at 0; the own step trains and gates with
+# chessai-probit (own_games.binary_by_lineage in config.json), as F-P-c's. Risk: at tau 0 the model keeps stiffening
+# over the league's 1000+ rounds, so late own steps may barely move it; tau 1e-6 is the hedge. The league decides.
+F-P-tau0-c | F-P | models/from-scratch/bin/chessai-probit | scratch | lr | own | --model probit --use-probs --seed 21 --vs-previous --no-games --probit-tau 0
+#
+# From cycle 39 (the user, 2026-11-07 ~10:40: "You don't need to run compute matched arenas for so much of CPU time
+# may as well throw them into the tournament league and see how they do against a more balanced field"):
+# F-P-tau0-d2jit-c, F-P-tau0-c's line plus --depth 2, its one factor: self-play by depth-2 search, the
+# classifier-by-depth question for probit; the league already has LR (F-L-d2jit-c) and NB (F-N-d2jit-c) at depth 2.
+# Equal data: on cycle 15's league games, probit trained on ply-2 games beat the same model trained on ply-1 games by
+# 174 Elo at ply 2 (LR by 201, while NB's was 203 below). Pure self-play from scratch at equal CPU (tau 1e-5): probit
+# at depth 2 against depth 1, at ply 2, went from 231 below to 53 and 51 below at 450, 900 and 1800 CPU-s, closing
+# fastest of the three classifiers. Tau 0 rather than 1e-5: at depth 2 the model sees about 20-50 times fewer
+# positions a cycle, so tau 1e-5's memory of about 200k positions would be under a cycle's data.
+# (models/from-scratch/depth-train/ and models/IDEAS.md, "Look-ahead training by classifier".) Its own step trains and
+# gates with chessai-probit (own_games.binary_by_lineage in config.json), as F-P-c's.
+F-P-tau0-d2jit-c | F-P | models/from-scratch/bin/chessai-probit | scratch | lr | own | --model probit --use-probs --seed 21 --vs-previous --no-games --probit-tau 0 --depth 2
+#
+# From cycle 6 (the user, 2026-11-06: "Let's just throw some basic version of TAN in"): TAN, a tree-augmented naive
+# Bayes. Its features' dependence tree (Chow-Liu on I(Xi;Xj|C) from pair counts over positions, rebuilt every round)
+# backs off to CNBP with an m-estimate, m 200000; otherwise it is CNBP, so TAN-c against F-N-c is one factor. Its
+# training state (tanN.state, ~8.6 MB) holds the pair counts, so the driver resumes it and starts its own step from
+# it, as for a tree.
+TAN-c | TAN | models/from-scratch/bin/chessai-cyc5 | scratch | cnbp | own | --model tan --use-probs --tan-m 200000 --seed 21 --vs-previous --no-games
+#
+# The 9 BDT recipes of the earlier tournaments (batch29/30/31/32/34.sh), each twice: -merge-c merges a branch back into
+# its shadow when it fails (--revise 0); -c never merges (no --revise). Every recipe also has --reset-leaves inf,
+# which keeps the shadows to log the leaves' comparisons with them, so the -c variants still train shadows; shadows
+# never change a tree unless it merges (delegation.rs: revise_step merges only with --revise, measure_seams and the
+# leaf resets need shadows, and --reset-leaves inf only logs).
+# From cycle 5 on (chessai-cyc5), a delegator that switches to error routing (--route-switch) starts its revision
+# windows afresh, so a -merge-c tree judges the switched branch on a full window of error-routed examples before it
+# can merge it. Before, the merge check came on the next example and judged the cluster-routed window, so
+# T-L-LLs-merge-c and T-L-NLs-merge-c merged right after every switch they made. That changes the recipe of
+# T-L-LLs-merge-c, T-L-NLs-merge-c, T-L-NNs-merge-c and T-N-NNs-merge-c from cycle 5; every other lineage trains
+# byte for byte as with chessai-cyc2.
+T-L-Ne-c | T-L-Ne | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+T-L-Ne-merge-c | T-L-Ne | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+# From cycle 23 (the user, 2026-11-07): T-L-Ne-merge-c's recipe with the fresh merge test at z 2 (--revise 2
+# --revise-on fresh) on chessai-resid4, one factor, as T-L-Nc-fresh-c (below); own step on resid4 too.
+T-L-Ne-fresh-c | T-L-Ne | models/from-scratch/bin/chessai-resid4 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --revise 2 --revise-on fresh --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+# From cycle 26 (the user, 2026-11-07: "train the Error router from the beginning so that when the split happens it's
+# not as random"): T-L-Ne-c's recipe plus --pre-split, one factor, on chessai-presplit (the presplit agent's binary:
+# chessai-resid4's source plus presplit/presplit.patch; without --pre-split it gives chessai-resid4's output). Before
+# each split check a leaf trains its would-be split, the children and the router, in the shadow over the window, and a
+# split installs those trained candidates; until a tree's first split it plays and trains as T-L-Ne-c's. The
+# candidates live in the state files (bdtN.state), so its own step trains and gates with chessai-presplit too
+# (own_games.binary_by_lineage in config.json); its model files are plain trees, which the tournament plays.
+T-L-Ne-pre-c | T-L-Ne | models/from-scratch/bin/chessai-presplit | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --pre-split --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+T-L-Nc-c | T-L-Nc | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route cluster --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+T-L-Nc-merge-c | T-L-Nc | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route cluster --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+# From cycle 19 (the user, 2026-11-07): T-L-Nc-merge-c's recipe with another merge test, on chessai-resid4 (the
+# residual agent's binary: chessai-cyc5-labels' source plus resid/resid4.patch, byte-identical to it with the new
+# options off). --revise-on fresh: the shadow test scores each self-play round's positions by the model as it
+# starts the round, before it trains on them, rather than the training stream; --revise 2: a branch merges back
+# into its shadow only when it is worse by more than 2 standard errors (T-L-Nc-merge-c: the stream, z 0; T-L-Nc-c
+# never merges). Its own step trains and gates with chessai-resid4 too (own_games.binary_by_lineage in
+# config.json): chessai-cyc5-labels lacks --revise-on, and the tree's state records it.
+T-L-Nc-fresh-c | T-L-Nc | models/from-scratch/bin/chessai-resid4 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route cluster --revise 2 --revise-on fresh --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+# From cycle 26 (the user, 2026-11-07): D-L-Nc, the user's DAG, on chessai-dag (the DAG agent's binary:
+# chessai-resid4's source plus dag/dag.patch; for every existing option it gives chessai-resid4's output). One LR leaf
+# until the root's first split check; then a CNBP cluster router over 9 cells (--branch-factor 9) that point to 3
+# shared LR leaves (--dag-leaves 3; cell c to leaf c mod 3), and a cell is pointed to another leaf when that leaf's
+# fresh loss on the cell is lower by 2 standard errors over a window of 50,000 judged positions (--dag-window). Its
+# model files are plain BDT files with repeated children, which the tournament plays; the cells' accumulators live in
+# the state files (bdtN.state), so its own step trains and gates with chessai-dag too (own_games.binary_by_lineage).
+# chessai-dag refuses --reset-leaves inf, so the line has none.
+D-L-Nc-c | D-L-Nc | models/from-scratch/bin/chessai-dag | scratch | lr | own | --model bdt --leaf lr --branch-factor 9 --dag-leaves 3 --dag-window 50000 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route cluster --use-probs --seed 21 --vs-previous --no-games
+T-L-LLs-c | T-L-LLs | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router lr --route cluster --route-switch 3 --error log --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+T-L-LLs-merge-c | T-L-LLs | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router lr --route cluster --route-switch 3 --error log --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+T-L-NLs-c | T-L-NLs | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --error-router lr --route cluster --route-switch 3 --error log --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+T-L-NLs-merge-c | T-L-NLs | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --error-router lr --route cluster --route-switch 3 --error log --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+T-L-NNs-c | T-L-NNs | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route cluster --route-switch 3 --error log --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+T-L-NNs-merge-c | T-L-NNs | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route cluster --route-switch 3 --error log --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+T-L-Le-c | T-L-Le | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router lr --route error --error log --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+T-L-Le-merge-c | T-L-Le | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router lr --route error --error log --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+# From cycle 23 (the user, 2026-11-07): T-L-Le-merge-c's recipe with the fresh merge test at z 2 (--revise 2
+# --revise-on fresh) on chessai-resid4, one factor, as T-L-Nc-fresh-c (above); own step on resid4 too.
+T-L-Le-fresh-c | T-L-Le | models/from-scratch/bin/chessai-resid4 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router lr --route error --error log --revise 2 --revise-on fresh --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+# From cycle 26 (the user, 2026-11-07): T-L-Le-c's recipe plus --pre-split on chessai-presplit, one factor, as
+# T-L-Ne-pre-c (above); own step on chessai-presplit too.
+T-L-Le-pre-c | T-L-Le | models/from-scratch/bin/chessai-presplit | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router lr --route error --error log --pre-split --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+T-N-Ne-c | T-N-Ne | models/from-scratch/bin/chessai-cyc5 | scratch | cnbp | own | --model bdt --leaf cnbp --router cnbp --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --reset-leaves inf --route error --error log --use-probs --seed 21 --vs-previous --no-games
+T-N-Ne-merge-c | T-N-Ne | models/from-scratch/bin/chessai-cyc5 | scratch | cnbp | own | --model bdt --leaf cnbp --router cnbp --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --revise 0 --reset-leaves inf --route error --error log --use-probs --seed 21 --vs-previous --no-games
+T-N-Nc-c | T-N-Nc | models/from-scratch/bin/chessai-cyc5 | scratch | cnbp | own | --model bdt --leaf cnbp --router cnbp --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --route cluster --leaf-share 0.1 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+T-N-Nc-merge-c | T-N-Nc | models/from-scratch/bin/chessai-cyc5 | scratch | cnbp | own | --model bdt --leaf cnbp --router cnbp --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --route cluster --leaf-share 0.1 --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+# From cycle 23 (the user, 2026-11-07): T-N-Nc-merge-c's recipe with the fresh merge test at z 2 (--revise 2
+# --revise-on fresh) on chessai-resid4, one factor, as T-L-Nc-fresh-c (above); own step on resid4 too.
+T-N-Nc-fresh-c | T-N-Nc | models/from-scratch/bin/chessai-resid4 | scratch | cnbp | own | --model bdt --leaf cnbp --router cnbp --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --route cluster --leaf-share 0.1 --revise 2 --revise-on fresh --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+T-N-NNs-c | T-N-NNs | models/from-scratch/bin/chessai-cyc5 | scratch | cnbp | own | --model bdt --leaf cnbp --router cnbp --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --route cluster --route-switch 3 --error log --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+T-N-NNs-merge-c | T-N-NNs | models/from-scratch/bin/chessai-cyc5 | scratch | cnbp | own | --model bdt --leaf cnbp --router cnbp --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --route cluster --route-switch 3 --error log --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+#
+# From cycle 10 (the user, 2026-11-06): 5 more T-N trees, merge versions only, each one factor from an existing T-N
+# merge tree: T-N-Le-merge-c (LR router; vs T-N-Ne-merge-c), T-N-Lc-merge-c (LR router; vs T-N-Nc-merge-c),
+# T-N-LLs-merge-c (LR routers; vs T-N-NNs-merge-c), T-N-NLs-merge-c (LR error router; vs T-N-NNs-merge-c) and
+# T-N-LNs-merge-c (LR cluster router with an NB error router, a new combination; vs T-N-NNs-merge-c).
+T-N-Le-merge-c | T-N-Le | models/from-scratch/bin/chessai-cyc5 | scratch | cnbp | own | --model bdt --leaf cnbp --router lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --revise 0 --reset-leaves inf --route error --error log --use-probs --seed 21 --vs-previous --no-games
+T-N-Lc-merge-c | T-N-Lc | models/from-scratch/bin/chessai-cyc5 | scratch | cnbp | own | --model bdt --leaf cnbp --router lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --route cluster --leaf-share 0.1 --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+T-N-LLs-merge-c | T-N-LLs | models/from-scratch/bin/chessai-cyc5 | scratch | cnbp | own | --model bdt --leaf cnbp --router lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --route cluster --route-switch 3 --error log --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+T-N-NLs-merge-c | T-N-NLs | models/from-scratch/bin/chessai-cyc5 | scratch | cnbp | own | --model bdt --leaf cnbp --router cnbp --error-router lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --route cluster --route-switch 3 --error log --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+T-N-LNs-merge-c | T-N-LNs | models/from-scratch/bin/chessai-cyc5 | scratch | cnbp | own | --model bdt --leaf cnbp --router lr --error-router cnbp --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --route cluster --route-switch 3 --error log --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+#
+# From cycle 11 (the user, 2026-11-06): a lineage that self-plays at depth 2, an existing recipe plus --depth 2
+# (one factor), named like F-L-d2jit-c (= F-L-c + --depth 2): F-N-d2jit-c (vs F-N-c).
+F-N-d2jit-c | F-N | models/from-scratch/bin/chessai-cyc5 | scratch | cnbp | own | --model cnbp --use-probs --seed 21 --vs-previous --no-games --depth 2
+#
+# From cycle 12 (the user, 2026-11-06): T-N-NNs-merge-c's recipe plus --depth 2, with its split threshold scaled to
+# its data: a leaf's split check comes every --split-threshold training positions, and at depth 2 the tree trains
+# about 0.85M positions a cycle (240 CPU-s at the measured 85.7 ms a game is ~2,800 games, at ~302 plies a game from
+# scratch) against T-N-NNs-merge-c's ~13.1M (cycles 9-10: 55 and 35 rounds of 1,000 games at ~292 plies a game), so
+# 5,000,000 x 0.85 / 13.1 = 323k, rounded to 300,000. At 5,000,000 it would have stayed one leaf for 5-10 cycles.
+T-N-NNs-merge-d2jit-c | T-N-NNs | models/from-scratch/bin/chessai-cyc5 | scratch | cnbp | own | --model bdt --leaf cnbp --router cnbp --branch-factor 3 --split-threshold 300000 --split-limit 5 --forget-factor 1 --route cluster --route-switch 3 --error log --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games --depth 2
+#
+# From cycle 35 (the user, 2026-11-07): three more depth-2 trees, each its twin's line plus --depth 2 with its split
+# threshold scaled to its data as for T-N-NNs-merge-d2jit-c (above), to see whether look-ahead helps trees with LR
+# leaves and not those with CNBP leaves (peak Elo at ply 2: F-L-d2jit-c 1818 against F-L-c's 1717, but F-N-d2jit-c
+# 1265 against F-N-c's 1477 and T-N-NNs-merge-d2jit-c 1175 against T-N-NNs-merge-c's 1472). T-L-Le-merge-d2jit-c: the
+# best T-L that is still a real tree (T-L-Le-merge-c, peak 1704 with 3 distinct leaves at v2053; T-L-Nc-merge-c and
+# T-L-Ne-merge-c peak higher but merged back to one leaf, flat LR, which F-L-d2jit-c covers). T-L-NLs-d2jit-c: the
+# original T-L recipe with the lowest peak (T-L-NLs-c, 1591, 11 leaves). T-N-Nc-merge-d2jit-c: the best active T-N
+# (T-N-Nc-merge-c, peak 1453, 7 leaves at v1832; T-N-NNs-merge-c, the top T-N by peak, has its depth-2 twin above).
+# Threshold = 5,000,000 x (positions a cycle at depth 2) / (the twin's positions a cycle at depth 0), at 240 CPU-s a
+# cycle (the coordinator's measurements): a depth-2 game costs 56.5, 116.8 and 87.5 ms (an arena of the twin's
+# bdt2053, bdt1433 and bdt1832 against itself, 40 games, nice 19, load ~6; LR's lr3941 57.0), at ~134 plies a game
+# with LR leaves (F-L-d2jit-c, cycles 26-31) and ~255 with NB leaves (T-N-NNs-merge-d2jit-c, cycles 27-32), so ~0.57M,
+# ~0.28M and ~0.70M positions a cycle, against the twins' 26.2M (cycles 11-16), 10.0M (cycles 22-27) and 18.05M
+# (cycles 27-32) at depth 0: 109k, 138k and 194k, rounded to 100,000 for both T-L trees (so the pair differs only in
+# its recipe) and 200,000 for the T-N tree.
+T-L-Le-merge-d2jit-c | T-L-Le | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 100000 --split-limit 5 --forget-factor 1 --router lr --route error --error log --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games --depth 2
+T-L-NLs-d2jit-c | T-L-NLs | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 100000 --split-limit 5 --forget-factor 1 --router cnbp --error-router lr --route cluster --route-switch 3 --error log --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games --depth 2
+T-N-Nc-merge-d2jit-c | T-N-Nc | models/from-scratch/bin/chessai-cyc5 | scratch | cnbp | own | --model bdt --leaf cnbp --router cnbp --branch-factor 3 --split-threshold 200000 --split-limit 5 --forget-factor 1 --route cluster --leaf-share 0.1 --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games --depth 2
+#
+# From cycle 40 (the user, 2026-11-07): T-L-NLs-merge-d2jit-c, T-L-NLs-d2jit-c's line plus --revise 0 where
+# T-L-NLs-merge-c's line has it, at the same split threshold (100,000), so the depth-2 pair differs only in merging.
+# The user reasons that merging beats not merging, which holds in 8 of the 9 tree pairs by peak (T-L-LLs about level).
+# At depth 0, T-L-NLs-merge-c reverted 7 of its 8 splits, kept the 8th (from v746) and peaked at 1658 at v1121 with
+# about 7 leaves, while T-L-NLs-c, which doesn't merge, peaked at 1585 (1591 in the cycle-35 comment above);
+# T-L-NLs-d2jit-c has kept the split it made at v18, and by v211 its model file is 12.3 times the size of its
+# single-leaf v17's. So the pair tests whether the merge rule keeps any of its depth-2 splits. A correction to the
+# cycle-35 comment above, which calls T-L-Le-merge-c the best T-L that is still a real tree: it reverted 25 of its 26
+# splits, each after about 20 versions, was one leaf in 71% of its versions, and its peak (v2051) came 2 versions into
+# a split; T-L-Nc-merge-c (22 of 22 splits reverted), T-L-Ne-merge-c (12 of 12) and T-L-NNs-merge-c (11 of 12) all
+# peaked as a single leaf; and at depth 2 T-L-Le-merge-d2jit-c has reverted all 5 of its splits so far and is one leaf
+# at v297.
+T-L-NLs-merge-d2jit-c | T-L-NLs | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 100000 --split-limit 5 --forget-factor 1 --router cnbp --error-router lr --route cluster --route-switch 3 --error log --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games --depth 2
+#
+# From cycle 13 (the user, 2026-11-06): F-L-d2mix-c's recipe with --depth 4 instead of 2, its one factor: self-play
+# at depth 4, trained on depth-2 look-ahead labels mixed half and half with results. A depth-4 game costs ~2 CPU-s
+# (~4 from scratch), so its 240 CPU-s buy only ~60-120 games (~20k positions) a cycle, in rounds of 10 games (the
+# round-size rule's floor): the small training set is what the user wants to test. Its own step labels its
+# tournament games the same way (train --label-depth 2 --label-result 0.5); the two came in at the same switch.
+F-L-d4mix-c | F-L | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model lr --use-probs --seed 21 --vs-previous --no-games --policy log-odds-softmax --temperature 0.3 --depth 4 --label-depth 2 --label-result 0.5
+#
+# From cycle 16 (the user, 2026-11-07): MoE-c's recipe plus --depth 2 (one factor), from scratch, as F-N-d2jit-c came
+# from F-N-c. MoE-c gains on tournament games and crashes on its own depth-0 self-play (cycle 13: v300 at 1744 to
+# v336 at 1368 at ply 2, 1013 to 858 at ply 1; the ply-2 drop about 2.4 times the ply-1 drop points at search
+# exploiting it): does self-play by depth-2 search fix that?
+MoE-d2jit-c | MoE | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model moe --moe-experts 4 --use-probs --seed 21 --vs-previous --no-games --depth 2
+#
+# Hoeffding trees: they never merge.
+T-L-H-c | T-L-H | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model ht --leaf lr --use-probs --seed 21 --vs-previous --no-games
+T-N-H-c | T-N-H | models/from-scratch/bin/chessai-cyc5 | scratch | cnbp | own | --model ht --leaf cnbp --use-probs --seed 21 --vs-previous --no-games

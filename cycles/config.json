@@ -1,0 +1,84 @@
+{
+  "root": "/home/iv/dev/chessai",
+  "registry": "cycles/lineages.txt",
+  "costs": "cycles/costs.csv",
+  "runs_dir": "cycles/runs",
+  "state": "cycles/state.json",
+  "log_csv": "cycles/cycles.csv",
+  "log_dir": "cycles",
+  "league_dir": "selfplay/league-cycles",
+  "league_py": "cycles/league.py",
+  "tournament": {
+    "binary": "models/from-scratch/bin/chessai-probit",
+    "round_robins_per_cycle": 5,
+    "entry_depths": [1, 2],
+    "qualify_depth": 2,
+    "seed": 1,
+    "retired": "selfplay/league-cycles/retired.txt"
+  },
+  "league_setup": {
+    "add_players": ["random-1 1 rand", "random-2 2 rand"]
+  },
+  "budget_cpu_s": 240,
+  "round_anchor_games": 1000,
+  "jobs": 2,
+  "threads_per_job": 4,
+  "nice": 10,
+  "patience": 2,
+  "dormancy_se": 1.5,
+  "requalify_se": 1.0,
+  "heldout": {
+    "lr": "games/heldout-lr-d2-s555/round0",
+    "cnbp": "games/heldout-cnbp-d2-s555/round0"
+  },
+  "own_games": {
+    "enabled": true,
+    "binary": "models/from-scratch/bin/chessai-cyc5-labels",
+    "binary_by_lineage": {"T-L-Nc-fresh-c": "models/from-scratch/bin/chessai-resid4",
+                          "T-L-Ne-fresh-c": "models/from-scratch/bin/chessai-resid4",
+                          "T-L-Le-fresh-c": "models/from-scratch/bin/chessai-resid4",
+                          "T-N-Nc-fresh-c": "models/from-scratch/bin/chessai-resid4",
+                          "T-L-Ne-pre-c": "models/from-scratch/bin/chessai-presplit",
+                          "T-L-Le-pre-c": "models/from-scratch/bin/chessai-presplit",
+                          "D-L-Nc-c": "models/from-scratch/bin/chessai-dag",
+                          "F-P-c": "models/from-scratch/bin/chessai-probit",
+                          "F-P-tau0-c": "models/from-scratch/bin/chessai-probit",
+                          "F-P-tau0-d2jit-c": "models/from-scratch/bin/chessai-probit"},
+    "opponents": "lineages",
+    "dormant": true,
+    "first_pool": "",
+    "pools_dir": "cycles/pools",
+    "keep_pools": false
+  },
+  "gate": {
+    "games": 1000,
+    "depth": 2,
+    "threshold": 0.5,
+    "seed": 1
+  },
+  "measure": {
+    "dir": "cycles/.measure",
+    "rounds": 2,
+    "games_by_depth": {
+      "0": 1000,
+      "1": 1000,
+      "2": 200,
+      "3": 50,
+      "4": 10
+    },
+    "games_by_kind": {
+      "moe": 300,
+      "fm": 300
+    },
+    "round_rule_binary": "models/from-scratch/bin/chessai-cyc",
+    "reference_runs": {
+      "lr": "models/from-scratch/F-L-s21",
+      "cnbp": "models/from-scratch/F-N-s11",
+      "moe": "models/from-scratch/moe-s21",
+      "fm": "models/from-scratch/F-FM-s21",
+      "probit": "models/from-scratch/probit/selfplay/F-P-s21"
+    }
+  },
+  "freeze_rule": {"after_dormant": 10, "milestone_step": 100, "milestone_window": 10, "reference_window": 50,
+                  "exempt": []}
+}

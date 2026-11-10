@@ -10,3 +10,16 @@ selfplay/**
 .idea/
 rs/target/
 __pycache__/
+
+# Cycle system (cycles/, cycles/champ/): code, configs, lineages and cycle
+# reports only; runs, games, models, backups, logs and state stay out
+cycles/*/
+!cycles/champ/
+cycles/champ/*/
+cycles/**/*.log
+cycles/**/*.out
+cycles/**/*.lock
+cycles/**/*.bak-*
+cycles/**/state.json
+cycles/**/cycles.csv
+cycles/**/totals.csv
