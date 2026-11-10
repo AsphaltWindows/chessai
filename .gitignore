@@ -23,3 +23,13 @@ cycles/**/*.bak-*
 cycles/**/state.json
 cycles/**/cycles.csv
 cycles/**/totals.csv
+
+# New league system (leagues/): code, docs, prices, recipes and specs; the
+# leagues themselves (global/, experiments/, index.json) and the smoke root
+# stay out
+leagues/index.json
+leagues/.index.lock
+leagues/global/
+leagues/experiments/
+leagues/*.log
+leagues-smoke/

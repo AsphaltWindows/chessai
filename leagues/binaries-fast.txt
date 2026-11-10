@@ -1,0 +1,132 @@
+# Fast binaries for the recipes of leagues/recipes.txt (2026-11-09 ~17:15, the fast-binaries fork). Method, logs
+# and every number: models/from-scratch/fastbin/summary.txt. recipes.txt is unchanged: switching the rows (and
+# recalibrating the price formula) is the engine's step.
+#
+# Every new binary has chessai-hybrid4's three exact Q9 fast paths:
+# - the fast leaf test: a search leaf asks only whether the side to move has a legal move;
+# - lazy candidates: a searching player encodes only the chosen move's position;
+# - encoding from the piece bitboards.
+# For each of the 65 rows below, the row's new train and self-play binaries produced byte-identical files to its
+# current ones in every check:
+# - self-play resumed from the row's latest live version, with its own settings;
+# - self-play from scratch;
+# - train with --start on a fixed set, and train from scratch;
+# - the engine's untrained version 0;
+# - arenas at depth 1 and depth 2;
+# - tree splits.
+# Flags and defaults, as leagues.py's binary_flags parses them, are a superset with equal defaults.
+#
+# 15 binaries become 5:
+# - chessai-hybrid4g (already the new league's tournament binary) for the main line;
+# - 4 new builds for the side branches whose options the main line lacks.
+#
+# OLD BINARY -> NEW BINARY
+# old | old md5 | new | new md5 | new binary's source | rows (as of recipes.txt 17:09, 65 rows)
+models/from-scratch/bin/chessai-cyc5-labels | f50d162dd475dbf1469739f914f0fdfd | models/from-scratch/bin/chessai-hybrid4g | f934bbbc07f0ae3dc8ca0d1ce2c9e328 | models/from-scratch/hybrid4g-src | train_binary of 36 rows
+models/from-scratch/bin/chessai-cyc5 | 51e05109d3274c7cbb02f401aa639f1f | models/from-scratch/bin/chessai-hybrid4g | f934bbbc07f0ae3dc8ca0d1ce2c9e328 | models/from-scratch/hybrid4g-src | selfplay_binary of the same 36 rows
+models/from-scratch/bin/chessai-resid4 | a872a8123f568fe6794b6d86f3af2316 | models/from-scratch/bin/chessai-hybrid4g | f934bbbc07f0ae3dc8ca0d1ce2c9e328 | models/from-scratch/hybrid4g-src | T-L-Le-fresh T-L-Nc-fresh T-L-Ne-fresh T-N-Nc-fresh
+models/from-scratch/bin/chessai-probit | 576db2c21f7997fe09bcd1ac790ffd77 | models/from-scratch/bin/chessai-hybrid4g | f934bbbc07f0ae3dc8ca0d1ce2c9e328 | models/from-scratch/hybrid4g-src | F-P F-P-tau0 F-P-tau0-d2jit
+models/from-scratch/bin/chessai-nbmix2 | d51bf10839e539e52d54b06c09d0f24e | models/from-scratch/bin/chessai-hybrid4g | f934bbbc07f0ae3dc8ca0d1ce2c9e328 | models/from-scratch/hybrid4g-src | M-L4-N M-N4-L
+models/from-scratch/bin/chessai-tanroute2 | a25836325c9571bdd1b88aa227f450e1 | models/from-scratch/bin/chessai-hybrid4g | f934bbbc07f0ae3dc8ca0d1ce2c9e328 | models/from-scratch/hybrid4g-src | T-L-Te T-L-Te-merge
+models/from-scratch/bin/chessai-lrshare | e9ae9c6528edb207399a6e1b293278d5 | models/from-scratch/bin/chessai-hybrid4g | f934bbbc07f0ae3dc8ca0d1ce2c9e328 | models/from-scratch/hybrid4g-src | T-L-Nc-share T-L-Nc-share-l10 T-L-Nc-share-merge T-L-Ne-share
+models/from-scratch/bin/chessai-sparsefit | 3b35c50975a48bef8e42c53d2d496878 | models/from-scratch/bin/chessai-hybrid4g | f934bbbc07f0ae3dc8ca0d1ce2c9e328 | models/from-scratch/hybrid4g-src | T-L-Ne-share3
+models/from-scratch/bin/chessai-hybrid | 89605f852f5dfeee72b32218b35d5b5f | models/from-scratch/bin/chessai-hybrid4g | f934bbbc07f0ae3dc8ca0d1ce2c9e328 | models/from-scratch/hybrid4g-src | M-LP-L M-LP-L-d2jit M-LP-L-hard
+models/from-scratch/bin/chessai-hybrid3 | 1bf4176eb4f9d8b04385143718e25fd3 | models/from-scratch/bin/chessai-hybrid4g | f934bbbc07f0ae3dc8ca0d1ce2c9e328 | models/from-scratch/hybrid4g-src | M-L4-L-hard M-LP-L-win
+models/from-scratch/bin/chessai-dag | 036be3c53c69c84025c55b807c3753a5 | models/from-scratch/bin/chessai-dag-q9 | ac89ed537d7675a74324cf085c4130b3 | models/from-scratch/fastbin/dag-q9-src | D-L-Nc
+models/from-scratch/bin/chessai-presplit | ba083fc7908338108792279e58b9b3f9 | models/from-scratch/bin/chessai-presplit-q9 | 8f14315af346c3bbe0269dddcb3f7abe | models/from-scratch/fastbin/presplit-q9-src | T-L-Ne-pre
+models/from-scratch/bin/chessai-bal | d6145e866f471cb5cda08531b597cd4c | models/from-scratch/bin/chessai-bal-q9 | 583d5bb1a2948201b46f1caafd79cd8b | models/from-scratch/fastbin/bal-q9-src | T-L-Le-bal T-L-Ne-bal
+models/from-scratch/bin/chessai-bddfix | 963e86ed537cff825122388b44961704 | models/from-scratch/bin/chessai-bddtrig2-q9 | ae3300ad423730278b06031a8738b110 | models/from-scratch/fastbin/bddtrig2-q9-src | D-L-Ne-lreg D-L-Ne-rf16 D-L-Ne-skip
+models/from-scratch/bin/chessai-bddtrig2 | c7dd57ca3e54542aee218a1c1886b59a | models/from-scratch/bin/chessai-bddtrig2-q9 | ae3300ad423730278b06031a8738b110 | models/from-scratch/fastbin/bddtrig2-q9-src | D-L-Ne-skill
+#
+# BY ROW: model | new train_binary | new selfplay_binary
+D-L-Nc | models/from-scratch/bin/chessai-dag-q9 | models/from-scratch/bin/chessai-dag-q9
+D-L-Ne | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+D-L-Ne-lreg | models/from-scratch/bin/chessai-bddtrig2-q9 | models/from-scratch/bin/chessai-bddtrig2-q9
+D-L-Ne-rf16 | models/from-scratch/bin/chessai-bddtrig2-q9 | models/from-scratch/bin/chessai-bddtrig2-q9
+D-L-Ne-skill | models/from-scratch/bin/chessai-bddtrig2-q9 | models/from-scratch/bin/chessai-bddtrig2-q9
+D-L-Ne-skip | models/from-scratch/bin/chessai-bddtrig2-q9 | models/from-scratch/bin/chessai-bddtrig2-q9
+F-L | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+F-L-d0soft | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+F-L-d1jit | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+F-L-d1play | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+F-L-d2jit | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+F-L-d2play | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+F-L-d4jit | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+F-L-d2mix | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+F-L-d4mix | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+F-N | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+F-N-d2jit | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+F-P | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+F-P-tau0 | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+F-P-tau0-d2jit | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+FM-d2jit | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+M-L4-L | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+M-L4-L-hard | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+M-L4-N | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+M-L8-L | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+M-LP-L | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+M-LP-L-d2jit | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+M-LP-L-hard | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+M-LP-L-win | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+M-N4-L | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-H | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-LLs | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-LLs-merge | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-Le | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-Le-bal | models/from-scratch/bin/chessai-bal-q9 | models/from-scratch/bin/chessai-bal-q9
+T-L-Le-fresh | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-NLs-d2jit | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-NLs-merge | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-NLs-merge-d2jit | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-NNs | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-NNs-merge | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-Nc | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-Nc-fresh | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-Nc-merge | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-Nc-share | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-Nc-share-l10 | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-Nc-share-merge | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-Ne | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-Ne-bal | models/from-scratch/bin/chessai-bal-q9 | models/from-scratch/bin/chessai-bal-q9
+T-L-Ne-fresh | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-Ne-merge | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-Ne-pre | models/from-scratch/bin/chessai-presplit-q9 | models/from-scratch/bin/chessai-presplit-q9
+T-L-Ne-share | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-Ne-share3 | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-Te | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-L-Te-merge | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-N-H | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-N-LLs-merge | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-N-Le-merge | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-N-NNs-merge | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-N-NNs-merge-d2jit | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-N-Nc-fresh | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-N-Nc-merge | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-N-Nc-merge-d2jit | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+T-N-Ne-merge | models/from-scratch/bin/chessai-hybrid4g | models/from-scratch/bin/chessai-hybrid4g
+#
+# SPEED, new CPU / old (summary.txt has every row, the method and the noise).
+# Self-play is CPU per game, including training on the round.
+#
+# Self-play at depth 0 (encoding is the only fast path that applies):
+# - flat LR 0.83-0.87, probit 0.74-0.78, NB 0.80-0.84;
+# - Hoeffding trees 0.87-0.89, small merge trees 0.82-0.88, LR-probit MoE 0.77-0.82;
+# - the other trees and the mixtures 0.93-1.02 by E-core CPU time (instructions 0.95-0.98; the CPU-time
+#   differences are within the noise).
+#
+# Self-play at depth 1: flat LR 0.53-0.62.
+#
+# Self-play at depth 2:
+# - flat LR, probit and NB 0.45-0.59;
+# - trees 0.54-0.76;
+# - LR-probit MoE 0.67;
+# - FM 0.80.
+#
+# Self-play at depth 4: flat LR 0.62-0.64.
+#
+# Train, per position: unchanged. Instructions 1.000-1.011, CPU time within the noise. The exception is
+# the label search of F-L-mix (--label-depth 2), at 0.58.
+#
+# Arenas (search only), pooled by kind:
+# - depth 1: 0.61 (probit) to 0.86 (bdd);
+# - depth 2: 0.48 (probit) to 0.86 (moenb).

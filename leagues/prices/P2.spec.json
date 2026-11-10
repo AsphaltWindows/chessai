@@ -1,0 +1,547 @@
+{
+  "version": "P2",
+  "note": "The fixed-point binaries (chessai-hybrid4gfx for the tournament and the main-line recipes). Tournament: P1's 33 players, the same model files, so the same games, one round robin per ply, played three times (same seed, interleaved). Self-play from scratch and from the latest live versions at the live round sizes (depth 0: 1000 games, 1: 860, 2: 40, 4: 10); each kind and depth's self-play ratio is fitted on its mature runs (the stage experiments spend most cycles in), the scratch runs are checked.",
+  "work": "/home/iv/dev/chessai/leagues-smoke/pricecal-P2",
+  "nice": 19,
+  "threads": 2,
+  "tournament": {
+    "players": [
+      {
+        "name": "F-L-v0",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/F-L-v0.lr.model",
+        "kind": "lr",
+        "stage": "untrained",
+        "heldout": "lr"
+      },
+      {
+        "name": "F-P-tau0-v0",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/F-P-tau0-v0.probit.model",
+        "kind": "probit",
+        "stage": "untrained",
+        "heldout": "lr"
+      },
+      {
+        "name": "F-N-v0",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/F-N-v0.cnbp.model",
+        "kind": "cnbp",
+        "stage": "untrained",
+        "heldout": "cnbp"
+      },
+      {
+        "name": "FM-v0",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/FM-v0.fm.model",
+        "kind": "fm",
+        "stage": "untrained",
+        "heldout": "lr"
+      },
+      {
+        "name": "T-L-Ne-v0",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/T-L-Ne-v0.bdt.model",
+        "kind": "bdt",
+        "stage": "untrained",
+        "heldout": "lr"
+      },
+      {
+        "name": "D-L-Nc-v0",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/D-L-Nc-v0.bdt.model",
+        "kind": "bdt",
+        "stage": "untrained",
+        "heldout": "lr"
+      },
+      {
+        "name": "D-L-Ne-v0",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/D-L-Ne-v0.bdd.model",
+        "kind": "bdd",
+        "stage": "untrained",
+        "heldout": "lr"
+      },
+      {
+        "name": "T-L-H-v0",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/T-L-H-v0.ht.model",
+        "kind": "ht",
+        "stage": "untrained",
+        "heldout": "lr"
+      },
+      {
+        "name": "M-L4-L-v0",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/M-L4-L-v0.moe.model",
+        "kind": "moe",
+        "stage": "untrained",
+        "heldout": "lr"
+      },
+      {
+        "name": "M-N4-L-v0",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/M-N4-L-v0.moenb.model",
+        "kind": "moenb",
+        "stage": "untrained",
+        "heldout": "cnbp"
+      },
+      {
+        "name": "M-L4-N-v0",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/M-L4-N-v0.nbgate.model",
+        "kind": "nbgate",
+        "stage": "untrained",
+        "heldout": "lr"
+      },
+      {
+        "name": "M-LP-L-v0",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/M-LP-L-v0.hybrid.model",
+        "kind": "hybrid",
+        "stage": "untrained",
+        "heldout": "lr"
+      },
+      {
+        "name": "F-L-c",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/F-L-c.lr.model",
+        "kind": "lr",
+        "stage": "mature",
+        "heldout": "lr"
+      },
+      {
+        "name": "F-L-c-v20",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/F-L-c-v20.lr.model",
+        "kind": "lr",
+        "stage": "early",
+        "heldout": "lr"
+      },
+      {
+        "name": "F-P-tau0-c",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/F-P-tau0-c.probit.model",
+        "kind": "probit",
+        "stage": "mature",
+        "heldout": "lr"
+      },
+      {
+        "name": "F-P-c",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/F-P-c.probit.model",
+        "kind": "probit",
+        "stage": "mature",
+        "heldout": "lr"
+      },
+      {
+        "name": "F-N-c",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/F-N-c.cnbp.model",
+        "kind": "cnbp",
+        "stage": "mature",
+        "heldout": "cnbp"
+      },
+      {
+        "name": "FM-c",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/FM-c.fm.model",
+        "kind": "fm",
+        "stage": "mature",
+        "heldout": "lr"
+      },
+      {
+        "name": "M-LP-L-c",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/M-LP-L-c.hybrid.model",
+        "kind": "hybrid",
+        "stage": "mature",
+        "heldout": "lr"
+      },
+      {
+        "name": "M-L4-L-c",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/M-L4-L-c.moe.model",
+        "kind": "moe",
+        "stage": "mature",
+        "heldout": "lr"
+      },
+      {
+        "name": "M-L8-L-c",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/M-L8-L-c.moe.model",
+        "kind": "moe",
+        "stage": "mature",
+        "heldout": "lr"
+      },
+      {
+        "name": "M-N4-L-c",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/M-N4-L-c.moenb.model",
+        "kind": "moenb",
+        "stage": "mature",
+        "heldout": "cnbp"
+      },
+      {
+        "name": "M-L4-N-c",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/M-L4-N-c.nbgate.model",
+        "kind": "nbgate",
+        "stage": "mature",
+        "heldout": "lr"
+      },
+      {
+        "name": "D-L-Ne-c",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/D-L-Ne-c.bdd.model",
+        "kind": "bdd",
+        "stage": "mature",
+        "heldout": "lr"
+      },
+      {
+        "name": "D-L-Nc-c",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/D-L-Nc-c.bdt.model",
+        "kind": "bdt",
+        "stage": "mature",
+        "heldout": "lr"
+      },
+      {
+        "name": "T-N-H-c",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/T-N-H-c.ht.model",
+        "kind": "ht",
+        "stage": "mature",
+        "heldout": "lr"
+      },
+      {
+        "name": "T-L-H-c",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/T-L-H-c.ht.model",
+        "kind": "ht",
+        "stage": "mature",
+        "heldout": "lr"
+      },
+      {
+        "name": "T-L-Ne-c-v20",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/T-L-Ne-c-v20.bdt.model",
+        "kind": "bdt",
+        "stage": "early",
+        "heldout": "lr"
+      },
+      {
+        "name": "T-L-Ne-c-v300",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/T-L-Ne-c-v300.bdt.model",
+        "kind": "bdt",
+        "stage": "mature",
+        "heldout": "lr"
+      },
+      {
+        "name": "T-L-Ne-c",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/T-L-Ne-c.bdt.model",
+        "kind": "bdt",
+        "stage": "mature",
+        "heldout": "lr"
+      },
+      {
+        "name": "T-L-Te-c",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/T-L-Te-c.bdt.model",
+        "kind": "bdt",
+        "stage": "mature",
+        "heldout": "lr"
+      },
+      {
+        "name": "T-N-Nc-merge-d2jit-c",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/T-N-Nc-merge-d2jit-c.bdt.model",
+        "kind": "bdt",
+        "stage": "mature",
+        "heldout": "lr"
+      },
+      {
+        "name": "T-L-Ne-merge-c",
+        "model": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1/models/T-L-Ne-merge-c.bdt.model",
+        "kind": "bdt",
+        "stage": "mature",
+        "heldout": "lr"
+      }
+    ],
+    "plies": [
+      1,
+      2
+    ],
+    "round_robins": 1,
+    "seed": 1,
+    "split": true,
+    "repeats": 3
+  },
+  "include": [],
+  "selfplay": [
+    {
+      "name": "F-L-d0-scratch",
+      "model": "F-L",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "F-L-d0-mature",
+      "model": "F-L",
+      "games": 1000,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/F-L-c"
+    },
+    {
+      "name": "F-L-d1-scratch",
+      "model": "F-L-d1jit",
+      "games": 860,
+      "rounds": 1
+    },
+    {
+      "name": "F-L-d1-mature",
+      "model": "F-L-d1jit",
+      "games": 860,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/F-L-d1jit-c"
+    },
+    {
+      "name": "F-L-d2-scratch",
+      "model": "F-L-d2jit",
+      "games": 40,
+      "rounds": 1
+    },
+    {
+      "name": "F-L-d2-mature",
+      "model": "F-L-d2jit",
+      "games": 40,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/F-L-d2jit-c"
+    },
+    {
+      "name": "F-L-d4-scratch",
+      "model": "F-L-d4jit",
+      "games": 10,
+      "rounds": 1
+    },
+    {
+      "name": "F-L-d4-mature",
+      "model": "F-L-d4jit",
+      "games": 10,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/F-L-d4jit-c"
+    },
+    {
+      "name": "F-P-d0-scratch",
+      "model": "F-P",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "F-P-d0-mature",
+      "model": "F-P",
+      "games": 1000,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/F-P-c"
+    },
+    {
+      "name": "F-P-tau0-d0-mature",
+      "model": "F-P-tau0",
+      "games": 1000,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/F-P-tau0-c"
+    },
+    {
+      "name": "F-P-d1-scratch",
+      "model": "F-P",
+      "games": 860,
+      "rounds": 1,
+      "depth": 1
+    },
+    {
+      "name": "F-P-d1-mature",
+      "model": "F-P",
+      "games": 860,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/F-P-c",
+      "depth": 1
+    },
+    {
+      "name": "F-P-d2-scratch",
+      "model": "F-P",
+      "games": 40,
+      "rounds": 1,
+      "depth": 2
+    },
+    {
+      "name": "F-P-tau0-d2-mature",
+      "model": "F-P-tau0-d2jit",
+      "games": 40,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/F-P-tau0-d2jit-c"
+    },
+    {
+      "name": "F-P-d4-scratch",
+      "model": "F-P",
+      "games": 10,
+      "rounds": 1,
+      "depth": 4
+    },
+    {
+      "name": "F-P-d4-mature",
+      "model": "F-P",
+      "games": 10,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/F-P-c",
+      "depth": 4
+    },
+    {
+      "name": "F-N-d0-scratch",
+      "model": "F-N",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "F-N-d0-mature",
+      "model": "F-N",
+      "games": 1000,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/F-N-c"
+    },
+    {
+      "name": "F-N-d1-scratch",
+      "model": "F-N",
+      "games": 860,
+      "rounds": 1,
+      "depth": 1
+    },
+    {
+      "name": "F-N-d1-mature",
+      "model": "F-N",
+      "games": 860,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/F-N-c",
+      "depth": 1
+    },
+    {
+      "name": "F-N-d2-scratch",
+      "model": "F-N-d2jit",
+      "games": 40,
+      "rounds": 1
+    },
+    {
+      "name": "F-N-d2-mature",
+      "model": "F-N-d2jit",
+      "games": 40,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/F-N-d2jit-c"
+    },
+    {
+      "name": "F-N-d4-scratch",
+      "model": "F-N",
+      "games": 10,
+      "rounds": 1,
+      "depth": 4
+    },
+    {
+      "name": "F-N-d4-mature",
+      "model": "F-N",
+      "games": 10,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/F-N-c",
+      "depth": 4
+    },
+    {
+      "name": "FM-d2-scratch",
+      "model": "FM-d2jit",
+      "games": 40,
+      "rounds": 1
+    },
+    {
+      "name": "FM-d2-mature",
+      "model": "FM-d2jit",
+      "games": 40,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/FM-d2jit-c"
+    },
+    {
+      "name": "T-L-Ne-d0-scratch",
+      "model": "T-L-Ne",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "T-L-Ne-d0-mature",
+      "model": "T-L-Ne",
+      "games": 1000,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/T-L-Ne-c"
+    },
+    {
+      "name": "T-L-NLs-d2-mature",
+      "model": "T-L-NLs-d2jit",
+      "games": 40,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/T-L-NLs-d2jit-c"
+    },
+    {
+      "name": "D-L-Ne-d0-scratch",
+      "model": "D-L-Ne",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "D-L-Ne-d0-mature",
+      "model": "D-L-Ne",
+      "games": 1000,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/D-L-Ne-c"
+    },
+    {
+      "name": "T-L-H-d0-scratch",
+      "model": "T-L-H",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "T-L-H-d0-mature",
+      "model": "T-L-H",
+      "games": 1000,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/T-L-H-c"
+    },
+    {
+      "name": "M-L4-L-d0-scratch",
+      "model": "M-L4-L",
+      "games": 1000,
+      "rounds": 2
+    },
+    {
+      "name": "M-L4-L-d0-mature",
+      "model": "M-L4-L",
+      "games": 1000,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/M-L4-L-c"
+    },
+    {
+      "name": "M-N4-L-d0-scratch",
+      "model": "M-N4-L",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "M-N4-L-d0-mature",
+      "model": "M-N4-L",
+      "games": 1000,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/M-N4-L-c"
+    },
+    {
+      "name": "M-L4-N-d0-scratch",
+      "model": "M-L4-N",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "M-L4-N-d0-mature",
+      "model": "M-L4-N",
+      "games": 1000,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/M-L4-N-c"
+    },
+    {
+      "name": "M-LP-L-d0-scratch",
+      "model": "M-LP-L",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "M-LP-L-d0-mature",
+      "model": "M-LP-L",
+      "games": 1000,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/M-LP-L-c"
+    },
+    {
+      "name": "M-LP-L-d2-mature",
+      "model": "M-LP-L-d2jit",
+      "games": 40,
+      "rounds": 1,
+      "from": "/home/iv/dev/chessai/cycles/runs/M-LP-L-d2jit-c"
+    }
+  ],
+  "selfplay_fit_stages": [
+    "mature"
+  ],
+  "refresh_costs": true
+}

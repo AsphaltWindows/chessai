@@ -1,0 +1,33 @@
+{
+  "version": "P0",
+  "note": "Provisional: a small sample on the old recipe binaries, to prove the procedure. Kinds and depths not measured are derived.",
+  "moved": "16:59: the included smoke leagues moved from leagues-smoke/ to leagues-smoke/old-1609/ (paths below updated)",
+  "work": "/home/iv/dev/chessai/leagues-smoke/pricecal-P0",
+  "nice": 19,
+  "threads": 2,
+  "tournament": {
+    "players": [
+      {"name": "F-L-solo-c", "from": "/home/iv/dev/chessai/cycles/runs/F-L-solo-c"},
+      {"name": "T-L-Ne-new-c", "from": "/home/iv/dev/chessai/cycles/runs/T-L-Ne-new-c"},
+      {"name": "F-P-c", "from": "/home/iv/dev/chessai/cycles/runs/F-P-c"},
+      {"name": "F-L-v0", "recipe": "F-L"},
+      {"name": "T-L-Ne-v0", "recipe": "T-L-Ne"}
+    ],
+    "plies": [1, 2],
+    "split": false,
+    "round_robins": 1,
+    "seed": 1
+  },
+  "include": [
+    "/home/iv/dev/chessai/leagues-smoke/old-1609/global",
+    "/home/iv/dev/chessai/leagues-smoke/old-1609/experiments/three-options",
+    "/home/iv/dev/chessai/leagues-smoke/old-1609/experiments/sp-vs-local"
+  ],
+  "selfplay": [
+    {"name": "F-L-d0-scratch", "model": "F-L", "games": 100, "rounds": 2},
+    {"name": "F-L-d2jit-scratch", "model": "F-L-d2jit", "games": 6, "rounds": 2},
+    {"name": "F-L-d2jit-mature", "model": "F-L-d2jit", "from": "/home/iv/dev/chessai/cycles/runs/F-L-d2jit-c", "games": 6, "rounds": 1},
+    {"name": "F-L-d4jit-scratch", "model": "F-L-d4jit", "games": 2, "rounds": 1},
+    {"name": "T-L-Ne-mature", "model": "T-L-Ne", "from": "/home/iv/dev/chessai/cycles/runs/T-L-Ne-new-c", "games": 40, "rounds": 1}
+  ]
+}

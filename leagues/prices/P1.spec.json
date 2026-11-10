@@ -1,0 +1,319 @@
+{
+  "version": "P1",
+  "note": "Every recipe kind at plies 1 and 2, untrained and trained (trees and mixtures at several sizes), in one round robin per ply on the tournament binary, played three times (same seed, interleaved) to average the CPU noise; self-play from scratch and from live versions on the fast recipe binaries, at the live round sizes (depth 0: 1000 games, 1: 860, 2: 40, 4: 10).",
+  "work": "/home/iv/dev/chessai/leagues-smoke/pricecal-P1",
+  "nice": 19,
+  "threads": 2,
+  "tournament": {
+    "players": [
+      {
+        "name": "F-L-v0",
+        "recipe": "F-L"
+      },
+      {
+        "name": "F-P-tau0-v0",
+        "recipe": "F-P-tau0"
+      },
+      {
+        "name": "F-N-v0",
+        "recipe": "F-N"
+      },
+      {
+        "name": "FM-v0",
+        "recipe": "FM"
+      },
+      {
+        "name": "T-L-Ne-v0",
+        "recipe": "T-L-Ne"
+      },
+      {
+        "name": "D-L-Nc-v0",
+        "recipe": "D-L-Nc"
+      },
+      {
+        "name": "D-L-Ne-v0",
+        "recipe": "D-L-Ne"
+      },
+      {
+        "name": "T-L-H-v0",
+        "recipe": "T-L-H"
+      },
+      {
+        "name": "M-L4-L-v0",
+        "recipe": "M-L4-L"
+      },
+      {
+        "name": "M-N4-L-v0",
+        "recipe": "M-N4-L"
+      },
+      {
+        "name": "M-L4-N-v0",
+        "recipe": "M-L4-N"
+      },
+      {
+        "name": "M-LP-L-v0",
+        "recipe": "M-LP-L"
+      },
+      {
+        "name": "F-L-c",
+        "from": "/home/iv/dev/chessai/cycles/runs/F-L-c"
+      },
+      {
+        "name": "F-L-c-v20",
+        "from": "/home/iv/dev/chessai/cycles/runs/F-L-c",
+        "version": 20,
+        "stage": "early"
+      },
+      {
+        "name": "F-P-tau0-c",
+        "from": "/home/iv/dev/chessai/cycles/runs/F-P-tau0-c"
+      },
+      {
+        "name": "F-P-c",
+        "from": "/home/iv/dev/chessai/cycles/runs/F-P-c"
+      },
+      {
+        "name": "F-N-c",
+        "from": "/home/iv/dev/chessai/cycles/runs/F-N-c"
+      },
+      {
+        "name": "FM-c",
+        "from": "/home/iv/dev/chessai/cycles/runs/FM-c"
+      },
+      {
+        "name": "M-LP-L-c",
+        "from": "/home/iv/dev/chessai/cycles/runs/M-LP-L-c"
+      },
+      {
+        "name": "M-L4-L-c",
+        "from": "/home/iv/dev/chessai/cycles/runs/M-L4-L-c"
+      },
+      {
+        "name": "M-L8-L-c",
+        "from": "/home/iv/dev/chessai/cycles/runs/M-L8-L-c"
+      },
+      {
+        "name": "M-N4-L-c",
+        "from": "/home/iv/dev/chessai/cycles/runs/M-N4-L-c",
+        "heldout": "cnbp"
+      },
+      {
+        "name": "M-L4-N-c",
+        "from": "/home/iv/dev/chessai/cycles/runs/M-L4-N-c"
+      },
+      {
+        "name": "D-L-Ne-c",
+        "from": "/home/iv/dev/chessai/cycles/runs/D-L-Ne-c"
+      },
+      {
+        "name": "D-L-Nc-c",
+        "from": "/home/iv/dev/chessai/cycles/runs/D-L-Nc-c"
+      },
+      {
+        "name": "T-N-H-c",
+        "from": "/home/iv/dev/chessai/cycles/runs/T-N-H-c"
+      },
+      {
+        "name": "T-L-H-c",
+        "from": "/home/iv/dev/chessai/cycles/runs/T-L-H-c"
+      },
+      {
+        "name": "T-L-Ne-c-v20",
+        "from": "/home/iv/dev/chessai/cycles/runs/T-L-Ne-c",
+        "version": 20,
+        "stage": "early"
+      },
+      {
+        "name": "T-L-Ne-c-v300",
+        "from": "/home/iv/dev/chessai/cycles/runs/T-L-Ne-c",
+        "version": 300
+      },
+      {
+        "name": "T-L-Ne-c",
+        "from": "/home/iv/dev/chessai/cycles/runs/T-L-Ne-c"
+      },
+      {
+        "name": "T-L-Te-c",
+        "from": "/home/iv/dev/chessai/cycles/runs/T-L-Te-c"
+      },
+      {
+        "name": "T-N-Nc-merge-d2jit-c",
+        "from": "/home/iv/dev/chessai/cycles/runs/T-N-Nc-merge-d2jit-c"
+      },
+      {
+        "name": "T-L-Ne-merge-c",
+        "from": "/home/iv/dev/chessai/cycles/runs/T-L-Ne-merge-c"
+      }
+    ],
+    "plies": [
+      1,
+      2
+    ],
+    "split": true,
+    "round_robins": 1,
+    "seed": 1,
+    "repeats": 3
+  },
+  "include": [],
+  "selfplay": [
+    {
+      "name": "F-L-d0-scratch",
+      "model": "F-L",
+      "games": 1000,
+      "rounds": 2
+    },
+    {
+      "name": "F-L-d0-mature",
+      "model": "F-L",
+      "from": "/home/iv/dev/chessai/cycles/runs/F-L-c",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "F-L-d1jit-scratch",
+      "model": "F-L-d1jit",
+      "games": 860,
+      "rounds": 1
+    },
+    {
+      "name": "F-L-d2jit-scratch",
+      "model": "F-L-d2jit",
+      "games": 40,
+      "rounds": 2
+    },
+    {
+      "name": "F-L-d2jit-mature",
+      "model": "F-L-d2jit",
+      "from": "/home/iv/dev/chessai/cycles/runs/F-L-d2jit-c",
+      "games": 40,
+      "rounds": 1
+    },
+    {
+      "name": "F-L-d4jit-scratch",
+      "model": "F-L-d4jit",
+      "games": 10,
+      "rounds": 1
+    },
+    {
+      "name": "F-P-tau0-d0-scratch",
+      "model": "F-P-tau0",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "F-P-tau0-d0-mature",
+      "model": "F-P-tau0",
+      "from": "/home/iv/dev/chessai/cycles/runs/F-P-tau0-c",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "F-P-d0-scratch",
+      "model": "F-P",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "F-N-d0-scratch",
+      "model": "F-N",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "F-N-d0-mature",
+      "model": "F-N",
+      "from": "/home/iv/dev/chessai/cycles/runs/F-N-c",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "F-N-d2jit-scratch",
+      "model": "F-N-d2jit",
+      "games": 40,
+      "rounds": 1
+    },
+    {
+      "name": "FM-d2jit-scratch",
+      "model": "FM-d2jit",
+      "games": 40,
+      "rounds": 1
+    },
+    {
+      "name": "T-L-Ne-d0-scratch",
+      "model": "T-L-Ne",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "T-L-Ne-d0-mature",
+      "model": "T-L-Ne",
+      "from": "/home/iv/dev/chessai/cycles/runs/T-L-Ne-c",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "D-L-Ne-d0-scratch",
+      "model": "D-L-Ne",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "D-L-Ne-d0-mature",
+      "model": "D-L-Ne",
+      "from": "/home/iv/dev/chessai/cycles/runs/D-L-Ne-c",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "T-L-H-d0-scratch",
+      "model": "T-L-H",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "T-L-H-d0-mature",
+      "model": "T-L-H",
+      "from": "/home/iv/dev/chessai/cycles/runs/T-L-H-c",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "M-L4-L-d0-scratch",
+      "model": "M-L4-L",
+      "games": 1000,
+      "rounds": 2
+    },
+    {
+      "name": "M-L4-L-d0-mature",
+      "model": "M-L4-L",
+      "from": "/home/iv/dev/chessai/cycles/runs/M-L4-L-c",
+      "games": 1000,
+      "rounds": 1
+    },
+    {
+      "name": "M-N4-L-d0-scratch",
+      "model": "M-N4-L",
+      "games": 1000,
+      "rounds": 2
+    },
+    {
+      "name": "M-L4-N-d0-scratch",
+      "model": "M-L4-N",
+      "games": 1000,
+      "rounds": 2
+    },
+    {
+      "name": "M-LP-L-d0-scratch",
+      "model": "M-LP-L",
+      "games": 1000,
+      "rounds": 2
+    },
+    {
+      "name": "M-LP-L-d0-mature",
+      "model": "M-LP-L",
+      "from": "/home/iv/dev/chessai/cycles/runs/M-LP-L-c",
+      "games": 1000,
+      "rounds": 1
+    }
+  ]
+}

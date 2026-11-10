@@ -1,0 +1,120 @@
+# The fixed-point binary for the new league's main-line rows (2026-11-09 ~17:30-18:05, the fast-binaries fork).
+# Method, logs and every number: models/from-scratch/fastbin/summary.txt, section FX. Nothing is switched or deployed:
+# recipes.txt and the engine files are untouched. Switching rows, the tournament binary and the prices is the
+# engine's step.
+#
+# chessai-hybrid4gfx = chessai-hybrid4g (hybrid4's three exact Q9 fast paths and tournament --game-cpu) plus the fx v2
+# changes of the base-model speed study (chessai-fxlr2; models/from-scratch/modelopt/summary.txt, section 3):
+# - fixed-point incremental sums for LR, probit and NB: each weight is rounded once to a multiple of 2^-32 and kept as
+#   an i64, so a position's sums are exact and a child's are its parent's plus the changed features;
+# - direct log-odds values: slope_winner*(l_w-l_b)+(off_w-off_b) for LR and NB, z_w-z_b for every calibrated model;
+# - search-label outcomes once per search, from the float model at the principal variation's leaf.
+# CHESSAI_FX=on (the default) | direct | off.
+#
+# IDENTITY: for each of the 57 rows below, chessai-hybrid4gfx wrote byte-identical files to chessai-hybrid4g in every
+# check, 465 checks in all, with no exception:
+# - self-play resumed from the row's latest live version, with its own settings (57 rows);
+# - for each of the rows' 47 recipes: self-play from scratch; train with --start on a fixed set; train from
+#   scratch; the engine's untrained version 0; arenas at depth 1 and depth 2;
+# - forced tree splits (31 recipes; the trees grew from 1 leaf to 3-21, except T-N-Le-merge, as before);
+# - added for the calibrated path, which only cal: players reach (the league's tournaments and own games):
+#   - calibrated arenas at depth 1 and depth 2 (47 recipes);
+#   - a small tournament with the league's flags: one row per kind (12) at plies 1 and 2, and 3 references;
+#     702 games, every output file but game_cpu.csv.
+# The benchmarks below re-checked identity, every run against every other.
+# chessai-hybrid4gfx also matches chessai-fxlr2: identical files in 5 benchmarks, 2 self-play checks and a probit
+# arena, with instruction counts equal to within 0.002%.
+#
+# BINARIES
+# binary | md5 | source
+models/from-scratch/bin/chessai-hybrid4gfx | a3e6d4e6cbaf400ef600ddeb5f3104b5 | models/from-scratch/fastbin/hybrid4gfx-src (new)
+models/from-scratch/bin/chessai-hybrid4g | f934bbbc07f0ae3dc8ca0d1ce2c9e328 | models/from-scratch/hybrid4g-src (the rows' current binary)
+models/from-scratch/bin/chessai-fxlr2 | 93e370d678d9a5c4db5b6603bf0f0326 | models/from-scratch/modelopt/fxlr-src (the study's; reference)
+#
+# OLD BINARY -> NEW BINARY
+# old | old md5 | new | new md5 | rows
+models/from-scratch/bin/chessai-hybrid4g | f934bbbc07f0ae3dc8ca0d1ce2c9e328 | models/from-scratch/bin/chessai-hybrid4gfx | a3e6d4e6cbaf400ef600ddeb5f3104b5 | train_binary and selfplay_binary of the 57 rows below
+#
+# BY ROW: model | new train_binary | new selfplay_binary (as of recipes.txt 17:19, 65 rows)
+D-L-Ne | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+F-L | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+F-L-d0soft | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+F-L-d1jit | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+F-L-d1play | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+F-L-d2jit | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+F-L-d2mix | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+F-L-d2play | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+F-L-d4jit | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+F-L-d4mix | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+F-N | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+F-N-d2jit | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+F-P | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+F-P-tau0 | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+F-P-tau0-d2jit | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+FM-d2jit | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+M-L4-L | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+M-L4-L-hard | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+M-L4-N | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+M-L8-L | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+M-LP-L | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+M-LP-L-d2jit | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+M-LP-L-hard | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+M-LP-L-win | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+M-N4-L | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-H | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-LLs | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-LLs-merge | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-Le | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-Le-fresh | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-NLs-d2jit | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-NLs-merge | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-NLs-merge-d2jit | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-NNs | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-NNs-merge | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-Nc | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-Nc-fresh | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-Nc-merge | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-Nc-share | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-Nc-share-l10 | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-Nc-share-merge | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-Ne | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-Ne-fresh | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-Ne-merge | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-Ne-share | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-Ne-share3 | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-Te | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-L-Te-merge | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-N-H | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-N-LLs-merge | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-N-Le-merge | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-N-NNs-merge | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-N-NNs-merge-d2jit | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-N-Nc-fresh | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-N-Nc-merge | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-N-Nc-merge-d2jit | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+T-N-Ne-merge | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx
+#
+# UNCHANGED: the 8 side-branch rows stay on their q9 binaries (no fx build of them was asked for):
+# D-L-Nc | models/from-scratch/bin/chessai-dag-q9
+# D-L-Ne-lreg | models/from-scratch/bin/chessai-bddtrig2-q9
+# D-L-Ne-rf16 | models/from-scratch/bin/chessai-bddtrig2-q9
+# D-L-Ne-skill | models/from-scratch/bin/chessai-bddtrig2-q9
+# D-L-Ne-skip | models/from-scratch/bin/chessai-bddtrig2-q9
+# T-L-Le-bal | models/from-scratch/bin/chessai-bal-q9
+# T-L-Ne-bal | models/from-scratch/bin/chessai-bal-q9
+# T-L-Ne-pre | models/from-scratch/bin/chessai-presplit-q9
+#
+# SPEED, new CPU / old. Pinned to the E-cores, runs old new new old; instructions (user space) in brackets.
+# Self-play (CPU per game, including training on the round):
+# - flat LR: depth 0 0.74 (0.51); depth 1 with the softmax policy (F-L-d1play) 0.62 (0.51); depth 2 0.39 (0.36).
+#   Depth 4 (F-L-d4jit, F-L-d4mix; single runs in the identity check) 0.31-0.34.
+# - LR at depth 1 with the jitter policy (F-L-d1jit) is SLOWER: 1.07 (1.07). Its search wants an outcome for every
+#   root move, so at depth 1 every leaf gets the fixed-point value and then the float model's outcome as well.
+# - NB: depth 0 0.67 (0.51), depth 2 0.36 (0.41).
+# - probit: depth 0 0.97 (0.74), depth 2 1.01 (0.86): no gain; its cycles do not fall with its instructions.
+# - trees (T-L-Ne) and mixtures (M-L4-L) at depth 0: unchanged (instructions 1.001).
+# Training per position: search labels (F-L-d2mix, --label-depth 2) 0.29 (0.26); other training unchanged.
+# Calibrated arenas (the league's tournaments and own games; a version against itself, log-odds softmax T0.1):
+# - depth 2: LR 0.33, NB 0.35, probit 0.70; T-L-Ne 0.93 and M-L4-L 0.97 (direct values only);
+# - depth 1: LR 0.69, NB 0.69, probit 0.85.
+# The small tournament (12 kinds at plies 1 and 2): 0.92.

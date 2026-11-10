@@ -1,0 +1,32 @@
+{
+  "kind": "experiment",
+  "root": "/home/iv/dev/chessai/leagues",
+  "name": "lr-settings",
+  "models": [
+    {
+      "model": "F-L",
+      "sweep": {
+        "--lr-rate": [
+          "0.0125",
+          "0.025",
+          "0.05",
+          "0.1"
+        ]
+      },
+      "to": "train"
+    },
+    {
+      "model": "F-L",
+      "set": {
+        "--label-depth": "2",
+        "--label-result": "0.5"
+      },
+      "to": "train"
+    }
+  ],
+  "options": [
+    "local"
+  ],
+  "cycles": 500,
+  "rounds_per_cycle": 5
+}

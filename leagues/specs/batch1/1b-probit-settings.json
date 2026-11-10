@@ -1,0 +1,24 @@
+{
+  "kind": "experiment",
+  "root": "/home/iv/dev/chessai/leagues",
+  "name": "probit-settings",
+  "models": [
+    {
+      "model": "F-P",
+      "sweep": {
+        "--probit-tau": [
+          "0",
+          "1e-6",
+          "1e-5",
+          "1e-4"
+        ]
+      },
+      "to": "train"
+    }
+  ],
+  "options": [
+    "local"
+  ],
+  "cycles": 500,
+  "rounds_per_cycle": 5
+}

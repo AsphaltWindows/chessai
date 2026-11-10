@@ -1,0 +1,23 @@
+{
+  "kind": "experiment",
+  "root": "/home/iv/dev/chessai/leagues",
+  "name": "nb-settings",
+  "models": [
+    {
+      "model": "F-N",
+      "sweep": {
+        "--alpha": [
+          "0.1",
+          "1",
+          "10"
+        ]
+      },
+      "to": "train"
+    }
+  ],
+  "options": [
+    "local"
+  ],
+  "cycles": 500,
+  "rounds_per_cycle": 5
+}

@@ -1,0 +1,61 @@
+{
+  "kind": "experiment",
+  "root": "/home/iv/dev/chessai/leagues",
+  "name": "selfplay-depth",
+  "models": [
+    {
+      "model": "F-L",
+      "sweep": {
+        "--depth": [
+          "0",
+          "1"
+        ]
+      },
+      "to": "selfplay"
+    },
+    {
+      "model": "F-L",
+      "set": {
+        "--depth": "2"
+      },
+      "to": "selfplay",
+      "replicates": 2
+    },
+    {
+      "model": "F-L",
+      "set": {
+        "--depth": "4"
+      },
+      "to": "selfplay"
+    },
+    {
+      "model": "F-P",
+      "sweep": {
+        "--depth": [
+          "0",
+          "1",
+          "2",
+          "4"
+        ]
+      },
+      "to": "selfplay"
+    },
+    {
+      "model": "F-N",
+      "sweep": {
+        "--depth": [
+          "0",
+          "1",
+          "2",
+          "4"
+        ]
+      },
+      "to": "selfplay"
+    }
+  ],
+  "options": [
+    "self-play"
+  ],
+  "cycles": 100,
+  "selfplay_budget_s": 60
+}
