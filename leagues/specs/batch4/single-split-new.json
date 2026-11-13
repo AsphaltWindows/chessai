@@ -1,0 +1,112 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "models": [
+  "F-L",
+  {
+   "model": "T-L-Le",
+   "set": {
+    "--split-limit": "1",
+    "--split-threshold": "1000000"
+   },
+   "to": "train"
+  },
+  {
+   "model": "T-L-Ne",
+   "set": {
+    "--split-limit": "1",
+    "--split-threshold": "1000000"
+   },
+   "to": "train"
+  },
+  {
+   "model": "T-L-Te",
+   "set": {
+    "--split-limit": "1",
+    "--split-threshold": "1000000"
+   },
+   "to": "train"
+  },
+  {
+   "model": "T-L-Lc-merge",
+   "set": {
+    "--split-limit": "1",
+    "--split-threshold": "1000000"
+   },
+   "to": "train"
+  },
+  {
+   "model": "T-L-Nc-merge",
+   "set": {
+    "--split-limit": "1",
+    "--split-threshold": "1000000"
+   },
+   "to": "train"
+  },
+  {
+   "model": "T-L-Tc-merge",
+   "set": {
+    "--split-limit": "1",
+    "--split-threshold": "1000000"
+   },
+   "to": "train"
+  }
+ ],
+ "options": [
+  "local"
+ ],
+ "name": "single-split-new",
+ "references": [],
+ "ply1_entries": false,
+ "plateau": {
+  "cycles": 50,
+  "min_cycles": 100
+ },
+ "cycles": 1000,
+ "rounds_per_cycle": 13,
+ "min_rounds": 13,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid9"
+ },
+ "prices_version": "P2",
+ "batch4": {
+  "original": "single-split",
+  "note": "Batch 4: single-split rerun without random players or ply-1 entries until the champions plateau. Rounds: 2449 games with a model at ply 2 per cycle in the original over 182 per round (7 lines, two ply-2 entries each).",
+  "binaries": {
+   "F-L.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "T-L-Le+split-limit=1+split-threshold=1000000.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "T-L-Ne+split-limit=1+split-threshold=1000000.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "T-L-Te+split-limit=1+split-threshold=1000000.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "T-L-Lc-merge+split-limit=1+split-threshold=1000000.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "T-L-Nc-merge+split-limit=1+split-threshold=1000000.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "T-L-Tc-merge+split-limit=1+split-threshold=1000000.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   }
+  },
+  "rounds_from": {
+   "original": "single-split",
+   "ply2_games_per_cycle": 2448.53,
+   "lines": 7,
+   "games_per_round": 182
+  }
+ }
+}

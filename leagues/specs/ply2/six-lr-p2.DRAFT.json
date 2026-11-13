@@ -1,0 +1,56 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "six-lr-p2",
+ "seed": 40,
+ "train": {
+  "seed": 40
+ },
+ "models": [
+  {
+   "model": "F-L",
+   "replicates": 2
+  },
+  {
+   "model": "D-L-Ne-ctx",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--router-split-z": "160",
+    "--router-split-limit": "4"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-L-Nc-merge",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--revise-on": "fresh",
+    "--revise": "2"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-errdag4"
+ },
+ "references": [],
+ "entry_ply": 2,
+ "self_games": true,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "prices_version": "P2",
+ "ply1_entries": false,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 600
+ },
+ "cycles": 900,
+ "description": "DRAFT (11-11 ~16:20): create only once chessai-hybrid14 is verified (the user: 'only after the optimizations are in'); then set the tournament binary to chessai-hybrid14 and the DAG lines' training to it if byte-identical (else chessai-errdag4). Router-split z 160, as in error-dag-p1. The user's ply-2 experiments for the six (11-11 ~12:00): the LR field, F-L x2, the LR error DAG D-L-Ne-ctx (NB error routers, path context, leaf limit 4 plus router limit 4, 1M) x2 and the LR cluster tree T-L-Nc-merge (NB cluster routers, fresh gate, limit 4, 1M) x2, in a ply-2 field (entry_ply 2, self-games). One deviation from the six's ply-1 recipes: the cluster tree's gate at --revise 2, so it holds its splits at ply 2 (as in probit-confirm-p2). Floor 600, cap 900 (theory-2 6.33). Prediction (6.33): both trees within 20 of F-L at ply 2 and below it at ply 3. Read cold at plies 1-3, T 0.02, the last two 100-cycle windows beside the finals. Own games at T 0.1."
+}

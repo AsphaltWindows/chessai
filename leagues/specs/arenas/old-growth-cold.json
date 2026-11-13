@@ -1,0 +1,114 @@
+{
+ "name": "old-growth-cold",
+ "dir": "leagues/arenas/old-growth-cold",
+ "description": "Twin of old-growth at softmax temperature 0.02 (near argmax). Did the old champion league's Elo growth hold at ply 2 in a field of strong players? (11-11 ~00:40, after the user noted the old champions trained on ~10x more games yet trail the new flat LR although their league Elo kept growing.) Versions spanning each lineage's league growth (labels give the league's champion Elo), the top model of top-champions-1 as a fixed yardstick, all at ply 2, calibrated as their sources (depth-1 own games), 60 round-robins.",
+ "binary": "models/from-scratch/bin/chessai-hybrid9",
+ "plies": [
+  2
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 20,
+  "min_rounds": 60,
+  "max_rounds": 60
+ },
+ "entries": [
+  {
+   "file": "cycles/runs/T-L-Ne-c/bdt1428.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "T-L-Ne-c@1428",
+   "label": "old league T-L-Ne-c v1428 (champion Elo 1631 when first rated as champion, cycle 1)"
+  },
+  {
+   "file": "cycles/runs/T-L-Ne-c/bdt1487.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "T-L-Ne-c@1487",
+   "label": "old league T-L-Ne-c v1487 (champion Elo 1718 when first rated as champion, cycle 7)"
+  },
+  {
+   "file": "cycles/runs/T-L-Ne-c/bdt1681.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "T-L-Ne-c@1681",
+   "label": "old league T-L-Ne-c v1681 (champion Elo 1801 when first rated as champion, cycle 26)"
+  },
+  {
+   "file": "cycles/runs/T-L-Ne-c/bdt1878.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "T-L-Ne-c@1878",
+   "label": "old league T-L-Ne-c v1878 (champion Elo 1844 when first rated as champion, cycle 47)"
+  },
+  {
+   "file": "cycles/runs/T-L-Ne-c/bdt2101.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "T-L-Ne-c@2101",
+   "label": "old league T-L-Ne-c v2101 (champion Elo 1866 when first rated as champion, cycle 75)"
+  },
+  {
+   "file": "cycles/runs/T-L-Te-merge-c/bdt460.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "T-L-Te-merge-c@460",
+   "label": "old league T-L-Te-merge-c v460 (champion Elo 1730 when first rated as champion, cycle 20)"
+  },
+  {
+   "file": "cycles/runs/T-L-Te-merge-c/bdt833.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "T-L-Te-merge-c@833",
+   "label": "old league T-L-Te-merge-c v833 (champion Elo 1838 when first rated as champion, cycle 38)"
+  },
+  {
+   "file": "cycles/runs/T-L-Te-merge-c/bdt999.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "T-L-Te-merge-c@999",
+   "label": "old league T-L-Te-merge-c v999 (champion Elo 1877 when first rated as champion, cycle 56)"
+  },
+  {
+   "file": "cycles/runs/T-L-Ne-share3-c/bdt152.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "T-L-Ne-share3-c@152",
+   "label": "old league T-L-Ne-share3-c v152 (champion Elo 1750 when first rated as champion, cycle 37)"
+  },
+  {
+   "file": "cycles/runs/T-L-Ne-share3-c/bdt225.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "T-L-Ne-share3-c@225",
+   "label": "old league T-L-Ne-share3-c v225 (champion Elo 1791 when first rated as champion, cycle 44)"
+  },
+  {
+   "file": "cycles/runs/T-L-Ne-share3-c/bdt335.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "T-L-Ne-share3-c@335",
+   "label": "old league T-L-Ne-share3-c v335 (champion Elo 1862 when first rated as champion, cycle 61)"
+  },
+  {
+   "file": "cycles/runs/T-L-Ne-share3-c/bdt394.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "T-L-Ne-share3-c@394",
+   "label": "old league T-L-Ne-share3-c v394 (champion Elo 1890 when first rated as champion, cycle 71)"
+  },
+  {
+   "version": "lr-settings-new:F-L+lr-rate=0.0125.loc@136",
+   "name": "lr-settings-new.F-L+lr-rate=0.0125@136",
+   "label": "yardstick: the top model of top-champions-1"
+  }
+ ],
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ]
+}

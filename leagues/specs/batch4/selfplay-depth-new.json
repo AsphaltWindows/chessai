@@ -1,0 +1,137 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "models": [
+  {
+   "model": "F-L",
+   "sweep": {
+    "--depth": [
+     "0",
+     "1"
+    ]
+   },
+   "to": "selfplay"
+  },
+  {
+   "model": "F-L",
+   "set": {
+    "--depth": "2"
+   },
+   "to": "selfplay",
+   "replicates": 2
+  },
+  {
+   "model": "F-L",
+   "set": {
+    "--depth": "4"
+   },
+   "to": "selfplay"
+  },
+  {
+   "model": "F-P",
+   "sweep": {
+    "--depth": [
+     "0",
+     "1",
+     "2",
+     "4"
+    ]
+   },
+   "to": "selfplay"
+  },
+  {
+   "model": "F-N",
+   "sweep": {
+    "--depth": [
+     "0",
+     "1",
+     "2",
+     "4"
+    ]
+   },
+   "to": "selfplay"
+  }
+ ],
+ "options": [
+  "self-play"
+ ],
+ "selfplay_budget_s": 60,
+ "name": "selfplay-depth-new",
+ "references": [],
+ "ply1_entries": false,
+ "plateau": {
+  "cycles": 50,
+  "min_cycles": 100
+ },
+ "cycles": 1000,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid9"
+ },
+ "prices_version": "P2",
+ "batch4": {
+  "original": "selfplay-depth",
+  "note": "Batch 4: selfplay-depth rerun without random players or ply-1 entries until the champions plateau. Rounds: 7623 games with a model at ply 2 per cycle in the original over 650 per round (13 lines, two ply-2 entries each). Held: written, not started.",
+  "binaries": {
+   "F-L+depth=0.sp": {
+    "train": "chessai-hybrid6",
+    "selfplay": "chessai-hybrid4gfx"
+   },
+   "F-L+depth=1.sp": {
+    "train": "chessai-hybrid6",
+    "selfplay": "chessai-hybrid4gfx"
+   },
+   "F-L+depth=2#1.sp": {
+    "train": "chessai-hybrid6",
+    "selfplay": "chessai-hybrid4gfx"
+   },
+   "F-L+depth=2#2.sp": {
+    "train": "chessai-hybrid6",
+    "selfplay": "chessai-hybrid4gfx"
+   },
+   "F-L+depth=4.sp": {
+    "train": "chessai-hybrid6",
+    "selfplay": "chessai-hybrid4gfx"
+   },
+   "F-P+depth=0.sp": {
+    "train": "chessai-hybrid6",
+    "selfplay": "chessai-hybrid4gfx"
+   },
+   "F-P+depth=1.sp": {
+    "train": "chessai-hybrid6",
+    "selfplay": "chessai-hybrid4gfx"
+   },
+   "F-P+depth=2.sp": {
+    "train": "chessai-hybrid6",
+    "selfplay": "chessai-hybrid4gfx"
+   },
+   "F-P+depth=4.sp": {
+    "train": "chessai-hybrid6",
+    "selfplay": "chessai-hybrid4gfx"
+   },
+   "F-N+depth=0.sp": {
+    "train": "chessai-hybrid6",
+    "selfplay": "chessai-hybrid4gfx"
+   },
+   "F-N+depth=1.sp": {
+    "train": "chessai-hybrid6",
+    "selfplay": "chessai-hybrid4gfx"
+   },
+   "F-N+depth=2.sp": {
+    "train": "chessai-hybrid6",
+    "selfplay": "chessai-hybrid4gfx"
+   },
+   "F-N+depth=4.sp": {
+    "train": "chessai-hybrid6",
+    "selfplay": "chessai-hybrid4gfx"
+   }
+  },
+  "rounds_from": {
+   "original": "selfplay-depth",
+   "ply2_games_per_cycle": 7623.2,
+   "lines": 13,
+   "games_per_round": 650
+  }
+ }
+}

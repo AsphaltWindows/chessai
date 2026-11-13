@@ -1,0 +1,126 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "base-probit-p2-ladder-p2",
+ "dir": "leagues/arenas/diag/base-probit-p2-ladder-p2",
+ "plies": [
+  2
+ ],
+ "description": "Cold read base-probit-p2-ladder at ply 2 only (one arena per ply), versions 300, 450, final, near argmax (T 0.02), 75 round-robins. Tags: fp=base-probit-p2:^F-P, tree=base-probit-p2:^T-P, dag=base-probit-p2:^D-P",
+ "entries": [
+  {
+   "version": "base-probit-p2:F-P#1.loc@300",
+   "name": "fp300.L1@300",
+   "label": "base-probit-p2 F-P#1.loc version v300"
+  },
+  {
+   "version": "base-probit-p2:F-P#2.loc@300",
+   "name": "fp300.L2@300",
+   "label": "base-probit-p2 F-P#2.loc version v300"
+  },
+  {
+   "version": "base-probit-p2:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#1.loc@300",
+   "name": "tree300.L1@300",
+   "label": "base-probit-p2 T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#1.loc version v300"
+  },
+  {
+   "version": "base-probit-p2:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#2.loc@300",
+   "name": "tree300.L2@300",
+   "label": "base-probit-p2 T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#2.loc version v300"
+  },
+  {
+   "version": "base-probit-p2:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#1.loc@300",
+   "name": "dag300.L1@300",
+   "label": "base-probit-p2 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#1.loc version v300"
+  },
+  {
+   "version": "base-probit-p2:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#2.loc@300",
+   "name": "dag300.L2@300",
+   "label": "base-probit-p2 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#2.loc version v300"
+  },
+  {
+   "version": "base-probit-p2:F-P#1.loc@450",
+   "name": "fp450.L1@450",
+   "label": "base-probit-p2 F-P#1.loc version v450"
+  },
+  {
+   "version": "base-probit-p2:F-P#2.loc@450",
+   "name": "fp450.L2@450",
+   "label": "base-probit-p2 F-P#2.loc version v450"
+  },
+  {
+   "version": "base-probit-p2:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#1.loc@450",
+   "name": "tree450.L1@450",
+   "label": "base-probit-p2 T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#1.loc version v450"
+  },
+  {
+   "version": "base-probit-p2:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#2.loc@450",
+   "name": "tree450.L2@450",
+   "label": "base-probit-p2 T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#2.loc version v450"
+  },
+  {
+   "version": "base-probit-p2:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#1.loc@450",
+   "name": "dag450.L1@450",
+   "label": "base-probit-p2 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#1.loc version v450"
+  },
+  {
+   "version": "base-probit-p2:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#2.loc@450",
+   "name": "dag450.L2@450",
+   "label": "base-probit-p2 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#2.loc version v450"
+  },
+  {
+   "version": "base-probit-p2:F-P#1.loc@599",
+   "name": "fpF.L1@599",
+   "label": "base-probit-p2 F-P#1.loc version v599 (final)"
+  },
+  {
+   "version": "base-probit-p2:F-P#2.loc@599",
+   "name": "fpF.L2@599",
+   "label": "base-probit-p2 F-P#2.loc version v599 (final)"
+  },
+  {
+   "version": "base-probit-p2:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#1.loc@599",
+   "name": "treeF.L1@599",
+   "label": "base-probit-p2 T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#1.loc version v599 (final)"
+  },
+  {
+   "version": "base-probit-p2:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#2.loc@599",
+   "name": "treeF.L2@599",
+   "label": "base-probit-p2 T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#2.loc version v599 (final)"
+  },
+  {
+   "version": "base-probit-p2:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#1.loc@599",
+   "name": "dagF.L1@599",
+   "label": "base-probit-p2 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#1.loc version v599 (final)"
+  },
+  {
+   "version": "base-probit-p2:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#2.loc@599",
+   "name": "dagF.L2@599",
+   "label": "base-probit-p2 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#2.loc version v599 (final)"
+  }
+ ]
+}

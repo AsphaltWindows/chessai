@@ -1,0 +1,51 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "grow-dag-p1",
+ "description": "Created 2026-11-12 ~13:20 from grow-dag-p1.DRAFT.json. Encouraged router splits in a growing DAG at ply 1 (analyst 6.80, revised by 6.88; the user 11-12: 'we shouldn't rule out router splits', 'we should encourage them': copies add path-context parameters to their children that may pay over a long horizon and may enable better leaf splits later). One factor, the router split allowance on against off, with the leaf rule equal in both arms: grow4's rule with the MDL bar ON (--grow-mdl 1 --grow-gate age --grow-priority snapshot: age three own windows, the smallest paired snapshot gain first, credits one per 5M root positions capped at 2, kept iff over 2 block-SE and the MDL bar). Lines: F-P x2 (anchor); T-P-Ne-grow with that rule x2; D-P-Ne-ctx-grow + {--router-chain 2, --router-credit 5000000} x2 (6.88; the recipe row says chain 1 and 10M): the same tree as a DAG with path context and grow6's encourage rule (--router-split-rule encourage: a router split credit per 5M root positions (~26 cycles), banked to 2, so credits are nearly always there and eligibility and pruning set the rate; a split made whatever its gain on the eligible router (three own windows closed, children ready by the 90% guard, no trial in its region, its chain below 2: a router that split, or a copy, may split once more, never a third time; a node under two stacked splits has up to 9 arrival paths and cells) with the highest G_real - G_null, ties to H, then the index; the shadow partition as 6.36 (by arrival path where the router has several, else the cluster shadows); then a long do-no-harm trial of K = 5 windows of the split's region (5M examples at W 1M), the null shadows running on as the unsplit alternative. THE KEEP RULE (6.88): the split STAYS unless G_real - G_null over the trial is below -2 block-SE (--router-trial-z 2): undone only on clear harm, no positive margin to keep, NO MDL bar on the router trial (grow6 has none there; the leaf trials' MDL bar counts their path-table parameters, as 6.88 allows); an undone router backs off; --log-router-stats). With the allowance off the DAG trains as the tree with the same rule, game for game (models/from-scratch/fastbin/grow6/summary.txt). Seed 62 (61 is probit-p3's), ply 1, games_per_cycle 1584, self-games, plateau scaled min 600, cap 900 (long: ~20 leaf trials a line; 6-12 router splits a line by the floor). Games chessai-hybrid17. TRAINING PINNED TO chessai-grow6 FOR EVERY LINE after create, before cycle 1: python3 leagues/specs/ply1/train_binary.py leagues/experiments/grow-dag-p1 chessai-grow6 (grow6 trains F-P as hybrid6 and T-P-Ne-grow as grow4/grow5, byte for byte). Logs per router split: N, router, arrival paths, the chosen-by statistic, the trial's G_real - G_null per window and the verdict at K (also G against the unsplit router, logged only); per leaf trial: N, leaf, under an earlier router split or not, kept or undone, gain, and the kept rate under router splits against elsewhere; path cells' count, mean and largest |cell| and movement at every root window; node and cell counts; the 55-node warning. Read (6.80 (3)): the ply-1 panel (r + e + g + h at v300) at v150, v300, v600 and the final, plies 1 and 2; DAG minus tree is the router splits' net value; the kept-rate table and the fraction of router splits pruned. Predictions (6.88, replacing 6.80 (4)): router splits by the floor (v600) 6-12 per line, 30-60% undone at K; DAG minus tree against the TR panel at ply 1 -20 to 10 (centre -5) at v300 and at v600, -25 to 15 at ply 2; leaf trials under router splits kept at the same rate as elsewhere within 15 points; nodes under 55. 6.80's rules stand. Confirms the user's hypothesis: a kept rate under router splits 20+ points above elsewhere AND the DAG 20+ over the tree at the final at both plies. Closes it: the DAG within 15 of the tree with the kept rate level after 600-900 cycles. Cost with chain 2 and 5M: ~27 CPU-s per cycle on average: ~4.5 CPU-h at the 600 floor, ~7-7.5 at the 900 cap; the DAG lines train at ~4x the tree's CPU once they have router splits (shadows, copies, 9 cells a leaf) (models/from-scratch/fastbin/grow6/summary.txt, COST and 6.88).",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne-grow",
+   "set": {
+    "--grow-mdl": "1",
+    "--grow-gate": "age",
+    "--grow-priority": "snapshot"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "D-P-Ne-ctx-grow",
+   "set": {
+    "--router-chain": "2",
+    "--router-credit": "5000000"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 62,
+ "train": {
+  "seed": 62
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 600
+ },
+ "cycles": 900,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid17"
+ }
+}

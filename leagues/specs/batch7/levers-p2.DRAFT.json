@@ -1,0 +1,54 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "seed": 75,
+ "train": {
+  "seed": 75
+ },
+ "references": [],
+ "entry_ply": 2,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300,
+  "rate_scale": "sqrt",
+  "guard_z": 1.0
+ },
+ "cycles": 401,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-pairs2"
+ },
+ "cold_games": {
+  "temperature": 0.02,
+  "share": 0.5,
+  "train": false
+ },
+ "rate_every": 4,
+ "champion_se_kind": "draw-aware",
+ "champion_se": 3,
+ "name": "levers-p2",
+ "models": [
+  {
+   "model": "F-P",
+   "train_binary": "chessai-hybrid6"
+  },
+  {
+   "model": "F-P",
+   "set": {
+    "--label-depth": "2",
+    "--label-result": "0.5"
+   },
+   "to": "train",
+   "train_binary": "chessai-hybrid6"
+  },
+  {
+   "model": "F-P-S7v2"
+  }
+ ],
+ "description": "DRAFT (coordinator 11-13 01:42; analyst 6.108 / 6.109). THE TWO LEVERS AT PLY 2, trained at ply 2 (labels-p1: search labels nothing at ply 1, +60 at ply 2 at v400, both seeds; s7-p1: pairs +47 at ply 1, -21.5 at ply 2 at v300, both seeds: the mirror image). One flat-only field at ply 2, every line on the same games: F-P (result labels, hybrid6), F-P --label-depth 2 --label-result 0.5 (hybrid6), F-P-S7v2 (pairs2, result labels). Contrasts on identical data: labels minus result, S7 minus result. The 6.109 2x2's fourth cell (S7 + labels) is NOT RUN: pairs2 refuses --label-depth with --pairs on; it gets a build only if both levers pay at ply 2. One seed (ply-2 run SD ~5, the field effect shared). Tournament chessai-pairs2 (pair models load only there; identical games to hybrid20 on other models). 6 entries: 30 games a round, the GPC cap binds (48 rounds = 1,440 games + self-games). Seed 75, T 0.1, cold T 0.02 share 0.5 rating-only, rate every 4, draw-aware crowning 3 SE, plateau floor 300 sqrt guard 1, cap 401. Reads vs y/v/l @299 at plies 2 and 3 at v150 / v300 / final, FP face the verdict. Bands (6.109, ply 2 / ply 3): labels - result 30-90 / 20-80; S7 - result 0-40 / -20..30. Rules: labels 40+ at ply 2 adopts search labels for the standard's flats at every rung; S7 30+ at ply 2 with ply 3 not below -20 puts a pairs flat into the standard (recheck at ply 1); S7 within 15 at ply 2 closes pairs as a strength lever."
+}

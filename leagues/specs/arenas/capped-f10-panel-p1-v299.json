@@ -1,0 +1,123 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 30,
+  "min_rounds": 150,
+  "max_rounds": 150
+ },
+ "name": "capped-f10-panel-p1-v299",
+ "dir": "leagues/arenas/diag/capped-f10-panel-p1-v299",
+ "plies": [
+  1
+ ],
+ "description": "Cold read capped-f10-panel-p1-v299: ply 1, version 299, only the contrast's lines, near argmax (T 0.02), 150 round-robins. Tags: fl=capped-l-f10-p1:^F-L, c1=capped-l-f10-p1:split-threshold=1000000#, c10=capped-l-f10-p1:forget-factor=10#, gfl=grow-l-p1:^F-L, gc=grow-l-p1:^T-L-Ne\\+, gg=grow-l-p1:^T-L-Ne-grow, hfl=grow-l-p1b:^F-L, hg1=grow-l-p1b:snapshot#, hg10=grow-l-p1b:forget-factor=10#",
+ "entries": [
+  {
+   "version": "capped-l-f10-p1:F-L#1.loc@299",
+   "name": "fl299.L1@299",
+   "label": "capped-l-f10-p1 F-L#1.loc version v299"
+  },
+  {
+   "version": "capped-l-f10-p1:F-L#2.loc@299",
+   "name": "fl299.L2@299",
+   "label": "capped-l-f10-p1 F-L#2.loc version v299"
+  },
+  {
+   "version": "capped-l-f10-p1:T-L-Ne+split-limit=4+split-threshold=1000000#1.loc@299",
+   "name": "c1299.L1@299",
+   "label": "capped-l-f10-p1 T-L-Ne+split-limit=4+split-threshold=1000000#1.loc version v299"
+  },
+  {
+   "version": "capped-l-f10-p1:T-L-Ne+split-limit=4+split-threshold=1000000#2.loc@299",
+   "name": "c1299.L2@299",
+   "label": "capped-l-f10-p1 T-L-Ne+split-limit=4+split-threshold=1000000#2.loc version v299"
+  },
+  {
+   "version": "capped-l-f10-p1:T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10#1.loc@299",
+   "name": "c10299.L1@299",
+   "label": "capped-l-f10-p1 T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10#1.loc version v299"
+  },
+  {
+   "version": "capped-l-f10-p1:T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10#2.loc@299",
+   "name": "c10299.L2@299",
+   "label": "capped-l-f10-p1 T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10#2.loc version v299"
+  },
+  {
+   "version": "grow-l-p1:F-L#1.loc@299",
+   "name": "gfl299.L1@299",
+   "label": "grow-l-p1 F-L#1.loc version v299"
+  },
+  {
+   "version": "grow-l-p1:F-L#2.loc@299",
+   "name": "gfl299.L2@299",
+   "label": "grow-l-p1 F-L#2.loc version v299"
+  },
+  {
+   "version": "grow-l-p1:T-L-Ne+split-limit=4+split-threshold=1000000#1.loc@299",
+   "name": "gc299.L1@299",
+   "label": "grow-l-p1 T-L-Ne+split-limit=4+split-threshold=1000000#1.loc version v299"
+  },
+  {
+   "version": "grow-l-p1:T-L-Ne+split-limit=4+split-threshold=1000000#2.loc@299",
+   "name": "gc299.L2@299",
+   "label": "grow-l-p1 T-L-Ne+split-limit=4+split-threshold=1000000#2.loc version v299"
+  },
+  {
+   "version": "grow-l-p1:T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot#1.loc@299",
+   "name": "gg299.L1@299",
+   "label": "grow-l-p1 T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot#1.loc version v299"
+  },
+  {
+   "version": "grow-l-p1:T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot#2.loc@299",
+   "name": "gg299.L2@299",
+   "label": "grow-l-p1 T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot#2.loc version v299"
+  },
+  {
+   "version": "grow-l-p1b:F-L#1.loc@299",
+   "name": "hfl299.L1@299",
+   "label": "grow-l-p1b F-L#1.loc version v299"
+  },
+  {
+   "version": "grow-l-p1b:F-L#2.loc@299",
+   "name": "hfl299.L2@299",
+   "label": "grow-l-p1b F-L#2.loc version v299"
+  },
+  {
+   "version": "grow-l-p1b:T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot#1.loc@299",
+   "name": "hg1299.L1@299",
+   "label": "grow-l-p1b T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot#1.loc version v299"
+  },
+  {
+   "version": "grow-l-p1b:T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot#2.loc@299",
+   "name": "hg1299.L2@299",
+   "label": "grow-l-p1b T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot#2.loc version v299"
+  },
+  {
+   "version": "grow-l-p1b:T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot+forget-factor=10#1.loc@299",
+   "name": "hg10299.L1@299",
+   "label": "grow-l-p1b T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot+forget-factor=10#1.loc version v299"
+  },
+  {
+   "version": "grow-l-p1b:T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot+forget-factor=10#2.loc@299",
+   "name": "hg10299.L2@299",
+   "label": "grow-l-p1b T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot+forget-factor=10#2.loc version v299"
+  }
+ ]
+}

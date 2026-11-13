@@ -1,0 +1,116 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 1,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "diversity-p2-eqpos-p2",
+ "dir": "leagues/arenas/diag/diversity-p2-eqpos-p2",
+ "plies": [
+  2
+ ],
+ "description": "diversity-p2 against probit-late-p2 at EQUAL TRAINING POSITIONS, ply 2 only (analyst 6.53's equal-positions comparator): diversity v182 (34.73M positions a line) vs probit-late v399 (34.66M) and diversity v140 (26.81M) vs probit-late v300 (26.64M); F-P and T-P-Ne x2 each; near argmax (T 0.02), 75 round-robins, 4 random references. Tags dfp/dtr = diversity F-P/tree, pfp/ptr = probit-late F-P/tree, suffixed by version.",
+ "entries": [
+  {
+   "version": "diversity-p2:F-P#1.loc@182",
+   "name": "dfp182.L1@182",
+   "label": "diversity-p2 F-P#1.loc version v182"
+  },
+  {
+   "version": "diversity-p2:F-P#2.loc@182",
+   "name": "dfp182.L2@182",
+   "label": "diversity-p2 F-P#2.loc version v182"
+  },
+  {
+   "version": "diversity-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@182",
+   "name": "dtr182.L1@182",
+   "label": "diversity-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v182"
+  },
+  {
+   "version": "diversity-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@182",
+   "name": "dtr182.L2@182",
+   "label": "diversity-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v182"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@399",
+   "name": "pfp399.L1@399",
+   "label": "probit-late-p2 F-P#1.loc version v399"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@399",
+   "name": "pfp399.L2@399",
+   "label": "probit-late-p2 F-P#2.loc version v399"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@399",
+   "name": "ptr399.L1@399",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v399"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@399",
+   "name": "ptr399.L2@399",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v399"
+  },
+  {
+   "version": "diversity-p2:F-P#1.loc@140",
+   "name": "dfp140.L1@140",
+   "label": "diversity-p2 F-P#1.loc version v140"
+  },
+  {
+   "version": "diversity-p2:F-P#2.loc@140",
+   "name": "dfp140.L2@140",
+   "label": "diversity-p2 F-P#2.loc version v140"
+  },
+  {
+   "version": "diversity-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@140",
+   "name": "dtr140.L1@140",
+   "label": "diversity-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v140"
+  },
+  {
+   "version": "diversity-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@140",
+   "name": "dtr140.L2@140",
+   "label": "diversity-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v140"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@300",
+   "name": "pfp300.L1@300",
+   "label": "probit-late-p2 F-P#1.loc version v300"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@300",
+   "name": "pfp300.L2@300",
+   "label": "probit-late-p2 F-P#2.loc version v300"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@300",
+   "name": "ptr300.L1@300",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v300"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@300",
+   "name": "ptr300.L2@300",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v300"
+  }
+ ]
+}

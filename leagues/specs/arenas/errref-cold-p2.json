@@ -1,0 +1,56 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "errref-cold-p2",
+ "dir": "leagues/arenas/diag/errref-cold-p2",
+ "plies": [
+  2
+ ],
+ "description": "Cold read errref-cold at ply 2 only (one arena per ply), versions 314, near argmax (T 0.02), 75 round-robins. Tags: efp=error-routing-p1:^F-P, etn=error-routing-p1:^T-P-Ne",
+ "entries": [
+  {
+   "version": "error-routing-p1:F-P#1.loc@314",
+   "name": "efp314.L1@314",
+   "label": "error-routing-p1 F-P#1.loc version v314"
+  },
+  {
+   "version": "error-routing-p1:F-P#2.loc@314",
+   "name": "efp314.L2@314",
+   "label": "error-routing-p1 F-P#2.loc version v314"
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@314",
+   "name": "etn314.L1@314",
+   "label": "error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v314"
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@314",
+   "name": "etn314.L2@314",
+   "label": "error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v314"
+  }
+ ]
+}

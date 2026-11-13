@@ -1,0 +1,67 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid13",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "router-kind-p1-cold",
+ "dir": "leagues/arenas/diag/router-kind-p1-cold",
+ "plies": [
+  1,
+  2
+ ],
+ "description": "Cold read of router-kind-p1's final versions at plies 1-2 near argmax (six-model shortlist, theory-2 6.24). Tags: fp=^F-P, lc=^T-P-Lc-merge, nc=^T-P-Nc-merge",
+ "entries": [
+  {
+   "version": "router-kind-p1:F-P#1.loc@299",
+   "name": "fp.L1@299",
+   "label": "router-kind-p1 F-P#1.loc final version v299"
+  },
+  {
+   "version": "router-kind-p1:F-P#2.loc@299",
+   "name": "fp.L2@299",
+   "label": "router-kind-p1 F-P#2.loc final version v299"
+  },
+  {
+   "version": "router-kind-p1:T-P-Lc-merge+split-limit=4+split-threshold=1000000+split-noise=0.03+revise-on=fresh#1.loc@299",
+   "name": "lc.L1@299",
+   "label": "router-kind-p1 T-P-Lc-merge+split-limit=4+split-threshold=1000000+split-noise=0.03+revise-on=fresh#1.loc final version v299"
+  },
+  {
+   "version": "router-kind-p1:T-P-Lc-merge+split-limit=4+split-threshold=1000000+split-noise=0.03+revise-on=fresh#2.loc@299",
+   "name": "lc.L2@299",
+   "label": "router-kind-p1 T-P-Lc-merge+split-limit=4+split-threshold=1000000+split-noise=0.03+revise-on=fresh#2.loc final version v299"
+  },
+  {
+   "version": "router-kind-p1:T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.03+revise-on=fresh#1.loc@299",
+   "name": "nc.L1@299",
+   "label": "router-kind-p1 T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.03+revise-on=fresh#1.loc final version v299"
+  },
+  {
+   "version": "router-kind-p1:T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.03+revise-on=fresh#2.loc@299",
+   "name": "nc.L2@299",
+   "label": "router-kind-p1 T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.03+revise-on=fresh#2.loc final version v299"
+  }
+ ]
+}

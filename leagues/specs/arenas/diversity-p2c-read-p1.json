@@ -1,0 +1,86 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "diversity-p2c-read-p1",
+ "dir": "leagues/arenas/diag/diversity-p2c-read-p1",
+ "plies": [
+  1
+ ],
+ "description": "diversity-p2c's read at ply 1 (analyst 6.57/6.58), final version v331: p2c F-P (cfp) and tree (ctr) against base-probit-p2 F-P (bfp), probit-late-p2 F-P (pfp), diversity-p2 F-P (dfp); at ply 2 also the acceleration ladder and the cold test of each cut reference kind (rFP, rTNc) against the line versions that cut it (cutFP, cutTNc). Near argmax (T 0.02), 75 round-robins.",
+ "entries": [
+  {
+   "version": "diversity-p2c:F-P#1.loc@331",
+   "name": "cfpF.L1@331",
+   "label": "diversity-p2c F-P#1.loc version v331"
+  },
+  {
+   "version": "diversity-p2c:F-P#2.loc@331",
+   "name": "cfpF.L2@331",
+   "label": "diversity-p2c F-P#2.loc version v331"
+  },
+  {
+   "version": "diversity-p2c:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@331",
+   "name": "ctrF.L1@331",
+   "label": "diversity-p2c T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v331"
+  },
+  {
+   "version": "diversity-p2c:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@331",
+   "name": "ctrF.L2@331",
+   "label": "diversity-p2c T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v331"
+  },
+  {
+   "version": "base-probit-p2:F-P#1.loc@450",
+   "name": "bfp450.L1@450",
+   "label": "base-probit-p2 F-P#1.loc version v450"
+  },
+  {
+   "version": "base-probit-p2:F-P#2.loc@450",
+   "name": "bfp450.L2@450",
+   "label": "base-probit-p2 F-P#2.loc version v450"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@399",
+   "name": "pfp399.L1@399",
+   "label": "probit-late-p2 F-P#1.loc version v399"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@399",
+   "name": "pfp399.L2@399",
+   "label": "probit-late-p2 F-P#2.loc version v399"
+  },
+  {
+   "version": "diversity-p2:F-P#1.loc@314",
+   "name": "dfp314.L1@314",
+   "label": "diversity-p2 F-P#1.loc version v314"
+  },
+  {
+   "version": "diversity-p2:F-P#2.loc@314",
+   "name": "dfp314.L2@314",
+   "label": "diversity-p2 F-P#2.loc version v314"
+  }
+ ]
+}

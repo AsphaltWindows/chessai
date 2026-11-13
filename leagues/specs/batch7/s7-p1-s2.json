@@ -1,0 +1,45 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "s7-p1-s2",
+ "description": "LAUNCHED 2026-11-12 23:42 by the coordinator (launch-when-free.sh, the user away). (the S7 pairs fork, 2026-11-12 ~23:40; not created, not launched; pairs2 per analyst 6.100 and the coordinator 22:56). S7: data-chosen PAIRWISE FEATURES for the flat probit (analyst 6.97; the user ~21:50: \"Let's try pairwise features also\"), with the corrected statistic. Seed 72 replicate 2 of 2; s7-p1-s1 (seed 71) is the other (flats are deterministic, so two lines of one recipe in one field would be one model twice: replicates are separate runs, analyst 6.98). QUESTION: does F-P-S7v2 beat plain F-P at ply 1 (and ply 2)? LINES (two, one factor: the pairs): F-P on chessai-pairs2 without the flag (byte-identical to hybrid6, std-v1's F-P binary) and F-P-S7v2 (recipes.txt row F-P-S7v2: chessai-pairs2 --pairs on). Both train on the same positions in the same order (pairs2 keeps the plain probit's shuffled order and sums its statistics by game at each round's end, so no game-order factor). F-P-S7v2: every conjunction of two feature values is a candidate (356,642; 2,415 active a position); z = the pair's interaction contrast (S_ab/n_ab - S_a/n_a - S_b/n_b + S/n, v the latent's standardized shift) over its standard error clustered by game (the games' sums centred at the null's prediction); at the end of each training round that crosses a multiple of 1M examples (counted from the model's start) the 20 candidates with the largest |z| above 5 become weights of the probit (mean 0, sd 0.5 x prior 0.3), at most 500 in all, after dropping each pair active in 3M examples since chosen whose |mean| is below 0.5 sd. Null check and offline held-out test: models/from-scratch/pairs/summary.txt. The model file holds the pairs and their weights (probit model version 2: chessai-pairs1 and -pairs2 load it, older binaries refuse it with \"unknown probit model version\"); the statistics are training state, runs/<line>/probitN.state (kind probit-pairs2, ~17 MB) beside the model, written by every training, read by the next (the driver keeps only the current version's; exact resume and a kill -9 smoke: the summary). PLAY: ply 1, games_per_cycle 1584 (with 4 entries the 48-round cap binds: 576 tournament games + 192 self-games a cycle, ~94k positions, so a checkpoint every ~11 cycles, ~37 by cycle 400), round robins and self-games at T 0.1 (the binary's default), every line trains on them; tournament binary chessai-pairs2 (needed to load F-P-S7v2's models; the same games as hybrid20 on every other model). RATING: rate_every 4, cold games T 0.02 share 0.5, rating only. CROWNING: draw-aware, 3 SEs. PLATEAU: scaled, sqrt, guard_z 1, floor 300 (min_cycles 300), cap 400 (cycles 401, a rated cycle). READS (the coordinator's): against the r/e/g/h panel @300 at v150, v300 and the final version, plies 1 and 2 (make_split_read.py --binary chessai-pairs2: its default hybrid16 cannot load F-P-S7v2's models); bands: ply 1 30-120 (under 15 closes the lever), ply 2 0-60; 15-40 gets a third seed. LOGS: runs/F-P-S7v2.loc.log, after each training's \"round 0\" line: \"pairs: N chosen of cap 500; this round: E examples, C checkpoints, added A (|z| min/median/max), dropped D; active per position X; T examples since the start\", then one \"pairs checkpoint at T examples:\" line per checkpoint naming the pairs dropped (mean, sd) and added (signed z) as i:a&j:b. COST: ~0.6-0.8 CPU-h a run (models/from-scratch/pairs/summary.txt). Seeds 71 and 72: unused before (70 is residual-p2's).",
+ "seed": 72,
+ "train": {
+  "seed": 72
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300,
+  "rate_scale": "sqrt",
+  "guard_z": 1.0
+ },
+ "cycles": 401,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-pairs2"
+ },
+ "cold_games": {
+  "temperature": 0.02,
+  "share": 0.5,
+  "train": false
+ },
+ "rate_every": 4,
+ "champion_se_kind": "draw-aware",
+ "champion_se": 3,
+ "models": [
+  {
+   "model": "F-P",
+   "train_binary": "chessai-pairs2"
+  },
+  {
+   "model": "F-P-S7v2"
+  }
+ ]
+}

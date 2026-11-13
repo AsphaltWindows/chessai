@@ -1,0 +1,55 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "growth-limits-p1",
+ "models": [
+  {
+   "model": "T-L-Nc-merge",
+   "set": {
+    "--split-limit": "1",
+    "--split-threshold": "1000000"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-L-Nc-merge",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-L-Nc-merge",
+   "set": {
+    "--split-limit": "8",
+    "--split-threshold": "1000000"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 12,
+ "train": {
+  "seed": 12
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 100
+ },
+ "cycles": 1000,
+ "rounds_per_cycle": 18,
+ "min_rounds": 18,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid9"
+ },
+ "prices_version": "P2"
+}

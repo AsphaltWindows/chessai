@@ -1,0 +1,111 @@
+{
+ "name": "matched-depth",
+ "description": "Depth-4 self-play models (F-L+depth=4.sp@99, F-P+depth=4.sp@99) against flat LR and probit models of the other self-play depths trained on about as many positions (models/from-scratch/matched-depth/README.md), with the depths' first versions as context. Everything at ply 2.",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid7",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid4gfx",
+ "stop": {
+  "ci95": 10,
+  "chunk_rounds": 10,
+  "min_rounds": 10,
+  "max_rounds": 400
+ },
+ "entries": [
+  {
+   "version": "selfplay-depth:F-L+depth=4.sp@99",
+   "positions": 1649603,
+   "label": "LR d4, the target"
+  },
+  {
+   "file": "models/from-scratch/matched-depth/F-L+depth=0.sp.round@5.lr.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "F-L+depth=0.sp.round@5",
+   "positions": 1511085,
+   "label": "LR d0 matched (0.92)"
+  },
+  {
+   "file": "models/from-scratch/matched-depth/F-L+depth=0.sp.round@6.lr.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "F-L+depth=0.sp.round@6",
+   "positions": 1798531,
+   "label": "LR d0 matched (1.09)"
+  },
+  {
+   "file": "models/from-scratch/matched-depth/F-L+depth=1.sp.round@14.lr.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "F-L+depth=1.sp.round@14",
+   "positions": 1682882,
+   "label": "LR d1 matched (1.02)"
+  },
+  {
+   "version": "selfplay-depth:F-L+depth=2#1.sp@2",
+   "positions": 1613734,
+   "label": "LR d2 matched (0.98)"
+  },
+  {
+   "version": "selfplay-depth:F-L+depth=2#2.sp@2",
+   "positions": 1601001,
+   "label": "LR d2 matched (0.97)"
+  },
+  {
+   "version": "selfplay-depth:F-L+depth=0.sp@1",
+   "positions": 14340139,
+   "label": "LR d0 context (8.7x)"
+  },
+  {
+   "version": "selfplay-depth:F-L+depth=1.sp@1",
+   "positions": 7406458,
+   "label": "LR d1 context (4.5x)"
+  },
+  {
+   "version": "selfplay-depth:F-P+depth=4.sp@99",
+   "positions": 788565,
+   "label": "probit d4, the target"
+  },
+  {
+   "file": "models/from-scratch/matched-depth/F-P+depth=0.sp.round@2.probit.model",
+   "kind": "probit",
+   "heldout": "lr",
+   "name": "F-P+depth=0.sp.round@2",
+   "positions": 635717,
+   "label": "probit d0 matched (0.81)"
+  },
+  {
+   "file": "models/from-scratch/matched-depth/F-P+depth=0.sp.round@3.probit.model",
+   "kind": "probit",
+   "heldout": "lr",
+   "name": "F-P+depth=0.sp.round@3",
+   "positions": 910791,
+   "label": "probit d0 matched (1.16)"
+  },
+  {
+   "file": "models/from-scratch/matched-depth/F-P+depth=1.sp.round@7.probit.model",
+   "kind": "probit",
+   "heldout": "lr",
+   "name": "F-P+depth=1.sp.round@7",
+   "positions": 791676,
+   "label": "probit d1 matched (1.00)"
+  },
+  {
+   "version": "selfplay-depth:F-P+depth=2.sp@2",
+   "positions": 852185,
+   "label": "probit d2 matched (1.08)"
+  },
+  {
+   "version": "selfplay-depth:F-P+depth=0.sp@1",
+   "positions": 13323308,
+   "label": "probit d0 context (16.9x)"
+  },
+  {
+   "version": "selfplay-depth:F-P+depth=1.sp@1",
+   "positions": 5906841,
+   "label": "probit d1 context (7.5x)"
+  }
+ ]
+}

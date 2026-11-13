@@ -1,0 +1,39 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "models": [
+  {
+   "model": "F-L",
+   "replicates": 4,
+   "start": {
+    "experiment": "flat-p3",
+    "version": 199
+   },
+   "start_forget": 8
+  }
+ ],
+ "seed": 24,
+ "train": {
+  "seed": 24
+ },
+ "references": [],
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 60
+ },
+ "cycles": 100,
+ "rounds_per_cycle": 6,
+ "min_rounds": 6,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid10"
+ },
+ "prices_version": "P2",
+ "name": "flat-p3-w4",
+ "entry_ply": 4,
+ "ply1_entries": false,
+ "description": "W4, the ply-4 twin. The analyst's warm-started twins (theory-2 6.17), the ply ladder's next rung: is ply-4 training data better than ply-3 data for ply-4 play? flat-p3-w4 and flat-p3-w3 differ only in the field's ply (4 and 3), so the ply of the training games is the one factor; the same starts, seed 24, 6 rounds a cycle, a scaled plateau from cycle 60, at most 100 cycles. Each of the four F-L lines starts from flat-p3's final model of the same line (version 199 of F-L#1-4.loc; its version 0 is a byte copy, path and md5 in config.json and the 'entered' event), and its first training divides the AdaGrad sums by 8 (start_forget 8: train --start <version 0> --init-forget 8) so the models can adapt again; later trainings as usual. Pure field with self-games and no references, standard T 0.1 tournament on chessai-hybrid10 (chessai-hybrid11 not built yet), prices P2 (ply 4: lr measured, 2026-11-11). Read: both twins' final versions against their common start (flat-p3 v199) and each other at ply 4, near argmax (T 0.02). Cost (NEXT-EXPERIMENTS.md): W4 ~3-5 CPU-h, W3 ~0.5 CPU-h. Written 11-11 ~03:30 for the coordinator to launch."
+}

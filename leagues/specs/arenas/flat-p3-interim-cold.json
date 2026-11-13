@@ -1,0 +1,74 @@
+{
+ "name": "flat-p3-interim-cold",
+ "dir": "leagues/arenas/diag/flat-p3-interim-cold",
+ "description": "Interim read (11-11 ~02:40) of flat-p3's final versions (F-L x4 trained in a ply-3 field) at ply 2 and 3, near argmax (T 0.02), against the best ply-2-trained flat LR (lr-settings-new) and the old depth-4 lineage (d4mix v426, best at ply 3 so far). The twin verdict (flat-p3/-b against flat-p2/-b) follows when all four runs end.",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid10",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "plies": [
+  2,
+  3
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 5,
+  "min_rounds": 40,
+  "max_rounds": 40
+ },
+ "entries": [
+  {
+   "version": "flat-p3:F-L#1.loc@199",
+   "name": "fp3.F-L#1@199",
+   "label": "flat-p3 F-L#1 final version v199"
+  },
+  {
+   "version": "flat-p3:F-L#2.loc@199",
+   "name": "fp3.F-L#2@199",
+   "label": "flat-p3 F-L#2 final version v199"
+  },
+  {
+   "version": "flat-p3:F-L#3.loc@199",
+   "name": "fp3.F-L#3@199",
+   "label": "flat-p3 F-L#3 final version v199"
+  },
+  {
+   "version": "flat-p3:F-L#4.loc@199",
+   "name": "fp3.F-L#4@199",
+   "label": "flat-p3 F-L#4 final version v199"
+  },
+  {
+   "version": "lr-settings-new:F-L+lr-rate=0.0125.loc@136",
+   "name": "lrs.F-L-0.0125@136",
+   "label": "lr-settings-new champion (best ply-2-trained flat LR)"
+  },
+  {
+   "version": "lr-settings-new:F-L+lr-rate=0.05.loc@193",
+   "name": "lrs.F-L-0.05@193",
+   "label": "lr-settings-new rate 0.05 (the default rate) final"
+  },
+  {
+   "file": "cycles/runs/F-L-d4mix-c/lr426.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "old.F-L-d4mix-c@426",
+   "label": "old champion run: depth-4 self-play, 50/50 search labels; its champion at cycle 75"
+  }
+ ]
+}

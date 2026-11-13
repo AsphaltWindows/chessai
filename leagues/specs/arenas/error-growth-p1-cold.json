@@ -1,0 +1,67 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid13",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "error-growth-p1-cold",
+ "dir": "leagues/arenas/diag/error-growth-p1-cold",
+ "plies": [
+  1,
+  2
+ ],
+ "description": "Cold read of error-growth-p1's final versions at plies 1-2 near argmax (six-model shortlist, theory-2 6.24). Tags: fp=^F-P, l4=split-limit=4, l8=split-limit=8",
+ "entries": [
+  {
+   "version": "error-growth-p1:F-P#1.loc@449",
+   "name": "fp.L1@449",
+   "label": "error-growth-p1 F-P#1.loc final version v449"
+  },
+  {
+   "version": "error-growth-p1:F-P#2.loc@449",
+   "name": "fp.L2@449",
+   "label": "error-growth-p1 F-P#2.loc final version v449"
+  },
+  {
+   "version": "error-growth-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@449",
+   "name": "l4.L1@449",
+   "label": "error-growth-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc final version v449"
+  },
+  {
+   "version": "error-growth-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@449",
+   "name": "l4.L2@449",
+   "label": "error-growth-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc final version v449"
+  },
+  {
+   "version": "error-growth-p1:T-P-Ne+split-limit=8+split-threshold=1000000+split-noise=0.03#1.loc@449",
+   "name": "l8.L1@449",
+   "label": "error-growth-p1 T-P-Ne+split-limit=8+split-threshold=1000000+split-noise=0.03#1.loc final version v449"
+  },
+  {
+   "version": "error-growth-p1:T-P-Ne+split-limit=8+split-threshold=1000000+split-noise=0.03#2.loc@449",
+   "name": "l8.L2@449",
+   "label": "error-growth-p1 T-P-Ne+split-limit=8+split-threshold=1000000+split-noise=0.03#2.loc final version v449"
+  }
+ ]
+}

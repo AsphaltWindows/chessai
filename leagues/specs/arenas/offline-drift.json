@@ -1,0 +1,61 @@
+{
+ "name": "offline-drift",
+ "dir": "leagues/arenas/diag/offline-drift",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 150,
+  "max_rounds": 150
+ },
+ "plies": [
+  1,
+  2
+ ],
+ "description": "Analyst 6.44 (ii) (11-11 ~21:10): the offline drift test. The F-P / T-P-Ne pair trained one pass on 10.8M of P2x (ply-1 field's models at ply 2) then 10.8M of P2, against the pair trained on P2 alone; cold, T 0.02, plies 1-2, 150 round-robins. Verdict on head-to-heads at ply 2: lag predicts the drifted tree within 20 of its flat (the P2-alone tree beats its flat by ~65); a drifted tree still 40+ ahead means another loop term (self-games, T 0.1 gate, late splits).",
+ "entries": [
+  {
+   "file": "models/from-scratch/offline-ply/drift/models/fp/probit108.model",
+   "kind": "probit",
+   "name": "dfp.S1@108",
+   "label": "drift F-P: 10.8M of P2x then 10.8M of P2"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/drift/models/tne/bdt108.model",
+   "kind": "bdt",
+   "name": "dtne.S1@108",
+   "label": "drift T-P-Ne: 10.8M of P2x then 10.8M of P2"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/models/P2/fp/probit108.model",
+   "kind": "probit",
+   "name": "p2fp.S1@108",
+   "label": "F-P on 21.6M of P2"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/models/P2/tne/bdt108.model",
+   "kind": "bdt",
+   "name": "p2tne.S1@108",
+   "label": "T-P-Ne on 21.6M of P2"
+  }
+ ]
+}

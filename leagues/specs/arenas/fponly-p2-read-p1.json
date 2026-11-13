@@ -1,0 +1,116 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "fponly-p2-read-p1",
+ "dir": "leagues/arenas/diag/fponly-p2-read-p1",
+ "plies": [
+  1
+ ],
+ "description": "Cold read fponly-p2-read at ply 1 only (one arena per ply), versions 300, 320, near argmax (T 0.02), 75 round-robins. Tags: x4=fponly-p2:^F-P, bfp=base-probit-p2:^F-P, pfp=probit-late-p2:^F-P",
+ "entries": [
+  {
+   "version": "fponly-p2:F-P#1.loc@300",
+   "name": "x4300.L1@300",
+   "label": "fponly-p2 F-P#1.loc version v300"
+  },
+  {
+   "version": "fponly-p2:F-P#2.loc@300",
+   "name": "x4300.L2@300",
+   "label": "fponly-p2 F-P#2.loc version v300"
+  },
+  {
+   "version": "fponly-p2:F-P#3.loc@300",
+   "name": "x4300.L3@300",
+   "label": "fponly-p2 F-P#3.loc version v300"
+  },
+  {
+   "version": "fponly-p2:F-P#4.loc@300",
+   "name": "x4300.L4@300",
+   "label": "fponly-p2 F-P#4.loc version v300"
+  },
+  {
+   "version": "base-probit-p2:F-P#1.loc@300",
+   "name": "bfp300.L1@300",
+   "label": "base-probit-p2 F-P#1.loc version v300"
+  },
+  {
+   "version": "base-probit-p2:F-P#2.loc@300",
+   "name": "bfp300.L2@300",
+   "label": "base-probit-p2 F-P#2.loc version v300"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@300",
+   "name": "pfp300.L1@300",
+   "label": "probit-late-p2 F-P#1.loc version v300"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@300",
+   "name": "pfp300.L2@300",
+   "label": "probit-late-p2 F-P#2.loc version v300"
+  },
+  {
+   "version": "fponly-p2:F-P#1.loc@320",
+   "name": "x4320.L1@320",
+   "label": "fponly-p2 F-P#1.loc version v320"
+  },
+  {
+   "version": "fponly-p2:F-P#2.loc@320",
+   "name": "x4320.L2@320",
+   "label": "fponly-p2 F-P#2.loc version v320"
+  },
+  {
+   "version": "fponly-p2:F-P#3.loc@320",
+   "name": "x4320.L3@320",
+   "label": "fponly-p2 F-P#3.loc version v320"
+  },
+  {
+   "version": "fponly-p2:F-P#4.loc@320",
+   "name": "x4320.L4@320",
+   "label": "fponly-p2 F-P#4.loc version v320"
+  },
+  {
+   "version": "base-probit-p2:F-P#1.loc@320",
+   "name": "bfp320.L1@320",
+   "label": "base-probit-p2 F-P#1.loc version v320"
+  },
+  {
+   "version": "base-probit-p2:F-P#2.loc@320",
+   "name": "bfp320.L2@320",
+   "label": "base-probit-p2 F-P#2.loc version v320"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@320",
+   "name": "pfp320.L1@320",
+   "label": "probit-late-p2 F-P#1.loc version v320"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@320",
+   "name": "pfp320.L2@320",
+   "label": "probit-late-p2 F-P#2.loc version v320"
+  }
+ ]
+}

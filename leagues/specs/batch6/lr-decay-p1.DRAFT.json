@@ -1,0 +1,40 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "lr-decay-p1",
+ "description": "DRAFT (2026-11-12 ~05:15; the lrdecay1 build fork; NOT created: the offline sweep's rule picked no N). One factor at ply 1: the LR learner's AdaGrad sums decay (analyst 6.64 (b)): AdaGrad's steps shrink as 1/sqrt(life), too slow for a drifting stream (6.64: the split boost, forget 10, worked as a crude reset). chessai-lrdecay1's --lr-sum-memory N: each example of the model's own multiplies every AdaGrad sum by (1 - 1/N) before adding its squared gradients (S <- S (1 - 1/N) + g^2, lazy and exact; byte-identical to grow5 without it). Lines: F-L x2 (AdaGrad); F-L-decay (F-L on chessai-lrdecay1, a recipe row so the flag can be an override) with --lr-sum-memory N x2; every line trains on chessai-lrdecay1 (train_binary.py after create); games hybrid16; games_per_cycle 1584; seed 53; floor 300, cap 400. N = 8000000 is a PLACEHOLDER, the least harmful value tested: the offline sweep (models/from-scratch/fastbin/lrdecay1/summary.txt; F-L one pass, prequential by round, gains = AdaGrad's loss minus N's) found every N losing, more the shorter the memory: on the drifting F-L self-play stream (ply 1, 150 rounds of 1728 games) -0.0062/-0.0037/-0.0020/-0.0010 nats raw at 1M/2M/4M/8M (-0.0041/-0.0025/-0.0014/-0.0007 calibrated on each round), on an abrupt field change (P2x then P2) -0.0111/-0.0066/-0.0036/-0.0018, on the stationary P1 held-out 0.0259/0.0181/0.0120/0.0074 raw (0.0063/0.0043/0.0027/0.0015 with a fitted calibration). The analyst's rule (the largest N within 10% of the best gain) presumes gains, so N is the analyst's call. Predictions (6.64): decaying over AdaGrad 10-40 Elo at ply 1, 0-30 at ply 2; within 0.002 nats on the stationary held-out (offline: 0.0015 calibrated, 0.0074 raw at 8M). Read: cold, T 0.02, one arena per ply (1, 2), v150 and the final; head to head decaying vs AdaGrad F-L. Plan (if it gains in play despite the offline loss, e.g. through self-play feedback): the LR learners (F-L and the LR trees' leaves) take the memory, then the LR growing tree is retested with it in place of the forget-10 boost. To run: rename to lr-decay-p1.json (setting N), python3 leagues/leagues.py create it, then python3 leagues/specs/ply1/train_binary.py leagues/experiments/lr-decay-p1 chessai-lrdecay1.",
+ "models": [
+  {
+   "model": "F-L",
+   "replicates": 2
+  },
+  {
+   "model": "F-L-decay",
+   "set": {
+    "--lr-sum-memory": "8000000"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 53,
+ "train": {
+  "seed": 53
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 400,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid16"
+ }
+}

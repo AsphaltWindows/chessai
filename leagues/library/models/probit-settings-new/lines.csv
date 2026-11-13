@@ -1,0 +1,5 @@
+line,model,option,kind,archetype,status,version,version_name,champion,champion_name,patience,entered_cycle,retired_cycle,train_binary,train_args,selfplay_binary,selfplay_args,label,base_model,train_overrides,selfplay_overrides,replicate,seed_offset
+F-P+probit-tau=0.loc,F-P+probit-tau=0,local,probit,F-P,active,255,E.L.25.255,205,E.L.25.205,,1,,models/from-scratch/bin/chessai-hybrid6,--use-probs --probit-tau 0,,,F-P probit-tau=0,F-P,probit-tau=0,,1,0
+F-P+probit-tau=1e-6.loc,F-P+probit-tau=1e-6,local,probit,F-P,active,255,E.L.25.255,173,E.L.25.173,,1,,models/from-scratch/bin/chessai-hybrid6,--use-probs --probit-tau 1e-6,,,F-P probit-tau=1e-6,F-P,probit-tau=1e-6,,1,0
+F-P+probit-tau=1e-5.loc,F-P+probit-tau=1e-5,local,probit,F-P,active,255,E.L.25.255,151,E.L.25.151,,1,,models/from-scratch/bin/chessai-hybrid6,--use-probs --probit-tau 1e-5,,,F-P probit-tau=1e-5,F-P,probit-tau=1e-5,,1,0
+F-P+probit-tau=1e-4.loc,F-P+probit-tau=1e-4,local,probit,F-P,active,255,E.L.23.255,162,E.L.23.162,,1,,models/from-scratch/bin/chessai-hybrid6,--use-probs --probit-tau 1e-4,,,F-P probit-tau=1e-4,F-P,probit-tau=1e-4,,1,0

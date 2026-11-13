@@ -1,0 +1,72 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "probit-p4w",
+ "description": "The user, 11-12 ~16:25: 'Alright let's train ply4', then 'Can we continue to add at least a couple of DAGs in which we may have reason to believe that the routers will split please' / 'If we're doing diverse groups that is'. A MIXED ply-4 field, every line warm-started from a finished or frozen line of its own name (version 0 a byte copy; trees copy model and training state and train on from the state, leagues.py tree warm starts of 2026-11-12): F-P x2 and T-P-Ne capped (limit 4, 1M, noise 0.03, forget 1) x2 from probit-p3's final v301 (trained at ply 3), and D-P-Ne-ctx-grow (router-chain 2, router-credit 5000000) x2 from grow-dag-p1 v395 (trained at ply 1; frozen copy in leagues/starts/grow-dag-p1@395, as the live run keeps only its current state), the grow DAGs whose encourage rule is built for router splits. start_forget 1 throughout (analyst 6.93: the probit's variances sit at the tau equilibrium; trees refuse a forget). entry_ply 4, ply1_entries false, self-games, games_per_cycle 720 (12 entries: 5 round-robins, 660 games), seed 64, prices P2. Rated every 4th cycle (rate_every 4) on rating-only cold games (T 0.02, share 0.5: 3 round-robins, 396 games); scaled plateau (rate_scale sqrt) from cycle 41, cap 101. Tournament chessai-hybrid19 (plays the grow6 DAGs byte for byte as chessai-grow6, plies 1-4); training chessai-hybrid6 for F-P and T-P-Ne (train_binary.py --from chessai-hybrid4gfx after create), chessai-grow6 for the DAGs (their recipe's). Read: the ply-4 finals against their ply-3 starts (probit-p3 v301; the DAGs' grow-dag-p1 v395) and against the standing panels, P2 y/v/l @299 and P1 r/e/g/h @300, at plies 4, 3 and 2 (stranger-panel differences, arm_panel.py); within the field trees vs F-P vs DAGs at ply 4 (the in-field cells are matchups). Router splits: the DAG lines' router stats (--log-router-stats) per cycle. Drafted 11-12 ~16:50 by the ply-4 prep fork for the coordinator to review and launch.",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2,
+   "start": {
+    "experiment": "probit-p3",
+    "version": 301
+   },
+   "start_forget": 1
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "replicates": 2,
+   "start": {
+    "experiment": "probit-p3",
+    "version": 301
+   }
+  },
+  {
+   "model": "D-P-Ne-ctx-grow",
+   "set": {
+    "--router-chain": "2",
+    "--router-credit": "5000000"
+   },
+   "to": "train",
+   "replicates": 2,
+   "start": {
+    "experiment": "/home/iv/dev/chessai/leagues/starts/grow-dag-p1@395",
+    "version": 395
+   }
+  }
+ ],
+ "seed": 64,
+ "train": {
+  "seed": 64
+ },
+ "references": [],
+ "entry_ply": 4,
+ "ply1_entries": false,
+ "self_games": true,
+ "games_per_cycle": 720,
+ "rate_every": 4,
+ "cold_games": {
+  "temperature": 0.02,
+  "share": 0.5,
+  "train": false
+ },
+ "plateau": {
+  "scaled": true,
+  "rate_scale": "sqrt",
+  "min_cycles": 41
+ },
+ "cycles": 101,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid19"
+ }
+}

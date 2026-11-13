@@ -1,0 +1,57 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid13",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 10,
+  "min_rounds": 150,
+  "max_rounds": 150
+ },
+ "name": "train-temp-p1",
+ "dir": "leagues/arenas/diag/train-temp-p1",
+ "plies": [
+  1,
+  2
+ ],
+ "description": "Training-game temperature (theory-2 6.23 item 1): F-L trained on its field's T 0.02 games against its twin trained on T 0.1 games, final versions, read at plies 1-2 near argmax.",
+ "entries": [
+  {
+   "version": "train-t002-p1:F-L#1.loc@210",
+   "name": "t002.F-L#1@210",
+   "label": "train-t002-p1 F-L#1.loc final version v210"
+  },
+  {
+   "version": "train-t002-p1:F-L#2.loc@210",
+   "name": "t002.F-L#2@210",
+   "label": "train-t002-p1 F-L#2.loc final version v210"
+  },
+  {
+   "version": "train-t01-p1:F-L#1.loc@201",
+   "name": "t01.F-L#1@201",
+   "label": "train-t01-p1 F-L#1.loc final version v201"
+  },
+  {
+   "version": "train-t01-p1:F-L#2.loc@201",
+   "name": "t01.F-L#2@201",
+   "label": "train-t01-p1 F-L#2.loc final version v201"
+  }
+ ]
+}

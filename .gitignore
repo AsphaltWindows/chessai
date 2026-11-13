@@ -6,6 +6,10 @@ cpp_src/.idea
 *.games
 games/**
 models/**
+# Research docs and their archive are tracked (the user, 2026-11-10); data and models stay out
+!models/*.md
+!models/archive/
+!models/archive/**
 selfplay/**
 .idea/
 rs/target/
@@ -25,11 +29,16 @@ cycles/**/cycles.csv
 cycles/**/totals.csv
 
 # New league system (leagues/): code, docs, prices, recipes and specs; the
-# leagues themselves (global/, experiments/, index.json) and the smoke root
-# stay out
+# leagues themselves (global/, experiments/, arenas/, index.json) and the
+# smoke root stay out
 leagues/index.json
 leagues/.index.lock
 leagues/global/
 leagues/experiments/
+leagues/arenas/
 leagues/*.log
 leagues-smoke/
+
+# Data inside leagues/ (2026-11-13): warm-start model states and the Play page's calibration cache
+leagues/starts/
+leagues/play-games/owncal/

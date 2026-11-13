@@ -1,0 +1,5 @@
+line,model,option,kind,archetype,status,version,version_name,champion,champion_name,patience,entered_cycle,retired_cycle,train_binary,train_args,selfplay_binary,selfplay_args,label,base_model,train_overrides,selfplay_overrides,replicate,seed_offset
+F-P-w#1.loc,F-P-w#1,local,probit,F-P,active,299,E.L.26.299,223,E.L.26.223,,1,,models/from-scratch/bin/chessai-weight1,--use-probs,,,F-P-w #1,F-P-w,,,1,0
+F-P-w#2.loc,F-P-w#2,local,probit,F-P,active,299,E.L.28.299,223,E.L.28.223,,1,,models/from-scratch/bin/chessai-weight1,--use-probs,,,F-P-w #2,F-P-w,,,2,1
+F-P-w+weight-by-uncertainty=score#1.loc,F-P-w+weight-by-uncertainty=score#1,local,probit,F-P,active,299,E.L.30.299,225,E.L.30.225,,1,,models/from-scratch/bin/chessai-weight1,--use-probs --weight-by-uncertainty score,,,F-P-w weight-by-uncertainty=score #1,F-P-w,weight-by-uncertainty=score,,1,0
+F-P-w+weight-by-uncertainty=score#2.loc,F-P-w+weight-by-uncertainty=score#2,local,probit,F-P,active,299,E.L.25.299,199,E.L.25.199,,1,,models/from-scratch/bin/chessai-weight1,--use-probs --weight-by-uncertainty score,,,F-P-w weight-by-uncertainty=score #2,F-P-w,weight-by-uncertainty=score,,2,1

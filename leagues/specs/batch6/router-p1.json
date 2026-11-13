@@ -1,0 +1,67 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "router-p1",
+ "description": "Router-split rule test at ply 1 (analyst 6.41; the user 11-11 ~20:15: 'We may want to test multiple various router split strategies in an experiment'; split criteria tested at ply 1). One factor, the router-split trigger, on D-P-Ne-ctx-r4 (probit error DAG with path context; leaf rule today's: worse, z 0, limit 4, 1M, noise 0.03; router limit 4 in every arm): C no router splits (--router-split-z 1e9, plays as T-P-Ne) x2; Z today's drift trigger at z 20 x2; H stall + headroom (grow3 --router-split-rule stall-h: own routing error stagnant, children holding 90% of lifetime examples have closed a window, oracle headroom over 2 block-SE and MDL with k=(m-1)d_R) x2; HG H plus the shadow test (stall-hg: prequential G_real - G_null paired by block over 2 SE and MDL; at cluster routers it tests the hard-EM cluster partition) x2; F-P x2 (anchor). H and HG log per-router windows (--log-router-stats). chessai-grow3 training for every line (byte-identical to hybrid15 / grow2 / hybrid6 without the new flags), hybrid16 games. Floor 300, cap 400; cold reads at v150 and the final, plies 1-2, T 0.02; verdicts by pooled head-to-head. Prediction (6.41, +-20, ply 1 / 2): C over F-P 80-120 / 45-80; Z minus C -10..10 / -45..0; H minus C -20..10 / -30..10 with 2-4 router splits per seed; HG minus C within 15, 0-1 splits.",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "D-P-Ne-ctx-r4",
+   "set": {
+    "--router-split-z": "1000000000"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "D-P-Ne-ctx-r4",
+   "set": {
+    "--router-split-z": "20"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "D-P-Ne-ctx-r4",
+   "set": {
+    "--router-split-rule": "stall-h",
+    "--log-router-stats": true
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "D-P-Ne-ctx-r4",
+   "set": {
+    "--router-split-rule": "stall-hg",
+    "--log-router-stats": true
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 45,
+ "train": {
+  "seed": 45
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 400,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid16"
+ }
+}

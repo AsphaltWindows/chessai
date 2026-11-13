@@ -1,0 +1,164 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": "field"
+ },
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 30,
+  "min_rounds": 30,
+  "max_rounds": 30
+ },
+ "name": "filtered-read-p1-v300",
+ "dir": "leagues/arenas/diag/filtered-read-p1-v300",
+ "plies": [
+  1
+ ],
+ "description": "Cold read filtered-read-p1-v300: ply 1, version 300, only the contrast's lines, near argmax (T 0.02), 30 round-robins; Elo 0 = the field's mean, no random player. Tags: ffl=filtered-p1:^F-L\\.loc$, wfl=filtered-p1-twin:^F-L\\.loc$, ffp=filtered-p1:^F-P\\.loc$, wfp=filtered-p1-twin:^F-P\\.loc$, ftg=filtered-p1:^T-P-Ne-grow, wtg=filtered-p1-twin:^T-P-Ne-grow, ftp=filtered-p1:^T-P-Ne\\+split, wtp=filtered-p1-twin:^T-P-Ne\\+split, ftl=filtered-p1:^T-L-Ne, wtl=filtered-p1-twin:^T-L-Ne, rfp=error-routing-p1:^F-P@300, efp=error-dag-probit-p1:^F-P@300, gfp=grow-p1:^F-P@300, hfp=grow-p1b:^F-P@300, rtr=error-routing-p1:^T-P-Ne\\+@300, etr=error-dag-probit-p1:^T-P-Ne\\+@300, gtr=grow-p1:^T-P-Ne\\+@300, htr=grow-p1b:^T-P-Ne-grow#@300",
+ "entries": [
+  {
+   "version": "filtered-p1:F-L.loc@300",
+   "name": "ffl300.L1@300",
+   "label": "filtered-p1 F-L.loc version v300"
+  },
+  {
+   "version": "filtered-p1-twin:F-L.loc@300",
+   "name": "wfl300.L1@300",
+   "label": "filtered-p1-twin F-L.loc version v300"
+  },
+  {
+   "version": "filtered-p1:F-P.loc@300",
+   "name": "ffp300.L1@300",
+   "label": "filtered-p1 F-P.loc version v300"
+  },
+  {
+   "version": "filtered-p1-twin:F-P.loc@300",
+   "name": "wfp300.L1@300",
+   "label": "filtered-p1-twin F-P.loc version v300"
+  },
+  {
+   "version": "filtered-p1:T-P-Ne-grow+grow-mdl=1+grow-gate=age+grow-priority=snapshot.loc@300",
+   "name": "ftg300.L1@300",
+   "label": "filtered-p1 T-P-Ne-grow+grow-mdl=1+grow-gate=age+grow-priority=snapshot.loc version v300"
+  },
+  {
+   "version": "filtered-p1-twin:T-P-Ne-grow+grow-mdl=1+grow-gate=age+grow-priority=snapshot.loc@300",
+   "name": "wtg300.L1@300",
+   "label": "filtered-p1-twin T-P-Ne-grow+grow-mdl=1+grow-gate=age+grow-priority=snapshot.loc version v300"
+  },
+  {
+   "version": "filtered-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc@300",
+   "name": "ftp300.L1@300",
+   "label": "filtered-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc version v300"
+  },
+  {
+   "version": "filtered-p1-twin:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc@300",
+   "name": "wtp300.L1@300",
+   "label": "filtered-p1-twin T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc version v300"
+  },
+  {
+   "version": "filtered-p1:T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc@300",
+   "name": "ftl300.L1@300",
+   "label": "filtered-p1 T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc version v300"
+  },
+  {
+   "version": "filtered-p1-twin:T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc@300",
+   "name": "wtl300.L1@300",
+   "label": "filtered-p1-twin T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc version v300"
+  },
+  {
+   "version": "error-routing-p1:F-P#1.loc@300",
+   "name": "rfp300.L1@300",
+   "label": "error-routing-p1 F-P#1.loc version v300"
+  },
+  {
+   "version": "error-routing-p1:F-P#2.loc@300",
+   "name": "rfp300.L2@300",
+   "label": "error-routing-p1 F-P#2.loc version v300"
+  },
+  {
+   "version": "error-dag-probit-p1:F-P#1.loc@300",
+   "name": "efp300.L1@300",
+   "label": "error-dag-probit-p1 F-P#1.loc version v300"
+  },
+  {
+   "version": "error-dag-probit-p1:F-P#2.loc@300",
+   "name": "efp300.L2@300",
+   "label": "error-dag-probit-p1 F-P#2.loc version v300"
+  },
+  {
+   "version": "grow-p1:F-P#1.loc@300",
+   "name": "gfp300.L1@300",
+   "label": "grow-p1 F-P#1.loc version v300"
+  },
+  {
+   "version": "grow-p1:F-P#2.loc@300",
+   "name": "gfp300.L2@300",
+   "label": "grow-p1 F-P#2.loc version v300"
+  },
+  {
+   "version": "grow-p1b:F-P#1.loc@300",
+   "name": "hfp300.L1@300",
+   "label": "grow-p1b F-P#1.loc version v300"
+  },
+  {
+   "version": "grow-p1b:F-P#2.loc@300",
+   "name": "hfp300.L2@300",
+   "label": "grow-p1b F-P#2.loc version v300"
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@300",
+   "name": "rtr300.L1@300",
+   "label": "error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v300"
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@300",
+   "name": "rtr300.L2@300",
+   "label": "error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v300"
+  },
+  {
+   "version": "error-dag-probit-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@300",
+   "name": "etr300.L1@300",
+   "label": "error-dag-probit-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v300"
+  },
+  {
+   "version": "error-dag-probit-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@300",
+   "name": "etr300.L2@300",
+   "label": "error-dag-probit-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v300"
+  },
+  {
+   "version": "grow-p1:T-P-Ne+split-threshold=1000000+split-noise=0.03+split-limit=4#1.loc@300",
+   "name": "gtr300.L1@300",
+   "label": "grow-p1 T-P-Ne+split-threshold=1000000+split-noise=0.03+split-limit=4#1.loc version v300"
+  },
+  {
+   "version": "grow-p1:T-P-Ne+split-threshold=1000000+split-noise=0.03+split-limit=4#2.loc@300",
+   "name": "gtr300.L2@300",
+   "label": "grow-p1 T-P-Ne+split-threshold=1000000+split-noise=0.03+split-limit=4#2.loc version v300"
+  },
+  {
+   "version": "grow-p1b:T-P-Ne-grow#1.loc@300",
+   "name": "htr300.L1@300",
+   "label": "grow-p1b T-P-Ne-grow#1.loc version v300"
+  },
+  {
+   "version": "grow-p1b:T-P-Ne-grow#2.loc@300",
+   "name": "htr300.L2@300",
+   "label": "grow-p1b T-P-Ne-grow#2.loc version v300"
+  }
+ ]
+}

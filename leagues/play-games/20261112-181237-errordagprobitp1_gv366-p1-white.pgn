@@ -1,0 +1,33 @@
+[Event "chessai play page"]
+[Site "leagues dashboard"]
+[Date "2026.11.12"]
+[Round "-"]
+[White "You"]
+[Black "errordagprobitp1_g v366 at ply 1"]
+[Result "1-0"]
+[Termination "checkmate"]
+[PlyCount "45"]
+[Time "18:12:37"]
+[LibraryId "errordagprobitp1_g"]
+[Experiment "error-dag-probit-p1"]
+[Line "D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#1.loc"]
+[Version "366"]
+[VersionRole "final"]
+[Model "D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#1"]
+[Archetype "D-P-Ne"]
+[Kind "bdd"]
+[TrainPly "1"]
+[Ply "1"]
+[Policy "log-odds argmax"]
+[Seed "154477713"]
+[Takebacks "0"]
+[Engine "chessai-play1 play-serve (26f4a935)"]
+[ModelFile "leagues/library/models/error-dag-probit-p1/runs/D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#1.loc/bdd366.model"]
+[ModelMd5 "dba3c352383e694ad4606cd715da492e"]
+[Calibration "own games 2507bb92971217155a9e3b4f13d144e5 (play-games)"]
+[Started "2026-11-12T23:12:06.298Z"]
+
+1. c4 e6 2. g3 Nf6 3. Bg2 c5 4. Nf3 d6 5. O-O Nc6 6. b3 Be7 7. Bb2 a6 8. d3 d5
+9. Nbd2 dxc4 10. dxc4 h6 11. Qc2 g6 12. Rad1 Na5 13. Rfe1 Nxb3 14. axb3 b6 15.
+e4 Nxe4 16. Nxe4 Qxd1 17. Rxd1 f5 18. Nd6+ Bxd6 19. Rxd6 Bb7 20. Qc3 Bxf3 21.
+Bxf3 g5 22. Qf6 Rg8 23. Bc6# 1-0

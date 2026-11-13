@@ -1,0 +1,33 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "fponly-p2",
+ "description": "An F-P-only ply-2 field (analyst 6.61, the cheapest decisive test after the batch-size read): base-probit-p2's F-P (1,584 games a cycle among F-P x2, cluster trees x2, DAGs x2) was 37-55 below probit-late-p2's F-P (720 games a cycle among F-P x2 and T-P-Ne x2, the trees level with the flats) at ply 2 and 47-83 above at ply 1, at equal versions. Two accounts: COMPOSITION (6.61: weaker play inside the trainee's own distribution, base's weaker same-stream siblings, corrupts its labels; weaker foreign play is neutral, as diversity-p2 showed) or VOLUME (more games a cycle at ply 2 hurts the ply-2 strength per version). F-P x4, seed 51, ply-2 field, self-games, games_per_cycle 1584 (the batch of base-probit-p2 and diversity-p2), floor 300, cap 400, hybrid16 games, hybrid6 training. Read at equal versions (v300 and the final) against base-probit-p2's F-P (composition factor, equal batch) and probit-late-p2's F-P (volume factor, same-quality siblings) at plies 1 and 2. Predictions (6.61, ply 2 / ply 1, \u00b128): F-P x4 minus bfp 20-60 / -60..-20; minus pfp within 30 at both. Kills both quality accounts: within 15 of bfp at ply 2 and 30+ below pfp; then the harm is volume per cycle at ply 2 and the 1,584 standard should drop to ~720 for ply-2 fields.",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 4
+  }
+ ],
+ "seed": 51,
+ "train": {
+  "seed": 51
+ },
+ "references": [],
+ "entry_ply": 2,
+ "self_games": true,
+ "ply1_entries": false,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 400,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid16"
+ }
+}

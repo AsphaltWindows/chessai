@@ -1,0 +1,47 @@
+{
+ "kind": "global",
+ "root": "/home/iv/dev/chessai/leagues",
+ "description": "Created 11-11 ~17:20 (the user: 'I think we're ready to start the global league', after hybrid14 and hybrid15 were verified). The user's global league (11-10 design, built 11-11 13:50) with the eight of 11-11 ~16:20 ('let's take 8 models forward'), untrained, at ply 1 ('in the global league they should be on ply 1 because that's the ply we tested them on'): F-L, F-P, the fresh-gate cluster trees T-P-Nc-merge-fresh and T-L-Nc-merge-fresh (limit 4, 1M; probit noise 0.03), and the error DAGs (NB error routers, path context, leaf limit 4 plus router limit 4, 1M; probit noise 0.03) with probit leaves at router-split z 30 and z 20 and with LR leaves at z 160 and z 120 (z 30 and z 160 as in error-dag-probit-p1 and error-dag-p1; z 20 and z 120 the user's lower thresholds). Rules: current and champion entries at each model's ply, training on games where both players are rated at or above the model's Elo minus 30, self-games, patience by training positions (20M, 5-cycle floor, every model), the four random references, 5 double round-robins a cycle. Tournament binary chessai-hybrid15 (byte-identical to hybrid14, errdag4 and hybrid13 in play; fixed-point play for DAGs with router splits); after create, the DAG lines train on hybrid15 (byte-identical to errdag4) and F-L/F-P on hybrid6 (train_binary.py). Every line shares the train seed, so an unsplit DAG is the same model as its error tree and the z 30 / z 20 and z 160 / z 120 pairs start as twins; they stay identical until one router-splits or their Elo-selected training games differ (a paired comparison of the thresholds).",
+ "models": [
+  {
+   "recipe": "F-L",
+   "ply": 1
+  },
+  {
+   "recipe": "F-P",
+   "ply": 1
+  },
+  {
+   "recipe": "T-P-Nc-merge-fresh",
+   "ply": 1
+  },
+  {
+   "recipe": "T-L-Nc-merge-fresh",
+   "ply": 1
+  },
+  {
+   "recipe": "D-P-Ne-ctx-z30",
+   "ply": 1
+  },
+  {
+   "recipe": "D-P-Ne-ctx-z20",
+   "ply": 1
+  },
+  {
+   "recipe": "D-L-Ne-ctx-z160",
+   "ply": 1
+  },
+  {
+   "recipe": "D-L-Ne-ctx-z120",
+   "ply": 1
+  }
+ ],
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid15"
+ },
+ "prices_version": "P2",
+ "seed": 41,
+ "train": {
+  "seed": 41
+ }
+}

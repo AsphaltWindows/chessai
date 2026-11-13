@@ -1,0 +1,15 @@
+{
+  "kind": "experiment",
+  "root": "/home/iv/dev/chessai/leagues",
+  "name": "moe-gates",
+  "models": [
+    "F-L",
+    "M-L4-L",
+    "M-L4-L-hard",
+    "M-L4-N"
+  ],
+  "options": [
+    "local"
+  ],
+  "cycles": 300
+}

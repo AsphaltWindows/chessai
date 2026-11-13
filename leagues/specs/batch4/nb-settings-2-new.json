@@ -1,0 +1,63 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "models": [
+  {
+   "model": "F-N",
+   "sweep": {
+    "--alpha": [
+     "0.1",
+     "1",
+     "10",
+     "100"
+    ]
+   },
+   "to": "train"
+  }
+ ],
+ "options": [
+  "local"
+ ],
+ "name": "nb-settings-2-new",
+ "references": [],
+ "ply1_entries": false,
+ "plateau": {
+  "cycles": 50,
+  "min_cycles": 100
+ },
+ "cycles": 1000,
+ "rounds_per_cycle": 16,
+ "min_rounds": 16,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid9"
+ },
+ "prices_version": "P2",
+ "batch4": {
+  "original": "nb-settings-2",
+  "note": "Batch 4: nb-settings-2 rerun without random players or ply-1 entries until the champions plateau. Rounds: 919 games with a model at ply 2 per cycle in the original over 56 per round (4 lines, two ply-2 entries each).",
+  "binaries": {
+   "F-N+alpha=0.1.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "F-N+alpha=1.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "F-N+alpha=10.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "F-N+alpha=100.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   }
+  },
+  "rounds_from": {
+   "original": "nb-settings-2",
+   "ply2_games_per_cycle": 918.92,
+   "lines": 4,
+   "games_per_round": 56
+  }
+ }
+}

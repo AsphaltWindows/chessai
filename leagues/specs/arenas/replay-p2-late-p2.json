@@ -1,0 +1,96 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "replay-p2-late-p2",
+ "dir": "leagues/arenas/diag/replay-p2-late-p2",
+ "plies": [
+  2
+ ],
+ "description": "Analyst 6.51's cheap read: replay-p2 at v399 and its final v542 against probit-late-p2 at v399 (its final), ply 2 only, T 0.02, 75 round-robins. Predictions: replay v542 over replay v399 20-50 (still recovering); replay v542 vs pure v399 -40..0.",
+ "entries": [
+  {
+   "version": "replay-p2:F-P#1.loc@399",
+   "name": "rfp399.L1@399",
+   "label": "replay-p2 F-P#1.loc version v399"
+  },
+  {
+   "version": "replay-p2:F-P#2.loc@399",
+   "name": "rfp399.L2@399",
+   "label": "replay-p2 F-P#2.loc version v399"
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@399",
+   "name": "rtr399.L1@399",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v399"
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@399",
+   "name": "rtr399.L2@399",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v399"
+  },
+  {
+   "version": "replay-p2:F-P#1.loc@542",
+   "name": "rfp542.L1@542",
+   "label": "replay-p2 F-P#1.loc version v542"
+  },
+  {
+   "version": "replay-p2:F-P#2.loc@542",
+   "name": "rfp542.L2@542",
+   "label": "replay-p2 F-P#2.loc version v542"
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@542",
+   "name": "rtr542.L1@542",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v542"
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@542",
+   "name": "rtr542.L2@542",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v542"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@399",
+   "name": "pfp399.L1@399",
+   "label": "probit-late-p2 F-P#1.loc version v399"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@399",
+   "name": "pfp399.L2@399",
+   "label": "probit-late-p2 F-P#2.loc version v399"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@399",
+   "name": "ptr399.L1@399",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v399"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@399",
+   "name": "ptr399.L2@399",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v399"
+  }
+ ]
+}

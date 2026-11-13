@@ -1,0 +1,41 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "small-field-x4-p1",
+ "models": [
+  {
+   "model": "F-L",
+   "replicates": 4
+  },
+  {
+   "model": "T-L-Tc-merge",
+   "set": {
+    "--split-limit": "1",
+    "--split-threshold": "1000000"
+   },
+   "to": "train",
+   "replicates": 4
+  }
+ ],
+ "seed": 11,
+ "train": {
+  "seed": 11
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 100
+ },
+ "cycles": 1000,
+ "rounds_per_cycle": 10,
+ "min_rounds": 10,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid9"
+ },
+ "prices_version": "P2"
+}

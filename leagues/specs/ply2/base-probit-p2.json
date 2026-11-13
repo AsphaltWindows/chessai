@@ -1,0 +1,58 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "base-probit-p2",
+ "seed": 39,
+ "train": {
+  "seed": 39
+ },
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "D-P-Ne-ctx",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03",
+    "--router-split-z": "20",
+    "--router-split-limit": "4"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Nc-merge",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--revise-on": "fresh",
+    "--split-noise": "0.03",
+    "--revise": "2"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid15"
+ },
+ "references": [],
+ "entry_ply": 2,
+ "self_games": true,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "prices_version": "P2",
+ "ply1_entries": false,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 600
+ },
+ "cycles": 900,
+ "description": "Ply-2 stage 1 (11-11 ~16:50; the user: 'Go ahead', after 'we kind of have to approach this situation from scratch ... exploratory experiments which try to isolate variables'): where the current models stand when trained and played at ply 2, the baseline for the ply-2 one-factor experiments. A ply-2-only field (entry_ply 2, no ply-1 entries, self-games, own games at T 0.1): F-P x2, the cluster tree T-P-Nc-merge (NB cluster routers, fresh gate at --revise 2, which holds splits at ply 2 where --revise 0 merged them all; limit 4, 1M, noise 0.03) x2 and the error DAG D-P-Ne-ctx (NB error routers, path context, leaf limit 4 plus router limit 4, 1M, noise 0.03) at router-split z 20 x2 (the user's lower z of the global league's pair: at z 30 an unsplit DAG is exactly the error tree). Floor 600, cap 900. Read cold at v300, v600 and the final version, T 0.02, plies 1-3. Earlier prediction (theory-2 6.33, for z 30): Prediction (6.33): DAG and cluster tree each 10-40 over F-P at ply 2, 0-40 at ply 3; the DAG within 20 of its tree recipe. Tournament binary chessai-hybrid15 (byte-identical to hybrid14/errdag4/hybrid13); after create, flat and tree lines train on hybrid6 and the DAG lines on hybrid15 (train_binary.py)."
+}

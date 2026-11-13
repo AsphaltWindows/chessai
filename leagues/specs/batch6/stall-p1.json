@@ -1,0 +1,55 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "stall-p1",
+ "description": "The user's stall split rule (11-11 ~19:10: 'can we run the experiment for the stalling split rule?' ... 'just put the experiment on the dashboard no need to run it offline'). One factor, the leaf split rule, with the cap held at 4 so only the timing and placement of splits differ (theory-2 6.38 addendum): F-P x2 (comparator); T-P-Ne with the current rule (--split-rule worse, --split-z 0: split when a window's error is above the previous one's) x2; T-P-Ne with --split-rule stall-high --split-z 2 (split when the leaf's error did not fall by more than 2 SE since the previous window and is at least the whole model's) x2. All T-P-Ne: NB error router, non-merging, limit 4, 1M, noise 0.03. Ply 1 (the analyst: the tree gain exists there, about 100 over F-P, so the rule's effect shows in Elo; at ply 2 every tree rule so far ties flat). Prediction (6.38 addendum): stall-high minus current -15 to 10 at ply 1 at v300; stall-high spends its 4 splits by ~v70-v90, lopsided into the high-loss middlegame branch, the endgame leaf unsplit. If it is not worse, the uncapped stall rule is the next field. Read cold at T 0.02, plies 1-2, with split timing from the models. hybrid15 games, hybrid6 training (train_binary.py).",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03",
+    "--split-rule": "stall-high",
+    "--split-z": "2"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 43,
+ "train": {
+  "seed": 43
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 600,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid15"
+ }
+}

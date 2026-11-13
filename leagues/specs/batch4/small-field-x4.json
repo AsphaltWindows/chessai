@@ -1,0 +1,85 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "small-field-x4",
+ "models": [
+  {
+   "model": "F-L",
+   "replicates": 4
+  },
+  {
+   "model": "T-L-Tc-merge",
+   "set": {
+    "--split-limit": "1",
+    "--split-threshold": "1000000"
+   },
+   "to": "train",
+   "replicates": 4
+  }
+ ],
+ "seed": 11,
+ "train": {
+  "seed": 11
+ },
+ "references": [],
+ "ply1_entries": false,
+ "plateau": {
+  "cycles": 50,
+  "min_cycles": 100
+ },
+ "cycles": 1000,
+ "rounds_per_cycle": 10,
+ "min_rounds": 10,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid9"
+ },
+ "prices_version": "P2",
+ "batch4": {
+  "original": null,
+  "like": "small-field",
+  "note": "Batch 4 extra (the user, 11-10 ~18:00): small-field's models, 4 replicates each (replicate r trains with seed + cycle + 100003 x (r - 1)), without random players or ply-1 entries, until the champions plateau; seed 11. Rounds: 2458 games with a model at ply 2 per cycle in small-field over 240 per round (8 lines, two ply-2 entries each).",
+  "binaries": {
+   "F-L#1.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "F-L#2.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "F-L#3.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "F-L#4.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "T-L-Tc-merge+split-limit=1+split-threshold=1000000#1.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "T-L-Tc-merge+split-limit=1+split-threshold=1000000#2.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "T-L-Tc-merge+split-limit=1+split-threshold=1000000#3.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "T-L-Tc-merge+split-limit=1+split-threshold=1000000#4.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   }
+  },
+  "rounds_from": {
+   "original": "small-field",
+   "ply2_games_per_cycle": 2458.25,
+   "lines": 8,
+   "games_per_round": 240
+  }
+ }
+}

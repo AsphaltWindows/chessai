@@ -1,0 +1,67 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid13",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "plies": [
+  1,
+  2
+ ],
+ "name": "error-routing-p1-v226-cold",
+ "dir": "leagues/arenas/diag/error-routing-p1-v226-cold",
+ "entries": [
+  {
+   "version": "error-routing-p1:F-P#1.loc@226",
+   "name": "fp.L1@226",
+   "label": "error-routing-p1 F-P#1.loc version v226 (46.46M positions trained: probit-confirm-p2 v241's data)"
+  },
+  {
+   "version": "error-routing-p1:F-P#2.loc@226",
+   "name": "fp.L2@226",
+   "label": "error-routing-p1 F-P#2.loc version v226 (46.46M positions trained: probit-confirm-p2 v241's data)"
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@226",
+   "name": "ne.L1@226",
+   "label": "error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v226 (46.46M positions trained: probit-confirm-p2 v241's data)"
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@226",
+   "name": "ne.L2@226",
+   "label": "error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v226 (46.46M positions trained: probit-confirm-p2 v241's data)"
+  },
+  {
+   "version": "error-routing-p1:T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.03+revise-on=fresh#1.loc@226",
+   "name": "nc.L1@226",
+   "label": "error-routing-p1 T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.03+revise-on=fresh#1.loc version v226 (46.46M positions trained: probit-confirm-p2 v241's data)"
+  },
+  {
+   "version": "error-routing-p1:T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.03+revise-on=fresh#2.loc@226",
+   "name": "nc.L2@226",
+   "label": "error-routing-p1 T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.03+revise-on=fresh#2.loc version v226 (46.46M positions trained: probit-confirm-p2 v241's data)"
+  }
+ ],
+ "description": "Equal-data read (11-11 ~11:45; theory-2 6.30's data-vs-field-play test, at the version the records give): error-routing-p1 (G2, ply-1 field) at v226, the version whose lines had trained 46.46M positions, as many as probit-confirm-p2's (ply-2 field) finals v241. cycles.csv gives ~205k positions a cycle at ply 1 and ~180k at ply 2, not 320k against 82k. F-P x2, T-P-Ne x2, T-P-Nc-merge x2, plies 1-2, T 0.02, 75 round-robins, the G2 read's settings. Trees 60 or more over F-P here = the ply-2 field's play, not its data, removed the gain. Tags: fp=^F-P, ne=^T-P-Ne, nc=^T-P-Nc-merge"
+}

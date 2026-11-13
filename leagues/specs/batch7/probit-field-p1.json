@@ -1,0 +1,75 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "seed": 65,
+ "train": {
+  "seed": 65
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300,
+  "rate_scale": "sqrt",
+  "guard_z": 1.0
+ },
+ "cycles": 301,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid19"
+ },
+ "cold_games": {
+  "temperature": 0.02,
+  "share": 0.5,
+  "train": false
+ },
+ "rate_every": 4,
+ "champion_se_kind": "draw-aware",
+ "champion_se": 3,
+ "name": "probit-field-p1",
+ "models": [
+  {
+   "model": "F-P",
+   "train_binary": "chessai-hybrid6",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "train_binary": "chessai-hybrid6",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne-grow",
+   "set": {
+    "--grow-mdl": "1",
+    "--grow-gate": "age",
+    "--grow-priority": "snapshot"
+   },
+   "to": "train",
+   "train_binary": "chessai-grow6",
+   "replicates": 2
+  },
+  {
+   "model": "D-P-Ne-ctx-grow",
+   "set": {
+    "--router-chain": "2",
+    "--router-trial-z": "-2"
+   },
+   "to": "train",
+   "train_binary": "chessai-grow6",
+   "replicates": 2
+  }
+ ],
+ "description": "Probit-only field (analyst 6.96 D; launched 2026-11-12 ~21:30 by the coordinator). In ladder-2 the ply-1 top 12 (903-921) are all probit trees/DAGs from probit-only fields while the mixed std field's models sit 20-170 lower. ONE FACTOR vs std-v1-p1-s1: the field's composition. The standard's 4 probit recipes (F-P, T-P-Ne capped, T-P-Ne-grow, D-P-Ne-ctx-grow) x2 replicates = 8 lines, so the field size, games per cycle and data per line match the std field; seed 65, T 0.1, the same binaries. Read at v300 against the r/e/g/h panel @300, vs std-v1-p1-s1's probit lines v300. Band (6.96): 20-50 over the std's probit lines => single-leaf-family standards; within 15 => selection, the mixed standard stands. Cap 301."
+}

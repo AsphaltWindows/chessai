@@ -1,0 +1,6 @@
+line,model,option,kind,archetype,status,version,version_name,champion,champion_name,patience,entered_cycle,retired_cycle,train_binary,train_args,selfplay_binary,selfplay_args,label,base_model,train_overrides,selfplay_overrides,replicate,seed_offset
+F-L+lr-rate=0.0125.loc,F-L+lr-rate=0.0125,local,lr,F-L,active,172,E.L.22.172,127,E.L.22.127,,1,,models/from-scratch/bin/chessai-hybrid4gfx,--use-probs --lr-rate 0.0125,,,F-L lr-rate=0.0125,F-L,lr-rate=0.0125,,1,0
+F-L+lr-rate=0.025.loc,F-L+lr-rate=0.025,local,lr,F-L,active,172,E.L.20.172,167,E.L.20.167,,1,,models/from-scratch/bin/chessai-hybrid4gfx,--use-probs --lr-rate 0.025,,,F-L lr-rate=0.025,F-L,lr-rate=0.025,,1,0
+F-L+lr-rate=0.05.loc,F-L+lr-rate=0.05,local,lr,F-L,active,172,E.L.20.172,139,E.L.20.139,,1,,models/from-scratch/bin/chessai-hybrid4gfx,--use-probs --lr-rate 0.05,,,F-L lr-rate=0.05,F-L,lr-rate=0.05,,1,0
+F-L+lr-rate=0.1.loc,F-L+lr-rate=0.1,local,lr,F-L,active,172,E.L.17.172,124,E.L.17.124,,1,,models/from-scratch/bin/chessai-hybrid4gfx,--use-probs --lr-rate 0.1,,,F-L lr-rate=0.1,F-L,lr-rate=0.1,,1,0
+F-L+label-depth=2+label-result=0.5.loc,F-L+label-depth=2+label-result=0.5,local,lr,F-L,active,172,E.L.16.172,135,E.L.16.135,,1,,models/from-scratch/bin/chessai-hybrid4gfx,--use-probs --label-depth 2 --label-result 0.5,,,F-L label-depth=2 label-result=0.5,F-L,label-depth=2 label-result=0.5,,1,0

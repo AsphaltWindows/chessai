@@ -1,0 +1,39 @@
+{
+  "kind": "experiment",
+  "root": "/home/iv/dev/chessai/leagues",
+  "name": "dag-home",
+  "models": [
+    "F-L",
+    {
+      "model": "T-L-Ne",
+      "set": {
+        "--split-limit": "5",
+        "--split-threshold": "1000000"
+      },
+      "to": "train"
+    },
+    {
+      "model": "D-L-Ne",
+      "set": {
+        "--split-limit": "5",
+        "--split-threshold": "1000000"
+      },
+      "to": "train"
+    },
+    {
+      "model": "D-L-Ne-home",
+      "set": {
+        "--split-limit": "5",
+        "--split-threshold": "1000000"
+      },
+      "to": "train"
+    }
+  ],
+  "options": [
+    "local"
+  ],
+  "tournament": {
+    "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid5"
+  },
+  "cycles": 300
+}

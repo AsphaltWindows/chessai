@@ -1,0 +1,70 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "models": [
+  "F-L",
+  {
+   "model": "T-L-Nc",
+   "set": {
+    "--split-limit": "8",
+    "--split-threshold": "1000000"
+   },
+   "to": "train"
+  },
+  {
+   "model": "T-L-Nc",
+   "set": {
+    "--split-gradient": "9.5",
+    "--split-limit": "8",
+    "--split-threshold": "1000000"
+   },
+   "to": "train"
+  }
+ ],
+ "options": [
+  "local"
+ ],
+ "seed": 9,
+ "train": {
+  "seed": 9,
+  "qualify": "a model at ply 2"
+ },
+ "name": "trigger-gradient-new",
+ "references": [],
+ "ply1_entries": false,
+ "plateau": {
+  "cycles": 50,
+  "min_cycles": 100
+ },
+ "cycles": 1000,
+ "rounds_per_cycle": 34,
+ "min_rounds": 34,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid9"
+ },
+ "prices_version": "P2",
+ "batch4": {
+  "original": "trigger-gradient",
+  "note": "Batch 4: trigger-gradient rerun without random players or ply-1 entries until the champions plateau. Rounds: 1024 games with a model at ply 2 per cycle in the original over 30 per round (3 lines, two ply-2 entries each).",
+  "binaries": {
+   "F-L.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "T-L-Nc+split-limit=8+split-threshold=1000000.loc": {
+    "train": "chessai-trigger",
+    "selfplay": null
+   },
+   "T-L-Nc+split-gradient=9.5+split-limit=8+split-threshold=1000000.loc": {
+    "train": "chessai-trigger",
+    "selfplay": null
+   }
+  },
+  "rounds_from": {
+   "original": "trigger-gradient",
+   "ply2_games_per_cycle": 1023.68,
+   "lines": 3,
+   "games_per_round": 30
+  }
+ }
+}

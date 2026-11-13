@@ -1,0 +1,66 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "filtered-p1-twin",
+ "description": "DRAFT (2026-11-12 ~12:20, the train_filter build; NOT created). The unfiltered TWIN of filtered-p1 (analyst 6.85 (b): its predictions are filtered against an unfiltered mixed twin; whether to run it is the user's call): filtered-p1's spec without train_filter and self_games_topup, so every line trains on the whole local set (round-robins, self-games and, with train, the cold games). Lines (the six of update 8 at ply 1, analyst 6.84 (2) / 6.85 (b)): F-L; F-P; T-P-Ne-grow with the leaf bar on (--grow-mdl 1 --grow-gate age --grow-priority snapshot); T-P-Ne capped (limit 4, 1M, noise 0.03); T-L-Ne capped forget 10 (limit 4, 1M). The optional sixth seat, T-L-Ne-grow-f10, is one more models row ({\"model\": \"T-L-Ne-grow-f10\"}; 6 lines: 12 entries, 12 rounds, plateau K 29); a router-split DAG seat only if grow-dag-p1 reads well against strangers (6.80's rule). Ply 1, games_per_cycle 1584 (5 lines: 10 entries, 18 double round-robins, 1,620 games), self-games, cold_games T 0.02 share 0.25 (4 cold double round-robins: 360 games, 72 an entry; every decision on the cold fit). End rule (the user's): no retirement (experiments never retire), crownings at the default 2.0 SE on the cold set (11-12 13:21: champion_se 2.5 dropped; the cold twins crowned at 2.0 as often as the T 0.1 runs, and 2.5 would have halved their crownings: z of every champion test in their cycles.csv; analyst 6.89 (a) flagged it; the user's end rule: \"just like experiments do\"), plateau scaled (K 32 for 5 lines) from cycle 300, cap 600. Seed 63 (62 is grow-dag-p1's draft). Games chessai-hybrid17; after create, before cycle 1: python3 leagues/specs/ply1/train_binary.py --from chessai-hybrid4gfx leagues/experiments/NAME chessai-hybrid6 (F-L, F-P and the capped trees; T-P-Ne-grow keeps its recipe's chessai-grow4, T-L-Ne-grow-f10 chessai-grow5). cold_games.train is \"TODO\" on purpose (create refuses it): set it from 6.82's twins (treeonly-p1-coldtrain / -coldrate, then fponly): true if the cold games may train, else false; the filtered run and its twin must carry the same value. WAITS for those twins (6.85: the filter on T 0.1 ratings is the biased one we already ran; on cold ratings it is a different experiment). Predictions (6.85 (b)), filtered minus its unfiltered twin against the standing ply-1 panel: flats 10-30 better, trees 0-40 better (6.78 (a)'s uniform-tree effect); the ranking unchanged (trees over flats by 60-110 against the mixed panel, 40-70 of it matchup); at ply 2 everything within 30. What it is for: the comparator. Every line trains on the whole local set; filtered-p1 minus this twin is the effect of the filter (6.87: a line keeps its own games and those of players rated at or above its smoothed rating minus 50) with its top-up. Read: the standing ply-1 panel (r + e + g + h at v300), v150, v300 and the final, plies 1 and 2, filtered against twin line by line; each line's kept share, floor and top-up games per cycle from cycles.csv (filter_* and topup_* columns). Cost: ~10 CPU-s a cycle early to ~17-20 late (measured rates of the running ply-1 twins and probit-f10-p1), ~1.2-3 CPU-h over 300-600 cycles.",
+ "models": [
+  {
+   "model": "F-L"
+  },
+  {
+   "model": "F-P"
+  },
+  {
+   "model": "T-P-Ne-grow",
+   "set": {
+    "--grow-mdl": "1",
+    "--grow-gate": "age",
+    "--grow-priority": "snapshot"
+   },
+   "to": "train"
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train"
+  },
+  {
+   "model": "T-L-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--forget-factor": "10"
+   },
+   "to": "train"
+  }
+ ],
+ "seed": 63,
+ "train": {
+  "seed": 63
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 600,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid17"
+ },
+ "cold_games": {
+  "temperature": 0.02,
+  "share": 0.25,
+  "train": "TODO"
+ }
+}

@@ -1,0 +1,4 @@
+line,model,option,kind,archetype,status,version,version_name,champion,champion_name,patience,entered_cycle,retired_cycle,train_binary,train_args,selfplay_binary,selfplay_args,label,base_model,train_overrides,selfplay_overrides,replicate,seed_offset
+F-N+alpha=0.1.loc,F-N+alpha=0.1,local,cnbp,F-N,active,265,E.L.1.265,1,E.L.1.1,,1,,models/from-scratch/bin/chessai-hybrid4gfx,--use-probs --alpha 0.1,,,F-N alpha=0.1,F-N,alpha=0.1,,1,0
+F-N+alpha=1.loc,F-N+alpha=1,local,cnbp,F-N,active,265,E.L.1.265,2,E.L.1.2,,1,,models/from-scratch/bin/chessai-hybrid4gfx,--use-probs --alpha 1,,,F-N alpha=1,F-N,alpha=1,,1,0
+F-N+alpha=10.loc,F-N+alpha=10,local,cnbp,F-N,active,265,E.L.1.265,2,E.L.1.2,,1,,models/from-scratch/bin/chessai-hybrid4gfx,--use-probs --alpha 10,,,F-N alpha=10,F-N,alpha=10,,1,0

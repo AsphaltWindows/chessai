@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""Cold read of one version at one ply, with only the contrast's own lines (11-12 ~04:40; analyst 6.65's power fix for
+diversity-p2d's read: a 600-game cell is +-28, so separating 30 needs ~2,400 games per contrast per version).
+    python3 make_split_read.py NAME VERSION PLY ROUNDS TAG=EXPERIMENT:REGEX[@VERSION] [...]
+One arena per (ply, version), so no games go across versions; ROUNDS round-robins (300 gives each 2x2 cell of lines
+2,400 games). A rule's own @VERSION overrides VERSION for its tag (a comparator at another version). Each matching line
+(re.search on the line name in EXPERIMENT's lines.csv) enters as TAG<v>.L<k>@<v>, as make_cross_read.py names them,
+so h2h_btg.py and h2h_pool.py group them by TAG<v>. Settings as make_cross_read.py (near argmax, T 0.02,
+chessai-hybrid16) but with one random reference, the anchor, instead of four. Writes
+leagues/specs/arenas/NAME.json (dir leagues/arenas/diag/NAME); refuses to overwrite.
+ROUNDS may also be ciX (11-12 ~09:45; the user: arenas should have "reasonable standard errors on elos" whatever the
+number of participants): arena.py's own stop rule, round-robins in chunks of 10 until every entry's 95% interval is
+at most X Elo (at least 10 round-robins, at most 200). A plain number keeps fixed round-robins, as before.
+ANCHOR (11-12 ~11:30, the ladder build; analyst 6.85, NEW-DESIGN.md: no random player): by default a new spec has
+NO random player and pins the mean of every entry at Elo 0 (arena.py's "anchor": {"mean_of": "field"}), so every
+entry is rated and ciX stops. Options (anywhere on the line):
+    --anchor TAG[,TAG...]   pin the mean of these tags' entries instead (a standing panel: one scale across arenas)
+    --random-anchor         the spec as before 11-12 ~11:30: one random reference as the anchor (ciX refused: with it
+                            the tournament rates no entry once every entry beats random in every game)
+    --out-dir DIR           write the spec into DIR instead of leagues/specs/arenas (tests)
+    --arena-dir DIR         the arena's directory instead of leagues/arenas/diag/NAME (tests)"""
+import csv, json, os, re, sys
+REPO = '/home/iv/dev/chessai'
+opts, argv = {}, []
+it = iter(sys.argv[1:])
+for a in it:
+    if a == '--random-anchor':
+        opts['random'] = True
+    elif a in ('--anchor', '--out-dir', '--arena-dir'):
+        opts[a[2:]] = next(it)
+    elif a.startswith('--anchor=') or a.startswith('--out-dir=') or a.startswith('--arena-dir='):
+        k, v = a[2:].split('=', 1)
+        opts[k] = v
+    else:
+        argv.append(a)
+assert not (opts.get('random') and opts.get('anchor')), '--random-anchor and --anchor exclude each other'
+sys.argv = sys.argv[:1] + argv
+name, version, ply, rounds = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
+if rounds.startswith('ci'):
+    if opts.get('random'):
+        # 11-12 ~11:10 (the cohort fork): with the random reference as the only anchor the tournament rates no entry
+        # (every entry beats random in every game), every interval stays infinite and the stop runs to max_rounds.
+        sys.exit('ciX is broken with the random anchor (intervals stay infinite); use a fixed round count')
+    ci = float(rounds[2:])
+    assert ci > 0, rounds
+    stop = {'ci95': ci, 'chunk_rounds': 10, 'min_rounds': 10, 'max_rounds': 200}
+    howlong = f"round-robins until every 95% interval is at most {ci:g} Elo"
+else:
+    rounds = int(rounds)
+    stop = {'ci95': 0.0, 'chunk_rounds': 30, 'min_rounds': rounds, 'max_rounds': rounds}
+    howlong = f"{rounds} round-robins"
+entries = []
+for a in sys.argv[5:]:
+    tag, rest = a.split('=', 1)
+    exp, rx = rest.split(':', 1)
+    want = version
+    if '@' in rx:
+        rx, want = rx.rsplit('@', 1)
+    rows = list(csv.DictReader(open(os.path.join(REPO, 'leagues', 'experiments', exp, 'lines.csv'))))
+    hit = [r for r in rows if re.search(rx, r['line'])]
+    if not hit:
+        sys.exit(f'no line of {exp} matches {rx}')
+    for r in hit:
+        assert int(want) <= int(r['version']), (exp, r['line'], want, r['version'])
+        # 11-12 17:08: lines without a replicate suffix (one line per recipe, e.g. filtered-p1's) take their
+        # replicate column (1 when absent); lines with '#' keep their number as before.
+        k = r['line'].rsplit('#', 1)[1].split('.')[0] if '#' in r['line'] else (r.get('replicate') or '1')
+        entries.append({'version': f"{exp}:{r['line']}@{want}", 'name': f"{tag}{want}.L{k}@{want}",
+                        'label': f"{exp} {r['line']} version v{want}"})
+names = [e['name'] for e in entries]
+assert len(names) == len(set(names)), 'two entries share a name: give each experiment its own tags'
+binary = 'models/from-scratch/bin/chessai-hybrid16'
+# 11-12 14:17: at ply 3 or more the tournament runs chessai-hybrid18 (the same games as hybrid16/17, x0.36-0.62 game
+# CPU a ply for trees and DAGs, x0.80 for F-P; fastbin/PERF-LEDGER.md). Own calibration games stay hybrid16 (ply-1
+# games, no saving there, and arena.py's own-games cache keys on that binary's md5).
+game_binary = 'models/from-scratch/bin/chessai-hybrid18' if ply >= 3 else binary
+spec = {'seed': 1, 'nice': 15, 'threads': 2, 'jobs': 2, 'binary': game_binary, 'owncal_binary': binary,
+        'flags': ['--reports-last', '--sparse-fit', '--policy', 'log-odds-softmax', '--temperature', '0.02'],
+        'references': ['random'],
+        'stop': stop,
+        'name': name, 'dir': f'leagues/arenas/diag/{name}', 'plies': [ply],
+        'description': f"Cold read {name}: ply {ply}, version {version}, only the contrast's lines, near argmax "
+                       f"(T 0.02), {howlong}. Tags: " + ', '.join(a for a in sys.argv[5:]),
+        'entries': entries}
+if not opts.get('random'):  # the pinned anchor (arena.py, ARENA.md "Pinned anchor"): no random player
+    if opts.get('anchor'):
+        want = opts['anchor'].split(',')
+        bad = [t for t in want if not any(e['name'].startswith(f'{t}') and e['name'][len(t):].split('.')[0].isdigit()
+                                          for e in entries)]
+        assert not bad, f'--anchor: no entries of tags {bad}'
+        ref = [f"{e['name']}-{ply}" for e in entries if any(e['name'].startswith(t) and
+                                                              e['name'][len(t):].split('.')[0].isdigit() for t in want)]
+        anchor = {'mean_of': ref}
+        what = f"the mean of {', '.join(want)} ({len(ref)} players)"
+    else:
+        anchor = {'mean_of': 'field'}
+        what = "the field's mean"
+    keys = list(spec)
+    spec = {k: spec[k] for k in keys[:keys.index('references')]}
+    spec.update(references=[], anchor=anchor, stop=stop, name=name, dir=f'leagues/arenas/diag/{name}', plies=[ply],
+                description=f"Cold read {name}: ply {ply}, version {version}, only the contrast's lines, near argmax "
+                            f"(T 0.02), {howlong}; Elo 0 = {what}, no random player. Tags: "
+                            + ', '.join(a for a in sys.argv[5:]),
+                entries=entries)
+if opts.get('arena-dir'):
+    spec['dir'] = opts['arena-dir']
+out = os.path.join(opts.get('out-dir') or os.path.join(REPO, 'leagues', 'specs', 'arenas'), name + '.json')
+assert not os.path.exists(out), out
+json.dump(spec, open(out, 'w'), indent=1)
+print('wrote', out, len(entries), 'entries:', ' '.join(names))

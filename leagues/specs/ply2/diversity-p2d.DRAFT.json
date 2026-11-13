@@ -1,0 +1,61 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "diversity-p2d",
+ "description": "diversity-p2c with the reference window removed (11-12 ~04:30; one factor against p2c, same seed 48, same four frozen references = base-probit-p2's v599 finals, games_per_cycle 1584, floor 300, cap 400). In p2c the window used in-run ratings (log-odds-softmax T 0.1), which under-rate trees ~100-150 (analyst 6.63): the F-P lines kept only 16-49% of the reference games, and the cut references were 37 (F-P) and 162 (cluster trees) STRONGER cold than the line versions that cut them. Here every reference game trains (line-line, line-ref, ref-ref, self-games), as in diversity-p2 but with strong references. Question: did the window, as rated, cost p2c its ceiling (p2c final cfp331 - bfp450 = 12)? Evidence for the user's rating-fix decision without building it.",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 48,
+ "train": {
+  "seed": 48
+ },
+ "references": [],
+ "entry_ply": 2,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 400,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid16"
+ },
+ "prices_version": "P2",
+ "ply1_entries": false,
+ "frozen_references": [
+  {
+   "name": "xFP1",
+   "version": "base-probit-p2:F-P#1.loc@599"
+  },
+  {
+   "name": "xFP2",
+   "version": "base-probit-p2:F-P#2.loc@599"
+  },
+  {
+   "name": "xTNc1",
+   "version": "base-probit-p2:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#1.loc@599"
+  },
+  {
+   "name": "xTNc2",
+   "version": "base-probit-p2:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#2.loc@599"
+  }
+ ],
+ "games_per_cycle": 1584
+}

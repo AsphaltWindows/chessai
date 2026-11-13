@@ -1,0 +1,458 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 4,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid17",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid17",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random"
+ ],
+ "stop": {
+  "ci95": 15.0,
+  "chunk_rounds": 10,
+  "min_rounds": 10,
+  "max_rounds": 200
+ },
+ "name": "cohort-fp-p2",
+ "dir": "leagues/arenas/diag/cohort-fp-p2",
+ "plies": [
+  2
+ ],
+ "description": "Library arena cohort-fp-p2: ply 2, near argmax (T 0.02), round-robins until every 95% interval is at most 15 Elo, 85 entries from leagues/library. Cohort-variance read (analyst 6.77): plain F-P lines of plateaued runs trained at ply 2, versions 299/279 (+final), short lines final/final-20.",
+ "entries": [
+  {
+   "version": "base-probit-p2:F-P#1.loc@299",
+   "name": "baseprobitp2_a299.L1@299",
+   "label": "base-probit-p2 F-P#1.loc version v299 (library baseprobitp2_a; plateau, train ply 2) [cohort read: run base-probit-p2]"
+  },
+  {
+   "version": "base-probit-p2:F-P#1.loc@279",
+   "name": "baseprobitp2_a279.L1@279",
+   "label": "base-probit-p2 F-P#1.loc version v279 (library baseprobitp2_a; plateau, train ply 2) [cohort read: run base-probit-p2]"
+  },
+  {
+   "version": "base-probit-p2:F-P#1.loc@599",
+   "name": "baseprobitp2_a599.L1@599",
+   "label": "base-probit-p2 F-P#1.loc version v599 (library baseprobitp2_a; plateau, train ply 2) [cohort read: run base-probit-p2]"
+  },
+  {
+   "version": "base-probit-p2:F-P#2.loc@299",
+   "name": "baseprobitp2_b299.L2@299",
+   "label": "base-probit-p2 F-P#2.loc version v299 (library baseprobitp2_b; plateau, train ply 2) [cohort read: run base-probit-p2]"
+  },
+  {
+   "version": "base-probit-p2:F-P#2.loc@279",
+   "name": "baseprobitp2_b279.L2@279",
+   "label": "base-probit-p2 F-P#2.loc version v279 (library baseprobitp2_b; plateau, train ply 2) [cohort read: run base-probit-p2]"
+  },
+  {
+   "version": "base-probit-p2:F-P#2.loc@599",
+   "name": "baseprobitp2_b599.L2@599",
+   "label": "base-probit-p2 F-P#2.loc version v599 (library baseprobitp2_b; plateau, train ply 2) [cohort read: run base-probit-p2]"
+  },
+  {
+   "version": "diversity-p2:F-P#1.loc@299",
+   "name": "diversityp2_a299.L1@299",
+   "label": "diversity-p2 F-P#1.loc version v299 (library diversityp2_a; plateau, train ply 2) [cohort read: run diversity-p2]"
+  },
+  {
+   "version": "diversity-p2:F-P#1.loc@279",
+   "name": "diversityp2_a279.L1@279",
+   "label": "diversity-p2 F-P#1.loc version v279 (library diversityp2_a; plateau, train ply 2) [cohort read: run diversity-p2]"
+  },
+  {
+   "version": "diversity-p2:F-P#1.loc@314",
+   "name": "diversityp2_a314.L1@314",
+   "label": "diversity-p2 F-P#1.loc version v314 (library diversityp2_a; plateau, train ply 2) [cohort read: run diversity-p2]"
+  },
+  {
+   "version": "diversity-p2:F-P#2.loc@299",
+   "name": "diversityp2_b299.L2@299",
+   "label": "diversity-p2 F-P#2.loc version v299 (library diversityp2_b; plateau, train ply 2) [cohort read: run diversity-p2]"
+  },
+  {
+   "version": "diversity-p2:F-P#2.loc@279",
+   "name": "diversityp2_b279.L2@279",
+   "label": "diversity-p2 F-P#2.loc version v279 (library diversityp2_b; plateau, train ply 2) [cohort read: run diversity-p2]"
+  },
+  {
+   "version": "diversity-p2:F-P#2.loc@314",
+   "name": "diversityp2_b314.L2@314",
+   "label": "diversity-p2 F-P#2.loc version v314 (library diversityp2_b; plateau, train ply 2) [cohort read: run diversity-p2]"
+  },
+  {
+   "version": "diversity-p2c:F-P#1.loc@299",
+   "name": "diversityp2c_a299.L1@299",
+   "label": "diversity-p2c F-P#1.loc version v299 (library diversityp2c_a; plateau, train ply 2) [cohort read: run diversity-p2c]"
+  },
+  {
+   "version": "diversity-p2c:F-P#1.loc@279",
+   "name": "diversityp2c_a279.L1@279",
+   "label": "diversity-p2c F-P#1.loc version v279 (library diversityp2c_a; plateau, train ply 2) [cohort read: run diversity-p2c]"
+  },
+  {
+   "version": "diversity-p2c:F-P#1.loc@331",
+   "name": "diversityp2c_a331.L1@331",
+   "label": "diversity-p2c F-P#1.loc version v331 (library diversityp2c_a; plateau, train ply 2) [cohort read: run diversity-p2c]"
+  },
+  {
+   "version": "diversity-p2c:F-P#2.loc@299",
+   "name": "diversityp2c_b299.L2@299",
+   "label": "diversity-p2c F-P#2.loc version v299 (library diversityp2c_b; plateau, train ply 2) [cohort read: run diversity-p2c]"
+  },
+  {
+   "version": "diversity-p2c:F-P#2.loc@279",
+   "name": "diversityp2c_b279.L2@279",
+   "label": "diversity-p2c F-P#2.loc version v279 (library diversityp2c_b; plateau, train ply 2) [cohort read: run diversity-p2c]"
+  },
+  {
+   "version": "diversity-p2c:F-P#2.loc@331",
+   "name": "diversityp2c_b331.L2@331",
+   "label": "diversity-p2c F-P#2.loc version v331 (library diversityp2c_b; plateau, train ply 2) [cohort read: run diversity-p2c]"
+  },
+  {
+   "version": "diversity-p2d:F-P#1.loc@299",
+   "name": "diversityp2d_a299.L1@299",
+   "label": "diversity-p2d F-P#1.loc version v299 (library diversityp2d_a; plateau, train ply 2) [cohort read: run diversity-p2c]"
+  },
+  {
+   "version": "diversity-p2d:F-P#1.loc@279",
+   "name": "diversityp2d_a279.L1@279",
+   "label": "diversity-p2d F-P#1.loc version v279 (library diversityp2d_a; plateau, train ply 2) [cohort read: run diversity-p2c]"
+  },
+  {
+   "version": "diversity-p2d:F-P#2.loc@299",
+   "name": "diversityp2d_b299.L2@299",
+   "label": "diversity-p2d F-P#2.loc version v299 (library diversityp2d_b; plateau, train ply 2) [cohort read: run diversity-p2c]"
+  },
+  {
+   "version": "diversity-p2d:F-P#2.loc@279",
+   "name": "diversityp2d_b279.L2@279",
+   "label": "diversity-p2d F-P#2.loc version v279 (library diversityp2d_b; plateau, train ply 2) [cohort read: run diversity-p2c]"
+  },
+  {
+   "version": "fponly-p2-720:F-P#1.loc@299",
+   "name": "fponlyp2720_a299.L1@299",
+   "label": "fponly-p2-720 F-P#1.loc version v299 (library fponlyp2720_a; plateau, train ply 2) [cohort read: run fponly-p2-720]"
+  },
+  {
+   "version": "fponly-p2-720:F-P#1.loc@279",
+   "name": "fponlyp2720_a279.L1@279",
+   "label": "fponly-p2-720 F-P#1.loc version v279 (library fponlyp2720_a; plateau, train ply 2) [cohort read: run fponly-p2-720]"
+  },
+  {
+   "version": "fponly-p2-720:F-P#1.loc@559",
+   "name": "fponlyp2720_a559.L1@559",
+   "label": "fponly-p2-720 F-P#1.loc version v559 (library fponlyp2720_a; plateau, train ply 2) [cohort read: run fponly-p2-720]"
+  },
+  {
+   "version": "fponly-p2-720:F-P#2.loc@299",
+   "name": "fponlyp2720_b299.L2@299",
+   "label": "fponly-p2-720 F-P#2.loc version v299 (library fponlyp2720_b; plateau, train ply 2) [cohort read: run fponly-p2-720]"
+  },
+  {
+   "version": "fponly-p2-720:F-P#2.loc@279",
+   "name": "fponlyp2720_b279.L2@279",
+   "label": "fponly-p2-720 F-P#2.loc version v279 (library fponlyp2720_b; plateau, train ply 2) [cohort read: run fponly-p2-720]"
+  },
+  {
+   "version": "fponly-p2-720:F-P#2.loc@559",
+   "name": "fponlyp2720_b559.L2@559",
+   "label": "fponly-p2-720 F-P#2.loc version v559 (library fponlyp2720_b; plateau, train ply 2) [cohort read: run fponly-p2-720]"
+  },
+  {
+   "version": "fponly-p2-720:F-P#3.loc@299",
+   "name": "fponlyp2720_c299.L3@299",
+   "label": "fponly-p2-720 F-P#3.loc version v299 (library fponlyp2720_c; plateau, train ply 2) [cohort read: run fponly-p2-720]"
+  },
+  {
+   "version": "fponly-p2-720:F-P#3.loc@279",
+   "name": "fponlyp2720_c279.L3@279",
+   "label": "fponly-p2-720 F-P#3.loc version v279 (library fponlyp2720_c; plateau, train ply 2) [cohort read: run fponly-p2-720]"
+  },
+  {
+   "version": "fponly-p2-720:F-P#3.loc@559",
+   "name": "fponlyp2720_c559.L3@559",
+   "label": "fponly-p2-720 F-P#3.loc version v559 (library fponlyp2720_c; plateau, train ply 2) [cohort read: run fponly-p2-720]"
+  },
+  {
+   "version": "fponly-p2-720:F-P#4.loc@299",
+   "name": "fponlyp2720_d299.L4@299",
+   "label": "fponly-p2-720 F-P#4.loc version v299 (library fponlyp2720_d; plateau, train ply 2) [cohort read: run fponly-p2-720]"
+  },
+  {
+   "version": "fponly-p2-720:F-P#4.loc@279",
+   "name": "fponlyp2720_d279.L4@279",
+   "label": "fponly-p2-720 F-P#4.loc version v279 (library fponlyp2720_d; plateau, train ply 2) [cohort read: run fponly-p2-720]"
+  },
+  {
+   "version": "fponly-p2-720:F-P#4.loc@559",
+   "name": "fponlyp2720_d559.L4@559",
+   "label": "fponly-p2-720 F-P#4.loc version v559 (library fponlyp2720_d; plateau, train ply 2) [cohort read: run fponly-p2-720]"
+  },
+  {
+   "version": "fponly-p2:F-P#1.loc@299",
+   "name": "fponlyp2_a299.L1@299",
+   "label": "fponly-p2 F-P#1.loc version v299 (library fponlyp2_a; plateau, train ply 2) [cohort read: run fponly-p2]"
+  },
+  {
+   "version": "fponly-p2:F-P#1.loc@279",
+   "name": "fponlyp2_a279.L1@279",
+   "label": "fponly-p2 F-P#1.loc version v279 (library fponlyp2_a; plateau, train ply 2) [cohort read: run fponly-p2]"
+  },
+  {
+   "version": "fponly-p2:F-P#1.loc@320",
+   "name": "fponlyp2_a320.L1@320",
+   "label": "fponly-p2 F-P#1.loc version v320 (library fponlyp2_a; plateau, train ply 2) [cohort read: run fponly-p2]"
+  },
+  {
+   "version": "fponly-p2:F-P#2.loc@299",
+   "name": "fponlyp2_b299.L2@299",
+   "label": "fponly-p2 F-P#2.loc version v299 (library fponlyp2_b; plateau, train ply 2) [cohort read: run fponly-p2]"
+  },
+  {
+   "version": "fponly-p2:F-P#2.loc@279",
+   "name": "fponlyp2_b279.L2@279",
+   "label": "fponly-p2 F-P#2.loc version v279 (library fponlyp2_b; plateau, train ply 2) [cohort read: run fponly-p2]"
+  },
+  {
+   "version": "fponly-p2:F-P#2.loc@320",
+   "name": "fponlyp2_b320.L2@320",
+   "label": "fponly-p2 F-P#2.loc version v320 (library fponlyp2_b; plateau, train ply 2) [cohort read: run fponly-p2]"
+  },
+  {
+   "version": "fponly-p2:F-P#3.loc@299",
+   "name": "fponlyp2_c299.L3@299",
+   "label": "fponly-p2 F-P#3.loc version v299 (library fponlyp2_c; plateau, train ply 2) [cohort read: run fponly-p2]"
+  },
+  {
+   "version": "fponly-p2:F-P#3.loc@279",
+   "name": "fponlyp2_c279.L3@279",
+   "label": "fponly-p2 F-P#3.loc version v279 (library fponlyp2_c; plateau, train ply 2) [cohort read: run fponly-p2]"
+  },
+  {
+   "version": "fponly-p2:F-P#3.loc@320",
+   "name": "fponlyp2_c320.L3@320",
+   "label": "fponly-p2 F-P#3.loc version v320 (library fponlyp2_c; plateau, train ply 2) [cohort read: run fponly-p2]"
+  },
+  {
+   "version": "fponly-p2:F-P#4.loc@299",
+   "name": "fponlyp2_d299.L4@299",
+   "label": "fponly-p2 F-P#4.loc version v299 (library fponlyp2_d; plateau, train ply 2) [cohort read: run fponly-p2]"
+  },
+  {
+   "version": "fponly-p2:F-P#4.loc@279",
+   "name": "fponlyp2_d279.L4@279",
+   "label": "fponly-p2 F-P#4.loc version v279 (library fponlyp2_d; plateau, train ply 2) [cohort read: run fponly-p2]"
+  },
+  {
+   "version": "fponly-p2:F-P#4.loc@320",
+   "name": "fponlyp2_d320.L4@320",
+   "label": "fponly-p2 F-P#4.loc version v320 (library fponlyp2_d; plateau, train ply 2) [cohort read: run fponly-p2]"
+  },
+  {
+   "version": "fponly-p2b:F-P#1.loc@299",
+   "name": "fponlyp2b_a299.L1@299",
+   "label": "fponly-p2b F-P#1.loc version v299 (library fponlyp2b_a; plateau, train ply 2) [cohort read: run fponly-p2b]"
+  },
+  {
+   "version": "fponly-p2b:F-P#1.loc@279",
+   "name": "fponlyp2b_a279.L1@279",
+   "label": "fponly-p2b F-P#1.loc version v279 (library fponlyp2b_a; plateau, train ply 2) [cohort read: run fponly-p2b]"
+  },
+  {
+   "version": "fponly-p2b:F-P#1.loc@352",
+   "name": "fponlyp2b_a352.L1@352",
+   "label": "fponly-p2b F-P#1.loc version v352 (library fponlyp2b_a; plateau, train ply 2) [cohort read: run fponly-p2b]"
+  },
+  {
+   "version": "fponly-p2b:F-P#2.loc@299",
+   "name": "fponlyp2b_b299.L2@299",
+   "label": "fponly-p2b F-P#2.loc version v299 (library fponlyp2b_b; plateau, train ply 2) [cohort read: run fponly-p2b]"
+  },
+  {
+   "version": "fponly-p2b:F-P#2.loc@279",
+   "name": "fponlyp2b_b279.L2@279",
+   "label": "fponly-p2b F-P#2.loc version v279 (library fponlyp2b_b; plateau, train ply 2) [cohort read: run fponly-p2b]"
+  },
+  {
+   "version": "fponly-p2b:F-P#2.loc@352",
+   "name": "fponlyp2b_b352.L2@352",
+   "label": "fponly-p2b F-P#2.loc version v352 (library fponlyp2b_b; plateau, train ply 2) [cohort read: run fponly-p2b]"
+  },
+  {
+   "version": "fponly-p2b:F-P#3.loc@299",
+   "name": "fponlyp2b_c299.L3@299",
+   "label": "fponly-p2b F-P#3.loc version v299 (library fponlyp2b_c; plateau, train ply 2) [cohort read: run fponly-p2b]"
+  },
+  {
+   "version": "fponly-p2b:F-P#3.loc@279",
+   "name": "fponlyp2b_c279.L3@279",
+   "label": "fponly-p2b F-P#3.loc version v279 (library fponlyp2b_c; plateau, train ply 2) [cohort read: run fponly-p2b]"
+  },
+  {
+   "version": "fponly-p2b:F-P#3.loc@352",
+   "name": "fponlyp2b_c352.L3@352",
+   "label": "fponly-p2b F-P#3.loc version v352 (library fponlyp2b_c; plateau, train ply 2) [cohort read: run fponly-p2b]"
+  },
+  {
+   "version": "fponly-p2b:F-P#4.loc@299",
+   "name": "fponlyp2b_d299.L4@299",
+   "label": "fponly-p2b F-P#4.loc version v299 (library fponlyp2b_d; plateau, train ply 2) [cohort read: run fponly-p2b]"
+  },
+  {
+   "version": "fponly-p2b:F-P#4.loc@279",
+   "name": "fponlyp2b_d279.L4@279",
+   "label": "fponly-p2b F-P#4.loc version v279 (library fponlyp2b_d; plateau, train ply 2) [cohort read: run fponly-p2b]"
+  },
+  {
+   "version": "fponly-p2b:F-P#4.loc@352",
+   "name": "fponlyp2b_d352.L4@352",
+   "label": "fponly-p2b F-P#4.loc version v352 (library fponlyp2b_d; plateau, train ply 2) [cohort read: run fponly-p2b]"
+  },
+  {
+   "version": "leaf-sources-new:F-P.loc@299",
+   "name": "leafsourcesnew_f299.L1@299",
+   "label": "leaf-sources-new F-P.loc version v299 (library leafsourcesnew_f; plateau, train ply 2) [cohort read: run leaf-sources-new]"
+  },
+  {
+   "version": "leaf-sources-new:F-P.loc@279",
+   "name": "leafsourcesnew_f279.L1@279",
+   "label": "leaf-sources-new F-P.loc version v279 (library leafsourcesnew_f; plateau, train ply 2) [cohort read: run leaf-sources-new]"
+  },
+  {
+   "version": "leaf-sources-new:F-P.loc@319",
+   "name": "leafsourcesnew_f319.L1@319",
+   "label": "leaf-sources-new F-P.loc version v319 (library leafsourcesnew_f; plateau, train ply 2) [cohort read: run leaf-sources-new]"
+  },
+  {
+   "version": "probit-confirm-p2:F-P#1.loc@241",
+   "name": "probitconfirmp2_a241.L1@241",
+   "label": "probit-confirm-p2 F-P#1.loc version v241 (library probitconfirmp2_a; plateau, train ply 2) [cohort read: run probit-confirm-p2, short]"
+  },
+  {
+   "version": "probit-confirm-p2:F-P#1.loc@221",
+   "name": "probitconfirmp2_a221.L1@221",
+   "label": "probit-confirm-p2 F-P#1.loc version v221 (library probitconfirmp2_a; plateau, train ply 2) [cohort read: run probit-confirm-p2, short]"
+  },
+  {
+   "version": "probit-confirm-p2:F-P#2.loc@241",
+   "name": "probitconfirmp2_b241.L2@241",
+   "label": "probit-confirm-p2 F-P#2.loc version v241 (library probitconfirmp2_b; plateau, train ply 2) [cohort read: run probit-confirm-p2, short]"
+  },
+  {
+   "version": "probit-confirm-p2:F-P#2.loc@221",
+   "name": "probitconfirmp2_b221.L2@221",
+   "label": "probit-confirm-p2 F-P#2.loc version v221 (library probitconfirmp2_b; plateau, train ply 2) [cohort read: run probit-confirm-p2, short]"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@299",
+   "name": "probitlatep2_a299.L1@299",
+   "label": "probit-late-p2 F-P#1.loc version v299 (library probitlatep2_a; plateau, train ply 2) [cohort read: run probit-late-p2]"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@279",
+   "name": "probitlatep2_a279.L1@279",
+   "label": "probit-late-p2 F-P#1.loc version v279 (library probitlatep2_a; plateau, train ply 2) [cohort read: run probit-late-p2]"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@399",
+   "name": "probitlatep2_a399.L1@399",
+   "label": "probit-late-p2 F-P#1.loc version v399 (library probitlatep2_a; plateau, train ply 2) [cohort read: run probit-late-p2]"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@299",
+   "name": "probitlatep2_b299.L2@299",
+   "label": "probit-late-p2 F-P#2.loc version v299 (library probitlatep2_b; plateau, train ply 2) [cohort read: run probit-late-p2]"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@279",
+   "name": "probitlatep2_b279.L2@279",
+   "label": "probit-late-p2 F-P#2.loc version v279 (library probitlatep2_b; plateau, train ply 2) [cohort read: run probit-late-p2]"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@399",
+   "name": "probitlatep2_b399.L2@399",
+   "label": "probit-late-p2 F-P#2.loc version v399 (library probitlatep2_b; plateau, train ply 2) [cohort read: run probit-late-p2]"
+  },
+  {
+   "version": "probit-trees-p2:F-P#1.loc@276",
+   "name": "probittreesp2_a276.L1@276",
+   "label": "probit-trees-p2 F-P#1.loc version v276 (library probittreesp2_a; plateau, train ply 2) [cohort read: run probit-trees-p2, short]"
+  },
+  {
+   "version": "probit-trees-p2:F-P#1.loc@256",
+   "name": "probittreesp2_a256.L1@256",
+   "label": "probit-trees-p2 F-P#1.loc version v256 (library probittreesp2_a; plateau, train ply 2) [cohort read: run probit-trees-p2, short]"
+  },
+  {
+   "version": "probit-trees-p2:F-P#2.loc@276",
+   "name": "probittreesp2_b276.L2@276",
+   "label": "probit-trees-p2 F-P#2.loc version v276 (library probittreesp2_b; plateau, train ply 2) [cohort read: run probit-trees-p2, short]"
+  },
+  {
+   "version": "probit-trees-p2:F-P#2.loc@256",
+   "name": "probittreesp2_b256.L2@256",
+   "label": "probit-trees-p2 F-P#2.loc version v256 (library probittreesp2_b; plateau, train ply 2) [cohort read: run probit-trees-p2, short]"
+  },
+  {
+   "version": "replay-p2:F-P#1.loc@299",
+   "name": "replayp2_a299.L1@299",
+   "label": "replay-p2 F-P#1.loc version v299 (library replayp2_a; plateau, train ply 2) [cohort read: run replay-p2]"
+  },
+  {
+   "version": "replay-p2:F-P#1.loc@279",
+   "name": "replayp2_a279.L1@279",
+   "label": "replay-p2 F-P#1.loc version v279 (library replayp2_a; plateau, train ply 2) [cohort read: run replay-p2]"
+  },
+  {
+   "version": "replay-p2:F-P#1.loc@542",
+   "name": "replayp2_a542.L1@542",
+   "label": "replay-p2 F-P#1.loc version v542 (library replayp2_a; plateau, train ply 2) [cohort read: run replay-p2]"
+  },
+  {
+   "version": "replay-p2:F-P#2.loc@299",
+   "name": "replayp2_b299.L2@299",
+   "label": "replay-p2 F-P#2.loc version v299 (library replayp2_b; plateau, train ply 2) [cohort read: run replay-p2]"
+  },
+  {
+   "version": "replay-p2:F-P#2.loc@279",
+   "name": "replayp2_b279.L2@279",
+   "label": "replay-p2 F-P#2.loc version v279 (library replayp2_b; plateau, train ply 2) [cohort read: run replay-p2]"
+  },
+  {
+   "version": "replay-p2:F-P#2.loc@542",
+   "name": "replayp2_b542.L2@542",
+   "label": "replay-p2 F-P#2.loc version v542 (library replayp2_b; plateau, train ply 2) [cohort read: run replay-p2]"
+  },
+  {
+   "version": "weight-p2:F-P-w#1.loc@299",
+   "name": "weightp2_a299.L1@299",
+   "label": "weight-p2 F-P-w#1.loc version v299 (library weightp2_a; plateau, train ply 2) [cohort read: run weight-p2]"
+  },
+  {
+   "version": "weight-p2:F-P-w#1.loc@279",
+   "name": "weightp2_a279.L1@279",
+   "label": "weight-p2 F-P-w#1.loc version v279 (library weightp2_a; plateau, train ply 2) [cohort read: run weight-p2]"
+  },
+  {
+   "version": "weight-p2:F-P-w#2.loc@299",
+   "name": "weightp2_b299.L2@299",
+   "label": "weight-p2 F-P-w#2.loc version v299 (library weightp2_b; plateau, train ply 2) [cohort read: run weight-p2]"
+  },
+  {
+   "version": "weight-p2:F-P-w#2.loc@279",
+   "name": "weightp2_b279.L2@279",
+   "label": "weight-p2 F-P-w#2.loc version v279 (library weightp2_b; plateau, train ply 2) [cohort read: run weight-p2]"
+  }
+ ]
+}

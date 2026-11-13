@@ -1,0 +1,84 @@
+{
+ "name": "offline-order",
+ "dir": "leagues/arenas/diag/offline-order",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 150,
+  "max_rounds": 150
+ },
+ "plies": [
+  2
+ ],
+ "description": "Analyst 6.45 check (iii) (11-11 ~21:35): order and mix at ply 2. Pairs trained one pass on 10.8M of P2x then 10.8M of P2 (d), the reverse (r), the two interleaved round by round (m), against the pair on P2 alone (p2). Coverage: m within 30 of d; recency: r far below d.",
+ "entries": [
+  {
+   "file": "models/from-scratch/offline-ply/drift/models/fp/probit108.model",
+   "kind": "probit",
+   "name": "dfp.S1@108",
+   "label": "F-P, P2x then P2"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/drift/models/tne/bdt108.model",
+   "kind": "bdt",
+   "name": "dtne.S1@108",
+   "label": "T-P-Ne, P2x then P2"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/drift-rev/models/fp/probit108.model",
+   "kind": "probit",
+   "name": "rfp.S1@108",
+   "label": "F-P, P2 then P2x"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/drift-rev/models/tne/bdt108.model",
+   "kind": "bdt",
+   "name": "rtne.S1@108",
+   "label": "T-P-Ne, P2 then P2x"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/drift-mix/models/fp/probit108.model",
+   "kind": "probit",
+   "name": "mfp.S1@108",
+   "label": "F-P, P2x/P2 interleaved"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/drift-mix/models/tne/bdt108.model",
+   "kind": "bdt",
+   "name": "mtne.S1@108",
+   "label": "T-P-Ne, P2x/P2 interleaved"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/models/P2/fp/probit108.model",
+   "kind": "probit",
+   "name": "p2fp.S1@108",
+   "label": "F-P on P2"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/models/P2/tne/bdt108.model",
+   "kind": "bdt",
+   "name": "p2tne.S1@108",
+   "label": "T-P-Ne on P2"
+  }
+ ]
+}

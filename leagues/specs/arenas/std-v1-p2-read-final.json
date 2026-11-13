@@ -1,0 +1,227 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid21",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": [
+   "yfp299.L1@299-2",
+   "yfp299.L2@299-2",
+   "ytr299.L1@299-2",
+   "ytr299.L2@299-2",
+   "vfp299.L1@299-2",
+   "vfp299.L2@299-2",
+   "vtr299.L1@299-2",
+   "vtr299.L2@299-2",
+   "lfp299.L1@299-2",
+   "lfp299.L2@299-2",
+   "ltr299.L1@299-2",
+   "ltr299.L2@299-2"
+  ]
+ },
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 30,
+  "min_rounds": 30,
+  "max_rounds": 30
+ },
+ "name": "std-v1-p2-read-final",
+ "dir": "leagues/arenas/diag/std-v1-p2-read-final",
+ "plies": [
+  2
+ ],
+ "description": "std-v1-p2 final read (std_p2_read.py, DRAFT 2026-11-12): std-v1-p2-s1 @300, std-v1-p2-s2 @300, std-v1-p2-x3 @436; panel y/v/l @299, stranger read on its upper tier's mean. Cold read std-v1-p2-read-final: ply 2, version 436, only the contrast's lines, near argmax (T 0.02), 30 round-robins; Elo 0 = the mean of yfp, ytr, vfp, vtr, lfp, ltr (12 players), no random player. Tags: w1fl=std-v1-p2-s1:^F-L\\.@300, w1fp=std-v1-p2-s1:^F-P\\.@300, w1tlc=std-v1-p2-s1:^T-L-Ne\\+@300, w1tpc=std-v1-p2-s1:^T-P-Ne\\+@300, w1tlg=std-v1-p2-s1:^T-L-Ne-grow@300, w1tpg=std-v1-p2-s1:^T-P-Ne-grow@300, w1dl=std-v1-p2-s1:^D-L-@300, w1dp=std-v1-p2-s1:^D-P-@300, w2fl=std-v1-p2-s2:^F-L\\.@300, w2fp=std-v1-p2-s2:^F-P\\.@300, w2tlc=std-v1-p2-s2:^T-L-Ne\\+@300, w2tpc=std-v1-p2-s2:^T-P-Ne\\+@300, w2tlg=std-v1-p2-s2:^T-L-Ne-grow@300, w2tpg=std-v1-p2-s2:^T-P-Ne-grow@300, w2dl=std-v1-p2-s2:^D-L-@300, w2dp=std-v1-p2-s2:^D-P-@300, x3fl=std-v1-p2-x3:^F-L\\.@436, x3fp=std-v1-p2-x3:^F-P\\.@436, x3tlc=std-v1-p2-x3:^T-L-Ne\\+@436, x3tpc=std-v1-p2-x3:^T-P-Ne\\+@436, x3tlg=std-v1-p2-x3:^T-L-Ne-grow@436, x3tpg=std-v1-p2-x3:^T-P-Ne-grow@436, x3dl=std-v1-p2-x3:^D-L-@436, x3dp=std-v1-p2-x3:^D-P-@436, yfp=replay-p2:^F-P#@299, ytr=replay-p2:^T-P-Ne\\+@299, vfp=diversity-p2:^F-P#@299, vtr=diversity-p2:^T-P-Ne\\+@299, lfp=probit-late-p2:^F-P#@299, ltr=probit-late-p2:^T-P-Ne\\+@299",
+ "entries": [
+  {
+   "version": "std-v1-p2-s1:F-L.loc@300",
+   "name": "w1fl300.L1@300",
+   "label": "std-v1-p2-s1 F-L.loc version v300"
+  },
+  {
+   "version": "std-v1-p2-s1:F-P.loc@300",
+   "name": "w1fp300.L1@300",
+   "label": "std-v1-p2-s1 F-P.loc version v300"
+  },
+  {
+   "version": "std-v1-p2-s1:T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc@300",
+   "name": "w1tlc300.L1@300",
+   "label": "std-v1-p2-s1 T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc version v300"
+  },
+  {
+   "version": "std-v1-p2-s1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc@300",
+   "name": "w1tpc300.L1@300",
+   "label": "std-v1-p2-s1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc version v300"
+  },
+  {
+   "version": "std-v1-p2-s1:T-L-Ne-grow-f10+grow-mdl=0+grow-gate=age+grow-priority=snapshot.loc@300",
+   "name": "w1tlg300.L1@300",
+   "label": "std-v1-p2-s1 T-L-Ne-grow-f10+grow-mdl=0+grow-gate=age+grow-priority=snapshot.loc version v300"
+  },
+  {
+   "version": "std-v1-p2-s1:T-P-Ne-grow+grow-mdl=1+grow-gate=age+grow-priority=snapshot.loc@300",
+   "name": "w1tpg300.L1@300",
+   "label": "std-v1-p2-s1 T-P-Ne-grow+grow-mdl=1+grow-gate=age+grow-priority=snapshot.loc version v300"
+  },
+  {
+   "version": "std-v1-p2-s1:D-L-Ne-ctx-grow+router-chain=2+router-trial-z=-2+grow-mdl=0+forget-factor=10.loc@300",
+   "name": "w1dl300.L1@300",
+   "label": "std-v1-p2-s1 D-L-Ne-ctx-grow+router-chain=2+router-trial-z=-2+grow-mdl=0+forget-factor=10.loc version v300"
+  },
+  {
+   "version": "std-v1-p2-s1:D-P-Ne-ctx-grow+router-chain=2+router-trial-z=-2.loc@300",
+   "name": "w1dp300.L1@300",
+   "label": "std-v1-p2-s1 D-P-Ne-ctx-grow+router-chain=2+router-trial-z=-2.loc version v300"
+  },
+  {
+   "version": "std-v1-p2-s2:F-L.loc@300",
+   "name": "w2fl300.L1@300",
+   "label": "std-v1-p2-s2 F-L.loc version v300"
+  },
+  {
+   "version": "std-v1-p2-s2:F-P.loc@300",
+   "name": "w2fp300.L1@300",
+   "label": "std-v1-p2-s2 F-P.loc version v300"
+  },
+  {
+   "version": "std-v1-p2-s2:T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc@300",
+   "name": "w2tlc300.L1@300",
+   "label": "std-v1-p2-s2 T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc version v300"
+  },
+  {
+   "version": "std-v1-p2-s2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc@300",
+   "name": "w2tpc300.L1@300",
+   "label": "std-v1-p2-s2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc version v300"
+  },
+  {
+   "version": "std-v1-p2-s2:T-L-Ne-grow-f10+grow-mdl=0+grow-gate=age+grow-priority=snapshot.loc@300",
+   "name": "w2tlg300.L1@300",
+   "label": "std-v1-p2-s2 T-L-Ne-grow-f10+grow-mdl=0+grow-gate=age+grow-priority=snapshot.loc version v300"
+  },
+  {
+   "version": "std-v1-p2-s2:T-P-Ne-grow+grow-mdl=1+grow-gate=age+grow-priority=snapshot.loc@300",
+   "name": "w2tpg300.L1@300",
+   "label": "std-v1-p2-s2 T-P-Ne-grow+grow-mdl=1+grow-gate=age+grow-priority=snapshot.loc version v300"
+  },
+  {
+   "version": "std-v1-p2-s2:D-L-Ne-ctx-grow+router-chain=2+router-trial-z=-2+grow-mdl=0+forget-factor=10.loc@300",
+   "name": "w2dl300.L1@300",
+   "label": "std-v1-p2-s2 D-L-Ne-ctx-grow+router-chain=2+router-trial-z=-2+grow-mdl=0+forget-factor=10.loc version v300"
+  },
+  {
+   "version": "std-v1-p2-s2:D-P-Ne-ctx-grow+router-chain=2+router-trial-z=-2.loc@300",
+   "name": "w2dp300.L1@300",
+   "label": "std-v1-p2-s2 D-P-Ne-ctx-grow+router-chain=2+router-trial-z=-2.loc version v300"
+  },
+  {
+   "version": "std-v1-p2-x3:F-L.loc@436",
+   "name": "x3fl436.L1@436",
+   "label": "std-v1-p2-x3 F-L.loc version v436"
+  },
+  {
+   "version": "std-v1-p2-x3:F-P.loc@436",
+   "name": "x3fp436.L1@436",
+   "label": "std-v1-p2-x3 F-P.loc version v436"
+  },
+  {
+   "version": "std-v1-p2-x3:T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc@436",
+   "name": "x3tlc436.L1@436",
+   "label": "std-v1-p2-x3 T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc version v436"
+  },
+  {
+   "version": "std-v1-p2-x3:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc@436",
+   "name": "x3tpc436.L1@436",
+   "label": "std-v1-p2-x3 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc version v436"
+  },
+  {
+   "version": "std-v1-p2-x3:T-L-Ne-grow-f10+grow-mdl=0+grow-gate=age+grow-priority=snapshot.loc@436",
+   "name": "x3tlg436.L1@436",
+   "label": "std-v1-p2-x3 T-L-Ne-grow-f10+grow-mdl=0+grow-gate=age+grow-priority=snapshot.loc version v436"
+  },
+  {
+   "version": "std-v1-p2-x3:T-P-Ne-grow+grow-mdl=1+grow-gate=age+grow-priority=snapshot.loc@436",
+   "name": "x3tpg436.L1@436",
+   "label": "std-v1-p2-x3 T-P-Ne-grow+grow-mdl=1+grow-gate=age+grow-priority=snapshot.loc version v436"
+  },
+  {
+   "version": "std-v1-p2-x3:D-L-Ne-ctx-grow+router-chain=2+router-trial-z=-2+grow-mdl=0+forget-factor=10.loc@436",
+   "name": "x3dl436.L1@436",
+   "label": "std-v1-p2-x3 D-L-Ne-ctx-grow+router-chain=2+router-trial-z=-2+grow-mdl=0+forget-factor=10.loc version v436"
+  },
+  {
+   "version": "std-v1-p2-x3:D-P-Ne-ctx-grow+router-chain=2+router-trial-z=-2.loc@436",
+   "name": "x3dp436.L1@436",
+   "label": "std-v1-p2-x3 D-P-Ne-ctx-grow+router-chain=2+router-trial-z=-2.loc version v436"
+  },
+  {
+   "version": "replay-p2:F-P#1.loc@299",
+   "name": "yfp299.L1@299",
+   "label": "replay-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "replay-p2:F-P#2.loc@299",
+   "name": "yfp299.L2@299",
+   "label": "replay-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299",
+   "name": "ytr299.L1@299",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v299"
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@299",
+   "name": "ytr299.L2@299",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v299"
+  },
+  {
+   "version": "diversity-p2:F-P#1.loc@299",
+   "name": "vfp299.L1@299",
+   "label": "diversity-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "diversity-p2:F-P#2.loc@299",
+   "name": "vfp299.L2@299",
+   "label": "diversity-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "diversity-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299",
+   "name": "vtr299.L1@299",
+   "label": "diversity-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v299"
+  },
+  {
+   "version": "diversity-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@299",
+   "name": "vtr299.L2@299",
+   "label": "diversity-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@299",
+   "name": "lfp299.L1@299",
+   "label": "probit-late-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@299",
+   "name": "lfp299.L2@299",
+   "label": "probit-late-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299",
+   "name": "ltr299.L1@299",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@299",
+   "name": "ltr299.L2@299",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v299"
+  }
+ ]
+}

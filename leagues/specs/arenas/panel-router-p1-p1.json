@@ -1,0 +1,163 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 30,
+  "min_rounds": 40,
+  "max_rounds": 40
+ },
+ "name": "panel-router-p1-p1",
+ "dir": "leagues/arenas/diag/panel-router-p1-p1",
+ "plies": [
+  1
+ ],
+ "description": "Cold read panel-router-p1-p1: ply 1, version 299, only the contrast's lines, near argmax (T 0.02), 40 round-robins. Tags: kfp=router-p1:^F-P, kc=router-p1:z=1000000000#, kz=router-p1:z=20#, kh=router-p1:stall-h\\+, khg=router-p1:stall-hg\\+, rfp=error-routing-p1:^F-P@300, rtr=error-routing-p1:^T-P-Ne\\+@300, efp=error-dag-probit-p1:^F-P@300, etr=error-dag-probit-p1:^T-P-Ne\\+@300, gfp=grow-p1:^F-P@300, gtr=grow-p1:^T-P-Ne\\+@300, hfp=grow-p1b:^F-P@300, htr=grow-p1b:^T-P-Ne-grow#@300",
+ "entries": [
+  {
+   "version": "router-p1:F-P#1.loc@299",
+   "name": "kfp299.L1@299",
+   "label": "router-p1 F-P#1.loc version v299"
+  },
+  {
+   "version": "router-p1:F-P#2.loc@299",
+   "name": "kfp299.L2@299",
+   "label": "router-p1 F-P#2.loc version v299"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-z=1000000000#1.loc@299",
+   "name": "kc299.L1@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-z=1000000000#1.loc version v299"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-z=1000000000#2.loc@299",
+   "name": "kc299.L2@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-z=1000000000#2.loc version v299"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-z=20#1.loc@299",
+   "name": "kz299.L1@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-z=20#1.loc version v299"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-z=20#2.loc@299",
+   "name": "kz299.L2@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-z=20#2.loc version v299"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#1.loc@299",
+   "name": "kh299.L1@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#1.loc version v299"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#2.loc@299",
+   "name": "kh299.L2@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#2.loc version v299"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-hg+log-router-stats#1.loc@299",
+   "name": "khg299.L1@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-rule=stall-hg+log-router-stats#1.loc version v299"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-hg+log-router-stats#2.loc@299",
+   "name": "khg299.L2@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-rule=stall-hg+log-router-stats#2.loc version v299"
+  },
+  {
+   "version": "error-routing-p1:F-P#1.loc@300",
+   "name": "rfp300.L1@300",
+   "label": "error-routing-p1 F-P#1.loc version v300"
+  },
+  {
+   "version": "error-routing-p1:F-P#2.loc@300",
+   "name": "rfp300.L2@300",
+   "label": "error-routing-p1 F-P#2.loc version v300"
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@300",
+   "name": "rtr300.L1@300",
+   "label": "error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v300"
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@300",
+   "name": "rtr300.L2@300",
+   "label": "error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v300"
+  },
+  {
+   "version": "error-dag-probit-p1:F-P#1.loc@300",
+   "name": "efp300.L1@300",
+   "label": "error-dag-probit-p1 F-P#1.loc version v300"
+  },
+  {
+   "version": "error-dag-probit-p1:F-P#2.loc@300",
+   "name": "efp300.L2@300",
+   "label": "error-dag-probit-p1 F-P#2.loc version v300"
+  },
+  {
+   "version": "error-dag-probit-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@300",
+   "name": "etr300.L1@300",
+   "label": "error-dag-probit-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v300"
+  },
+  {
+   "version": "error-dag-probit-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@300",
+   "name": "etr300.L2@300",
+   "label": "error-dag-probit-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v300"
+  },
+  {
+   "version": "grow-p1:F-P#1.loc@300",
+   "name": "gfp300.L1@300",
+   "label": "grow-p1 F-P#1.loc version v300"
+  },
+  {
+   "version": "grow-p1:F-P#2.loc@300",
+   "name": "gfp300.L2@300",
+   "label": "grow-p1 F-P#2.loc version v300"
+  },
+  {
+   "version": "grow-p1:T-P-Ne+split-threshold=1000000+split-noise=0.03+split-limit=4#1.loc@300",
+   "name": "gtr300.L1@300",
+   "label": "grow-p1 T-P-Ne+split-threshold=1000000+split-noise=0.03+split-limit=4#1.loc version v300"
+  },
+  {
+   "version": "grow-p1:T-P-Ne+split-threshold=1000000+split-noise=0.03+split-limit=4#2.loc@300",
+   "name": "gtr300.L2@300",
+   "label": "grow-p1 T-P-Ne+split-threshold=1000000+split-noise=0.03+split-limit=4#2.loc version v300"
+  },
+  {
+   "version": "grow-p1b:F-P#1.loc@300",
+   "name": "hfp300.L1@300",
+   "label": "grow-p1b F-P#1.loc version v300"
+  },
+  {
+   "version": "grow-p1b:F-P#2.loc@300",
+   "name": "hfp300.L2@300",
+   "label": "grow-p1b F-P#2.loc version v300"
+  },
+  {
+   "version": "grow-p1b:T-P-Ne-grow#1.loc@300",
+   "name": "htr300.L1@300",
+   "label": "grow-p1b T-P-Ne-grow#1.loc version v300"
+  },
+  {
+   "version": "grow-p1b:T-P-Ne-grow#2.loc@300",
+   "name": "htr300.L2@300",
+   "label": "grow-p1b T-P-Ne-grow#2.loc version v300"
+  }
+ ]
+}

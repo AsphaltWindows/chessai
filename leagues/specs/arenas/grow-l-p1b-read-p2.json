@@ -1,0 +1,96 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "grow-l-p1b-read-p2",
+ "dir": "leagues/arenas/diag/grow-l-p1b-read-p2",
+ "plies": [
+  2
+ ],
+ "description": "Cold read grow-l-p1b-read at ply 2 only (one arena per ply), versions 150, final, near argmax (T 0.02), 75 round-robins. Tags: lfl=grow-l-p1b:^F-L, lg1=grow-l-p1b:snapshot#, lg10=grow-l-p1b:forget-factor=10#",
+ "entries": [
+  {
+   "version": "grow-l-p1b:F-L#1.loc@150",
+   "name": "lfl150.L1@150",
+   "label": "grow-l-p1b F-L#1.loc version v150"
+  },
+  {
+   "version": "grow-l-p1b:F-L#2.loc@150",
+   "name": "lfl150.L2@150",
+   "label": "grow-l-p1b F-L#2.loc version v150"
+  },
+  {
+   "version": "grow-l-p1b:T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot#1.loc@150",
+   "name": "lg1150.L1@150",
+   "label": "grow-l-p1b T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot#1.loc version v150"
+  },
+  {
+   "version": "grow-l-p1b:T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot#2.loc@150",
+   "name": "lg1150.L2@150",
+   "label": "grow-l-p1b T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot#2.loc version v150"
+  },
+  {
+   "version": "grow-l-p1b:T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot+forget-factor=10#1.loc@150",
+   "name": "lg10150.L1@150",
+   "label": "grow-l-p1b T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot+forget-factor=10#1.loc version v150"
+  },
+  {
+   "version": "grow-l-p1b:T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot+forget-factor=10#2.loc@150",
+   "name": "lg10150.L2@150",
+   "label": "grow-l-p1b T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot+forget-factor=10#2.loc version v150"
+  },
+  {
+   "version": "grow-l-p1b:F-L#1.loc@347",
+   "name": "lflF.L1@347",
+   "label": "grow-l-p1b F-L#1.loc version v347 (final)"
+  },
+  {
+   "version": "grow-l-p1b:F-L#2.loc@347",
+   "name": "lflF.L2@347",
+   "label": "grow-l-p1b F-L#2.loc version v347 (final)"
+  },
+  {
+   "version": "grow-l-p1b:T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot#1.loc@347",
+   "name": "lg1F.L1@347",
+   "label": "grow-l-p1b T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot#1.loc version v347 (final)"
+  },
+  {
+   "version": "grow-l-p1b:T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot#2.loc@347",
+   "name": "lg1F.L2@347",
+   "label": "grow-l-p1b T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot#2.loc version v347 (final)"
+  },
+  {
+   "version": "grow-l-p1b:T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot+forget-factor=10#1.loc@347",
+   "name": "lg10F.L1@347",
+   "label": "grow-l-p1b T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot+forget-factor=10#1.loc version v347 (final)"
+  },
+  {
+   "version": "grow-l-p1b:T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot+forget-factor=10#2.loc@347",
+   "name": "lg10F.L2@347",
+   "label": "grow-l-p1b T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot+forget-factor=10#2.loc version v347 (final)"
+  }
+ ]
+}

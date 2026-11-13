@@ -1,0 +1,53 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 450
+ },
+ "cycles": 600,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid13"
+ },
+ "name": "error-growth-p1",
+ "seed": 37,
+ "train": {
+  "seed": 37
+ },
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "8",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "description": "Growth of the flagship error tree (11-11 ~10:43, coordinator; the user's goal: models that can expand in size). G2's probit error trees (T-P-Ne: NB error router, non-merging per the user's error-family rule, threshold 1M, noise 0.03) reached their limit (9 leaves at limit 4) by cycle 50-75 and held it for 250 cycles while gaining 118 over F-P at ply 1. One factor: split limit 4 x2 against 8 x2 (up to 17 leaves), F-P x2 beside, ply 1, floor 300. Read cold at plies 1-2, T 0.02, with leaf counts over time. A limit-8 gain says the error tree expands productively; a tie or loss says 9 leaves is its useful size on these features (the analyst's reading for cluster trees). Floor raised from 300 to 450 at cycle 28 (11-11 10:46, the analyst's 6.28: a late gain past cycle 400)."
+}

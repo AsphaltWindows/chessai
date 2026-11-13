@@ -1,0 +1,67 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 600,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-errdag3"
+ },
+ "name": "error-dag-probit-p1",
+ "seed": 36,
+ "train": {
+  "seed": 36
+ },
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "D-P-Ne-ctx",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03",
+    "--router-split-z": "0",
+    "--router-split-limit": "4"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "D-P-Ne-ctx",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03",
+    "--router-split-z": "30",
+    "--router-split-limit": "4"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "description": "The user's error-DAG test with probit leaves (11-11 ~10:05-10:10: error trees become DAGs with path parameters, no leaf sharing, non-merging, router-split threshold calibrated; \"they should at least be equal\"). Spec drafted by the errdag fork (step 2); launched by the coordinator in dag-lr-p1's slot, in place of the LR stand-in error-dag-p1 (deferred: the six's error tree is the probit T-P-Ne). Question: does the flagship error tree, T-P-Ne (G2: beat F-P by 118 at ply 1 and 77 at ply 2), at least hold up as an error-routed DAG with path parameters once the router-split threshold is calibrated?\n- Lines:\n  - D-P-Ne-ctx at --router-split-z 0 x2 and at --router-split-z 30 x2, both leaf limit 4 plus router limit 4, 1M, --split-noise 0.03.\n  - T-P-Ne limit 4, 1M, --split-noise 0.03 x2 (G2's line; the DAG at z = inf).\n  - F-P x2 beside.\n- D-P-Ne-ctx: chessai-errdag3, the BDD with T-P-Ne's probit leaves, CNBP error routers and --path-context. Non-merging, no leaf sharing.\n- Probit path cells (the analyst's 6.25 addendum): one Gaussian latent weight per (cell, value), mean 0 and variance 0.03^2 at creation, summed into the node's latent and trained in its ADF update. A split changes no prediction mean. The probit has one latent, so there is no class index.\n- --router-split-limit 4: --split-limit counts leaf splits only; a router splits only while router splits < leaf splits, at most 4. At z inf the DAG trains and plays exactly as T-P-Ne (checked: eval-loss on 10 held-out parts; games at depths 1-2, T 0.1 and 0.02).\n- Offline (models/from-scratch/errdag/summary.txt, section 9): 30 fixed ply-1 rounds, 100k windows, 2 seeds, 10 held-out parts.\n  - Router splits per seed: z 0: 4 and 3; z 5 and 10: 4 and 2 (byte-identical models); z 20: 3 and 2; z 25 and up: none (the tree). The count falls from 2-3 straight to none between z 20 and 25.\n  - Leaves: the tree's 9 everywhere, except seed 12 at z 0-10 (7: it made only 3 leaf splits within the 30 rounds).\n  - Against the tree: z 0: log-loss 0.0015 worse (SE 0.0008), winner log-loss 0.0037 better (0.0009); z 5 and 10: 0.0002 worse (0.0006), winner 0.0041 better (0.0011); z 20: 0.0024 worse (0.0007), winner 0.0025 worse (0.0010).\n- Which z (the coordinator, 11:20; the fork's draft had z 0 and z 60): z 0 is the busy DAG (router splits at the cap). z 30 is the calibrated one: the offline band z 5-10, the best by held-out loss, is z 16-32 at 1M windows under the sqrt(10) scaling; 30 sits inside it, well away from the cliff (z 20-25 offline, 63-79 at 1M), where the draft's z 60 sat, at offline z 20's arm (worse than the tree on both losses). Once the trees have their 4 leaf splits, count the DAG lines' sibling sets (\"pathcontext 1 N\", the first line of their model files); no z is moved mid-run.\n- Tournament binary: chessai-errdag3. It loads probit path-context models and plays the others exactly as hybrid13 (checked on T-P-Ne vs F-P at depths 1-2, T 0.1 and 0.02).\n- After create: python3 leagues/specs/ply1/train_binary.py --from chessai-hybrid4gfx leagues/experiments/error-dag-probit-p1. F-P and T-P-Ne then train on hybrid6 (exact); the DAG lines keep errdag3.\n- Cold read: leagues/specs/arenas/error-dag-probit-p1-cold.DRAFT.json (errdag3 as binary and owncal_binary).\n- Prediction (the fork): both DAG pairs within 20 of T-P-Ne at ply 1; if either gains, a pair with router splits (offline winner log-loss 0.004 better)."
+}

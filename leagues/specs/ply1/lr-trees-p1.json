@@ -1,0 +1,43 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "lr-trees-p1",
+ "models": [
+  {
+   "model": "F-L",
+   "replicates": 2
+  },
+  {
+   "model": "T-L-Nc-merge",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--revise-on": "fresh"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 21,
+ "train": {
+  "seed": 21
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 200
+ },
+ "cycles": 600,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid9"
+ },
+ "prices_version": "P2",
+ "description": "Does probit-widen-p1b's cold ply-1 routing gain need probit leaves? F-L x2 against T-L-Nc-merge limit 4, threshold 1M, fresh merge gate (--revise-on fresh) x2, in a pure ply-1 field (entry_ply 1, self-games, no references), 12 rounds a cycle, scaled plateau with min_cycles 200. Same standard tournament (T 0.1) and training conditions as probit-widen-p1b, so the leaf kind is the one factor against it; the verdict is a T 0.02 arena of every line's final version at ply 1 and 2 (make_cold_read.py --final). The analyst's plan (theory-2 6.11), launched 11-11 ~01:05 under the user's standing instruction to launch without them; the analyst drafted T 0.02 in the tournament, changed by the coordinator to keep one factor against p1b."
+}

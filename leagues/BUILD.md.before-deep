@@ -1,0 +1,1613 @@
+# The new league engine: how to run it, its rules, and the build notes
+
+The engine is leagues/leagues.py; its files are described in leagues/FORMATS.md, arenas in leagues/ARENA.md and the
+dashboard in leagues/DASHBOARD.md. This doc has, in order: how to create and run a league; the engine's choices and
+deviations from the design (models/NEW-DESIGN.md); the open questions; then the build log of 2026-11-09 and the CPU it
+used. Experiments have run since 2026-11-09 20:10 (models/NEXT-EXPERIMENTS.md); the global league has not been
+launched.
+
+## How to create and run a league
+
+Files: `leagues/leagues.py` (the driver), `leagues/repeat.sh` (the loop), `leagues/recipes.txt` (models and recipes,
+from `leagues/make_recipes.py`), `leagues/prices.csv` (the price constants, by version; `leagues/calibrate.py`
+writes them), `leagues/costs.csv` (self-play round sizes), `leagues/FORMATS.md` (the files).
+
+1. Write a spec. The global league takes recipe names (recipes.txt's 2nd column):
+
+       {"kind": "global", "root": "/home/iv/dev/chessai/leagues", "models": ["F-L", "T-L-Ne", "M-LP-L"],
+        "threads": 4, "jobs": 2, "nice": 10}
+
+   An experiment takes model names (1st column) and options:
+
+       {"kind": "experiment", "root": "/home/iv/dev/chessai/leagues", "name": "sp-vs-local",
+        "models": ["F-L-d2jit", "T-L-Ne"], "options": ["self-play", "local"], "cycles": 20,
+        "threads": 2, "jobs": 2, "nice": 10}
+
+   Any key of DEFAULTS in leagues.py can be overridden (rounds_per_cycle 5, champion_se 2, patience_cycles 20,
+   anchors, calibration games 600, selfplay round_anchor_games 1000, min_rounds 5, wait_poll_s 60, seed).
+   With "global" in options, global_source defaults to ROOT/global. `prices_version` picks a prices version
+   (default: the last in prices.csv).
+
+   A self-play-only experiment with a sweep and replicates (4 lines: two learning rates, two seeds each):
+
+       {"kind": "experiment", "root": "/home/iv/dev/chessai/leagues", "name": "lr-sweep",
+        "models": [{"model": "F-L", "sweep": {"--lr-rate": [0.025, 0.05]}, "replicates": 2}],
+        "options": ["self-play"], "cycles": 20, "selfplay_budget_s": 120}
+
+   - A model item is a name, or {"model": NAME, "set": {flag: value}, "sweep": {flag: [values]} (one flag, or two
+     for a grid), "to": "auto" | "train" | "selfplay" | "both" (or per flag {flag: ...}), "replicates": N}.
+     `"auto"` (the default) puts a flag into each argument list whose binary takes it. A value of true is a bare
+     flag; null (or false) removes the flag from the recipe.
+   - Every flag must be accepted by the binary it goes to (checked against its --help at create); the driver's own
+     flags (--seed, --rounds, --games, --threads, --resume, --init, --model, --start) can't be set.
+   - Model ids: `F-L+lr-rate=0.025#2`; labels `F-L lr-rate=0.025 #2`.
+   - Replicate r moves the self-play `--seed` (and `--moe-seed`/`--fm-seed` for kinds that have them) by r - 1,
+     and the training seed by 100003 x (r - 1). Replicate 1, and models without replicates, keep the recipe's.
+   - `selfplay_budget_s` (priced s per line per cycle, default 120) is for self-play-only experiments; with local
+     or global lines the self-play budget is the local data's price, and `create` refuses the field.
+   - Experiment options (2026-11-10, batch 4; the user's new defaults for experiments; absent, a league runs as
+     before; details in FORMATS.md, config.json):
+
+         "references": [], "ply1_entries": false, "plateau": {"cycles": 50, "min_cycles": 100}, "cycles": 1000
+
+     No random players: without `random`, create adds `rating_zero` (the first line's `<line>@0-2`); the tournament
+     runs without --anchor and the driver re-centres the ratings it records on that entry. No ply-1 entries: each
+     line plays its current version and its champion at ply 2. The plateau rule ends the experiment after the first
+     cycle from `min_cycles` on with no new champion in `plateau.cycles` cycles (`cycles` is the cap); that cycle
+     trains nothing and logs and records the stop (`done` event, `plateau: ...`). Rounds: batch 4 matches each
+     original's games with a model at ply 2 per cycle, at 2n(2n-1) games a round for n lines.
+   - Options of 2026-11-10 ~22:15-22:50 (the user: experiments screen at ply 1, with self-games; absent, a league
+     runs as before; details in FORMATS.md, config.json; `entry_ply` 3 from 2026-11-11, below):
+
+         "entry_ply": 1, "self_games": true, "plateau": {"scaled": true, "min_cycles": 100}
+
+     `entry_ply` 1: every main entry (each line's current version and its champion) plays at ply 1, and so do the
+     rating zero, the champion test, the plateau rule and the training rule (a game counts if a model at ply 1 plays
+     in it). Create refuses `ply1_entries` true and the global option with it; references are allowed. Self-play
+     depth: a self-play line whose depth neither the spec nor its recipe sets self-plays at the entry ply (create
+     sets `--depth`; chosen over refusing the mismatch, since plain recipes self-play at the binary's default depth
+     0); an explicit depth stays (F-L-d2jit: 2). Games are priced at their ply (P2 has ply-1 tournament prices for
+     every kind). `self_games`: each round every main entry also plays one game against itself, a training game for
+     the local lines only (never rated), priced into the local data's price and so into the self-play budgets. The
+     scaled plateau: K = round(K2 x sqrt(2 / n lines)), K2 50 by default (35 for 4 lines, 29 for 6, 25 for 8).
+     The ply-1 specs (leagues/specs/ply1/) make their lines with a plain `create`, which gives them the recipes'
+     training binary chessai-hybrid4gfx; `python3 leagues/specs/ply1/train_binary.py LEAGUE_DIR` then sets
+     chessai-hybrid6 (the same models with ~0.6 of the training CPU, as small-field-x4 and the running experiments
+     have) before cycle 1 (`--check` first shows what it would change).
+2. `python3 leagues/leagues.py create SPEC.json` makes ROOT/global/ or ROOT/experiments/NAME/ and updates
+   ROOT/index.json. Nothing runs yet.
+3. Run it detached in its own loop (one driver process per cycle):
+
+       setsid nohup /home/iv/dev/chessai/leagues/repeat.sh LEAGUE_DIR >> LEAGUE_DIR/repeat.log 2>&1 < /dev/null &
+
+   or a set number of cycles in the foreground: `python3 leagues/leagues.py run LEAGUE_DIR --cycles N`.
+4. `python3 leagues/leagues.py stop LEAGUE_DIR` stops it after the current cycle (or while it waits). Killing the
+   driver (SIGTERM) is also safe at any time: it terminates its children, and the next `run` resumes the cycle at
+   its phase. The global league's cycles replay exactly.
+5. `python3 leagues/leagues.py status ROOT` (every league) or `status LEAGUE_DIR` (one).
+6. `python3 leagues/leagues.py add ROOT/global --ply P RECIPE...` (no driver running): new recipes enter untrained
+   next cycle, each at ply P (the 11-10 design, 2026-11-11).
+7. `python3 leagues/leagues.py selftest --dir DIR` (about 2 CPU min, mostly the replay test; `--quick` skips the
+   games: 1 s).
+8. `python3 leagues/leagues.py prices SPEC.json` calibrates a new prices version (see leagues/prices/*.spec.json
+   and calibrate.py's docstring). A league keeps the version it was created with.
+
+Several leagues can run at once, each with its own threads/jobs/nice. An experiment with the global option reads
+the global league's batch under a shared lock and waits when every round of it is used.
+
+### Flags that only a newer binary takes
+
+`create` checks every flag against the --help of the binary it goes to, which is the recipe's binary in recipes.txt.
+To give a line flags that only a newer binary has, create the experiment through a wrapper that gives the recipe row
+that binary in memory and runs the engine's `cmd_create`, then set the lines' `train_binary` before cycle 1. This is
+how error-targets and error-targets-probit were made for chessai-target's flags (2026-11-10 13:14):
+models/from-scratch/target/league/create_et.py and swap_et.py, with the steps in NOTES.txt there. leagues.py and
+recipes.txt stay untouched.
+
+Batch 4 (2026-11-10) reruns every experiment so far under the new options through a wrapper of the same kind:
+leagues/specs/batch4/batch4.py `create ORIG` gives the recipe rows of chessai-target and chessai-trigger models
+their binary in memory, runs the engine's cmd_create, then sets every line's binaries as the spec records them
+(train chessai-hybrid6 unless chessai-target, chessai-trigger or search labels; self-play binaries kept) and checks
+the config against the original's (lines, seeds, calibration, champion_se, prices). leagues/specs/batch4/queue.sh
+runs the reruns one at a time; its state is leagues/experiments/batch4-queue.txt and its log batch4-queue.log.
+`touch leagues/experiments/batch4-queue.STOP` stops the queue before the next rerun (the running one goes on; stop
+it with `leagues.py stop`).
+Extras (18:39): experiments that aren't reruns, queued after them (batch4.py EXTRA; so far small-field-x4,
+small-field's two models as four replicates each, seed 11). `specs NAME` writes one spec, `check NAME` compares
+every line with the source experiment's (recipe, arguments, binary; only the names, replicate and seed offset may
+differ) and that its seed is used nowhere else, `create-item NAME` creates either kind. queue.sh now iterates
+`batch4.py items` (reruns, then extras); `queue.sh --after PID` first waits for an earlier queue to exit and goes
+on only if every rerun is done. The first queue (pid 1809879, 17:41) runs the old script, which it read when it
+started (queue.sh was replaced by rename, never edited in place); a second (pid 1841378) waits for it with
+`--after`. The old batch4.py and queue.sh are not kept in leagues/ (the change only adds subcommands; the old
+`order`, `status ORIG`, `create ORIG` and `state ORIG` the first queue calls work as before).
+
+### Swapping a binary in a running experiment
+
+Only a binary proven byte-identical goes into a running experiment (models/from-scratch/fastbin/PERF-LEDGER.md, the
+rules). Done for chessai-hybrid5 (tournament), chessai-hybrid6 (training) and chessai-hybrid7 (tournament):
+1. `python3 leagues/leagues.py stop LEAGUE_DIR`, then wait for the cycle to end and the driver to exit.
+2. Keep a copy of config.json (the swap scripts keep it in a config-before/ dir).
+3. Change only config.json's `tournament.binary`, or the lines' `train_binary`, and nothing else.
+4. Restart the loop with repeat.sh, as in step 3 above.
+
+The swap scripts check the rest of the config: models/from-scratch/fastbin/hybrid6/swap6.py (hybrid6 on every line;
+run with DRY=1 first) and models/from-scratch/target/league/swap_et.py. The driver itself (leagues.py) was swapped
+once, atomically during a phase that doesn't read it (the scan cache, 2026-11-10 10:56; `git checkout
+leagues/leagues.py` undoes it), and again for the batch-4 options (2026-11-10 17:39: config-gated, shown
+byte-identical on a copy of small-field first; the old file is leagues/leagues.py.before-batch4), and for the
+options of 2026-11-10 ~22:15-22:50 (22:39:58, and 22:50:07 for a create-only fix of the self-play depth default;
+each shown byte-identical first on one cycle of copies of nb-settings-no-random3, nb-settings-new and
+leaf-sources-2, run twice with the old driver and once with the new; the old file is
+leagues/leagues.py.before-selfgames). dashboard.py was replaced the same way (old: dashboard.py.before-selfgames);
+the running server keeps the old code until it is restarted.
+
+## Deviations from models/NEW-DESIGN.md and choices it leaves open (for the user)
+
+1. Experiment version names are `E.<S|L|G>.<major>.<v>` by option (the user's choice, 16:10).
+2. A version number counts the line's training steps. That is the line's cycle number since it entered, unless a step
+   fails or a self-play line's budget is under half a round; then the same version plays again.
+3. An experiment's last cycle trains nothing and copies no global rounds: no later cycle would rate the result. It
+   plays `rounds_per_cycle` rounds.
+4. Version 0 is made by `train` on one empty game. F-L-mix's is made without its label flags, which need positions; an
+   untrained model doesn't depend on its labels. The first step (v0 to v1) trains from scratch, which is the same model.
+   A self-play line's run also starts from scratch, since `--init` is refused by TAN and FM.
+5. Own calibration games are played as the live league plays them: with the recipe's held-out calibration (the live
+   lineages.txt's heldout set: lr or cnbp), 600 games at ply 1, T 0.1, seed 5. The held-out sets are old offline
+   games, used only to make those games' play reasonable. Open question below.
+6. Training order: every model's `train --seed` is the league's train seed plus the cycle, so all models shuffle the
+   same positions the same way. Today each recipe passes its own `--seed 21`.
+7. Anchors start at the [100, 200) interval. There is none for [0, 100) or below 0; the references cover the bottom.
+   - An anchor is a new entry, `<line>@<v>F-1`, rated from the next cycle on its own games. Its lock-in uses the
+     version's ply-1 rating, as decided.
+   - A cycle counts as outside when the rating is below lo - 25 or above lo + 125. An unrated cycle leaves the streak
+     as it is.
+   - Once given up, an interval stays given up, even if the anchor drifts back, until a new entry lands in it. That
+     can happen in the same cycle.
+   - A retiring line's current ply-1 entry can still lock an interval.
+   - A version anchors one interval at most.
+8. Global-round selection compares the copied rounds' qualifying price (what the global lines train on) with the
+   experiment rounds' qualifying price (what the local lines train on), both priced by the experiment.
+   - An experiment round is priced over this cycle's field, each pair at the mean moves of its pair class (model or
+     random, by ply) in last cycle's games (in the first cycle, the global batch's), so a field that grows when
+     champions split from current versions is priced right.
+   - The mismatch carries (`global_carry_s`), as the user chose: copy need = min_rounds x estimate - carry (at least
+     one round), rounds played = round((copied + carry) / estimate), at least min_rounds when covered.
+9. Edge case: a batch that is entirely unused but too small to cover `min_rounds` experiment rounds is taken whole,
+   and the experiment plays the rounds it covers (at least 1). A partly used batch that can't cover makes the
+   experiment wait. Without this, an experiment bigger than the global league would wait forever.
+10. Self-play budgets and chunks are priced: a chunk is about 25% of the budget at the mean price of this cycle's
+    rounds so far (last cycle's for the first chunk; one round if none is known). Over- and underspending (in
+    priced s) carries to the next cycle's budget, as in the live league. The measured generation CPU recorded
+    beside it is the job's CPU split by the wall time of its phases (playing and labelling on the job's threads,
+    training on one); subtracting wall times went to 0 under load.
+11. Repeatability: both leagues replay bit for bit, interrupted or not, which the replay test checks. Nothing
+    measured enters a decision.
+12. STOP is honoured between cycles and while an experiment waits; the driver deletes it when it stops on it. SIGTERM
+    at any point is safe: the driver kills its children, and the next run resumes the cycle at its phase.
+13. Patience counts a cycle whose decision isn't a new champion, including `unrated`. A line retires when the count
+    reaches 20, with decision `retired`, and doesn't train in that cycle.
+14. When the current version is the champion (after a failed step), there is no test: `champion-kept`.
+15. Added beyond the directive:
+    - `leagues.py add` brings recipes into the global league; they enter untrained at the next cycle.
+    - New columns `selfplay_carry_s` (cycles.csv) and `tournament_proc_cpu_s` (totals.csv).
+    - A `batch` phase. It publishes the batch right after the tournament, so waiting experiments go on before the
+      global league trains.
+16. Prices (16:10 follow-up):
+    - Constants are per context: the tournament binary's games and each self-play binary's generation differ
+      (self-play cost 0.76 of the tournament's lr ply-1 constants at depth 0 and 2.2 times its ply-2 ones at depth
+      2 in P0).
+    - The formula has a per-game term besides the per-ply one (progress note 16:10-16:58).
+    - No model-size term yet. P1 shows trees need one (open question 4): their games cost more per move as the tree
+      grows: per move, about 4 to 6 times at ply 2 from 21 KB to 1-2 MB.
+    - Unmeasured constants are derived: a tournament kind from the mean of the measured kinds at that ply; a
+      self-play (kind, depth) from the kind's tournament constants times the self-play/tournament ratio (the
+      kind's own, else pooled over kinds at that depth, else interpolated geometrically between measured depths).
+      Each row's `source` says which.
+    - An experiment prices the global rounds it copies with its own version, so leagues on different versions
+      still compare like with like.
+17. Variants (16:30 follow-up): `"to": "auto"` (the default) puts a flag where the binaries take it, refusing a
+    flag that would only change version 0 (train-only flags in a self-play-only experiment). Replicate seeds as in
+    "How to create". Games per self-play round are fixed in the config at create.
+
+## Open questions for the user
+
+Settled at 16:10: anchors start at 100; the global option's mismatch carries; an experiment's last cycle trains
+nothing; leagues-smoke/ stays until launch; experiment names E.<S|L|G>.
+
+1. Own-calibration games are played with the old offline held-out sets (games/heldout-lr-d2-s555 and
+   games/heldout-cnbp-d2-s555), as the live league plays them. Keep that (my pick: it is the live rule), or play them
+   with the version's previous own calibration, so no outside data enters?
+2. Anchors shared with the global league (open in the design): not built. Experiments have only the four random
+   references. If wanted, an experiment would add the global league's current anchors as fixed players.
+3. The CPU split between the global league and experiments (open in the design): each league's spec sets its
+   threads, jobs and nice (defaults 4, 2 and 10).
+4. A model-size term in the price. P1 says trees need one; not built (a format change).
+   - Evidence: P1 fits each player its own constants. Against those, the kind's constants misprice a tree's
+     games by 0.50 to 2.14 times (log-rms 0.41). Flat models and mixtures are mispriced 0.67 to 1.61 times
+     (log-rms 0.18).
+   - By model size (report): at ply 2, trees under 50 KB are priced at 1.27 (bdt) and 1.37 (bdd) of their
+     measured CPU. Trees over 400 KB are priced at 0.78 to 0.79 (bdt) and 0.76 (bdd).
+   - Self-play is mispriced the same way: scratch trees at 1.77 to 2.33, mature ones at 0.56 to 0.62.
+   - Hoeffding trees barely move: 1.09 small, 0.89 large.
+   - Proposed form: one more constant, `us_per_ply_doubling`, per (context, kind, depth). A side's per-move price
+     becomes `us_per_ply + us_per_ply_doubling x log2(max(1, model bytes / 20 KB))`.
+     - Fitted on P1's games, it brings the trees to 0.60-1.75 (log-rms 0.23), level with the other kinds.
+     - The ply-2 terms come out at 62 us per doubling for bdt (base 132), 112 for bdd (base 121) and 13 for ht
+       (base 136).
+     - A linear term in bytes does worse (log-rms 0.28).
+     - Fitted for every kind, it also catches the 8-expert MoE (priced 0.72), taking all players from log-rms
+       0.30 to 0.18.
+   - What it needs:
+     - the model bytes of every entry, recorded when the entry is made (entries.csv, the global batch), so prices
+       never read model files later;
+     - the model bytes each self-play round starts from (plies.csv);
+     - the fit and the report (calibrate.py). P1's tournament games already carry their models' sizes; the
+       self-play records keep them from now on, so a P2 needs only the self-play runs again (about 3 CPU min).
+   - Still off after it, by the report's measure: the DAG D-L-Nc-c (0.75; its routing, a recipe effect, not size)
+     and the early T-L-Ne-c version 20 at ply 2 (1.28).
+
+## Build log (the engine fork, 2026-11-09)
+
+- 15:10 Started. Spec: models/NEW-DESIGN.md. Formats: leagues/FORMATS.md (written first, 15:15).
+- 15:20 New tournament binary models/from-scratch/bin/chessai-hybrid4g (md5 f934bbbc...), from a copy of
+  hybrid4-src (models/from-scratch/hybrid4g-src). The only change is `tournament --game-cpu`: each game's thread
+  CPU time (clock_gettime CLOCK_THREAD_CPUTIME_ID around play_game; a game is played on one thread) goes to
+  OUT/game_cpu.csv. Identity check (leagues-smoke/idcheck): hybrid4 and hybrid4g, flag off and on, give
+  byte-identical games.csv, ratings, tables and saved games (8 players, 2 round-robins). cargo test tournament: 13
+  passed.
+- 15:25 leagues/make_recipes.py writes leagues/recipes.txt from the live registry (read-only): the 70 lineages active
+  at cycle 64 give 54 training recipes and 63 experiment models (a recipe plus distinct self-play settings).
+  - Three d2jit merge trees train with a smaller --split-threshold, so they are distinct recipes:
+    T-L-NLs-merge-st100k, T-N-NNs-merge-st300k and T-N-Nc-merge-st200k.
+- 15:30 Untrained models (version 0) come from `train` on a round holding one empty game directory (0 positions;
+  `train` refuses an empty round, and --rounds 0 saves nothing).
+  - Checked for all 54 recipes (leagues-smoke/untrained/t.py): each loads and plays calibrated in hybrid4g. Own
+    calibration of a constant model gives slope 0, and it plays uniformly.
+  - F-L-mix fails, because --label-depth needs positions. Its version 0 is made without the label flags, which only
+    change how positions are labelled, not the model.
+- leagues/costs.csv is a copy of cycles/champ/costs.csv, used for self-play round sizes and first estimates.
+- 15:40 make_recipes.py: recipes now group by train binary too (no change in the 54), and a solo lineage takes its
+  non-solo twin's train binary (F-P-tau0-solo-c had defaulted to chessai-cyc5-labels, which can't train probit). New
+  last column `heldout` (the live lineages.txt's held-out set), used to play own calibration games as the live league
+  does.
+- 15:45 leagues/leagues.py written (create, add, run, status, stop, index, selftest) and leagues/repeat.sh (one cycle
+  per driver process; stops on STOP, failure or an experiment's end).
+- 15:50 selftest (leagues-smoke/selftest.log): 33 rule checks pass (names, ply-2 filter, champion test and its SE
+  against a dense inverse, anchors: lock-in, ties, margin, 5-cycle release, replacement, one interval per entry;
+  global-round selection and CPU equalisation; waiting on a fake global batch). Resume: a 2-recipe global league
+  (F-L, T-L-Ne) interrupted at 10 points (every phase, mid-tournament, mid-training, mid-records) reproduces the
+  uninterrupted run's games, ratings, models and records exactly; an experiment's self-play interrupted after a chunk
+  finishes with each self-play round once. 31 CPU s.
+- 15:47-15:50 Smoke part 1 (leagues-smoke/run-smoke-1.sh): the global league (F-L, T-L-Ne, M-LP-L; 2 rounds a
+  cycle, 60 calibration games) ran 4 cycles while the experiment three-options (F-L x self-play, local, global;
+  min_rounds 2) ran 3. The experiment waited 25 s for the first batch, then copied rounds.
+  - Found: sizing a cycle from last cycle's CPU per round gave the local lines 2.4 times the global lines' data in
+    cycle 2, because the field grew from 2 to 3 entries a line when champions split from current versions. Now each
+    pair is priced by its class from last cycle's games.
+  - Found: the last cycle copied global rounds although it trains nothing. It now copies none.
+  - Found: events carried the records' time; each now keeps its own.
+- 15:51 `add` fixed (it took the league lock twice). Smoke part 2 (run-smoke-2.sh):
+  - F-P-tau0 joins the global league at cycle 5;
+  - three-options is made again and runs while the global league plays cycles 5-7;
+  - sp-vs-local (F-L-d2jit, T-L-Ne x self-play, local) runs under repeat.sh, is stopped with STOP after its first
+    cycle, and is restarted.
+- 15:55 Smoke part 2 results (leagues-smoke/run-smoke-2.log, global.out, three-options.out, sp-vs-local.out;
+  leagues-smoke/equalisation.py prints what each line trained on). All three leagues ran to the end without errors.
+  - Late entry: F-P-tau0 entered the global league untrained at cycle 5 as G.0.0 and was crowned at cycle 6 (G.1.1).
+  - Anchors after 7 cycles (global/anchors.csv): [100, 200) F-L@1F-1, [200, 300) M-LP-L@2F-1, [300, 400)
+    M-LP-L@3F-1, [400, 500) F-P-tau0@1F-1. Each now rates below its lock-in rating (152 to 135, 235 to 179, 361 to
+    326, 463 to 434), as the design expects. The smoke's ratings are too noisy (95% CI 48 to 96) to say by how much.
+  - Data equalisation: CPU s of the qualifying games each line trained on, and the ratio to the local lines.
+
+    | Experiment, cycle | local | self-play | global |
+    |---|---|---|---|
+    | sp-vs-local, 1 | 5.3, 5.3 s | 1.03, 1.00 | |
+    | sp-vs-local, 2 | 11.3, 11.3 s | 0.97, 1.01 | |
+    | three-options, 1 | 5.0 s | 1.11 | 0.99 |
+    | three-options, 2 | 10.0 s | 0.96 | 1.28 |
+
+    - Self-play's over- or underspending carries to the next cycle. In three-options' cycle 2 the budget was 9.98 s
+      of this cycle's games less the 0.52 s overspent in cycle 1. The job used 17.83 s: training 8.27 s and
+      generation 9.56 s, so 0.10 s overspent carries on.
+    - The global line's 1.28: the estimate priced an experiment round at 4.3 s from cycle 1's games, and the 3 rounds
+      played cost 3.3 s each. Rounding wasn't the cause: the copied 12.8 s came to 2.98 estimated rounds, and 3 were
+      played. Games got cheaper as the models trained: ply-2 model against ply-2 model cost 58, 40 and 28 ms a game
+      in cycles 1-3 (310, 298 and 229 plies). Untrained models' long games are the design's "early cycles, not
+      priced" item.
+  - STOP during sp-vs-local's cycle 2: the driver finished the cycle, deleted STOP and exited; repeat.sh ended with
+    "STOP found: stopped" (status stopped, phase idle). The restart ran cycle 3 and ended with "experiment done".
+  - Both experiments' last cycle copied nothing and trained nothing. three-options played 5 rounds in it.
+  - The live league stayed untouched throughout (its loop and dashboard kept running).
+- 16:00 `status ROOT` prints "1 model", not "1 models". Quick selftest after it: 33 rule checks pass.
+- 16:10-16:58 Follow-ups (the user, via the coordinator): prices instead of measured CPU, the global carry,
+  experiment names E.<S|L|G>, a fixed self-play budget for self-play-only experiments, re-runnable price
+  calibration, and model variants, sweeps and replicates. All in leagues.py and leagues/calibrate.py; FORMATS.md has
+  the changelog (16:40 to 16:58).
+  - Prices: every budget and sizing decision now uses a game's price, a fixed formula over its plies and the
+    constants of a versioned table, leagues/prices.csv. Measured CPU is still recorded beside it, for information.
+    - A game's price: for each side, `us_per_game + moves x us_per_ply` of its (context, kind, search depth). A
+      self-play round of G games and P plies: `2 G us_per_game + P us_per_ply`.
+    - The per-game term is mine, beyond the suggested per-ply form: per ply alone, short games came out at 0.58 of
+      their measured CPU and long ones at 1.27 (the opening's plies have more moves to search than the endgame's).
+      With it: 1.11 and 1.05.
+    - A league copies its version's constants into its config at create and keeps them. An experiment prices the
+      global rounds it copies with its own constants.
+    - `leagues.py prices SPEC.json` (calibrate.py) measures, fits and appends a new version with a report,
+      leagues/prices/<version>.md. `--fit-only` refits from the measurements already made; `--check` writes the
+      report to the work dir without adding a version; `--measure-only` measures and stops.
+  - P0 (provisional; the procedure proven on a small sample, as asked, on the old binaries): 5 players at plies 1
+    and 2 (3 copied from the live run dirs, 2 untrained), 182 games, plus the old smoke leagues' 6074 games with
+    measured CPU; 5 self-play measurements (lr at depths 0, 2 and 4; a mature tree at depth 0). Calibration CPU
+    about 14 s. Results: leagues/prices/P0.md; summary in the CPU section below.
+  - Fixed in the fit: a constant could be stuck at the floor (probit at ply 1 came out 0) because a negative
+    first estimate was held for good. Each iteration now starts with every term free and starts from weights
+    1/measured; probit's per-ply constant at ply 1 is 4.4 us (8.0 per ply alone).
+  - The global option's mismatch carries: `global_carry_s` (state, totals) adds each cycle's copied qualifying
+    price minus the local lines' qualifying price; the next copy aims at the local data minus the carry.
+  - Self-play-only experiments: `selfplay_budget_s` priced s per line per cycle, default 120. Experiments with
+    local or global lines keep the budget tied to the local data's price; `create` refuses the field for them.
+  - Self-play rounds are priced from the output's `round N: +W -B =D, P plies` lines, kept in
+    runs/<line>/sp/plies.csv. A round saved without its line (a kill between the two) is rolled back and replayed.
+  - Games per self-play round are fixed in the config at create (the live league's round-size rule from
+    leagues/costs.csv), so a later edit of costs.csv can't change a running experiment.
+  - Variants: an experiment model may be {"model", "set", "sweep", "to", "replicates"}; flags are checked against
+    the binaries' --help at create. Example in "How to create" below.
+- 16:58 selftest: 66 rule checks pass, among them the price formula, versions, the copy plan with a carry, the
+  round estimate, the self-play plan in priced s, the budget rule, variants and their seeds, and recovering
+  self-play counts from a log. The replay test (it replaces the resume test): two roots, each a global league
+  (F-L, T-L-Ne) and an experiment (F-L under self-play, local and global), run in step for 3 cycles; root b is
+  interrupted 18 times (every phase of both leagues, mid-tournament, mid-training, mid-self-play, mid-records). Both
+  give the same games, ratings, models (md5), self-play rounds (plies.csv, ladder, results) and records (160
+  items). 66 + 124 CPU s.
+- 16:58-17:00 Smoke 3 (leagues-smoke/run-smoke-3.sh, .log), for the dashboard: the old smoke leagues moved to
+  leagues-smoke/old-1609/ (the P0 spec's include paths follow them); new ones in leagues-smoke/ on prices P0:
+  global (F-L, T-L-Ne, F-P-tau0; 2 rounds a cycle; 4 cycles), three-options (F-L x self-play, local, global; 3
+  cycles) and lr-sweep (self-play only, budget 2 priced s: F-L x --lr-rate 0.05, 0.1 x 2 replicates; 3 cycles),
+  global cycle k then the experiments' cycle k. All ran to the end.
+  - three-options' data per line (priced s, self-play / local / global): cycle 1 2.88 / 2.86 / 2.87, cycle 2
+    6.84 / 6.87 / 7.07; global carry 0.0 then 0.2 s.
+  - lr-sweep: each line played 44-46 rounds of 20 games a cycle for its 2.00 s; carries within 0.03 s. Replicates
+    differ only in `--seed` (21, 22) and the training seed; the two rates' models differ.
+
+- 17:11 recipes.txt: models F-N and F-P added (the coordinator's request for the planned experiments: experiment 4
+  has F-L, F-P and F-N under self-play and local; the per-family sweeps of probit tau and NB smoothing build on F-P
+  and F-N). make_recipes.py takes a new EXTRA list of lineages beyond the cycle-64 snapshot: F-N-c (retired live at
+  cycle 57) and F-P-c (frozen live since cycle 37), with their binaries and arguments as they are. F-N joins recipe
+  F-N (F-N-d2jit's, the same training); F-P is a new recipe. The regenerated file differs from the old one only by
+  the 2 rows and 2 comment lines. Checked end to end (leagues-smoke/extra-check: F-L, F-P, F-N under self-play and
+  local, 2 cycles): version 0, own calibration, tournament, training and self-play all ran for both. 40 CPU s.
+- 17:20 Fast binaries (the coordinator's go, after models/from-scratch/fastbin/ proved them byte-identical):
+  make_recipes.py maps every row's binaries through leagues/binaries-fast.txt (its old -> new table; the BY ROW list
+  checks the result: all 65 rows match). recipes.txt now names 5 binaries: chessai-hybrid4g (114 of the 130 binary
+  fields), chessai-bddtrig2-q9 (8), chessai-bal-q9 (4), chessai-dag-q9 (2), chessai-presplit-q9 (2). No other field
+  changed; comment lines at the top name each live binary and its replacement. Leagues made before keep theirs
+  (config.json).
+  - Replay on the new binaries (leagues-smoke/replay-fast): the replay test passes again (root b interrupted 18
+    times = root a), and root a equals the old binaries' root a (leagues-smoke/selftest-full/replay/a) in all 25 +
+    135 items: 641 + 1027 game lines, ratings, 9 + 119 model and state files (md5), 110 self-play rounds (plies.csv,
+    ladder, results) and every record, leaving out only the binary paths in lines.csv (the measured columns are left
+    out as in the replay test). lines.csv confirms the runs used chessai-hybrid4g. CPU 121 user + 4.5 sys s.
+- 17:25-17:40 Prices P1 (leagues/prices/P1.md, its spec P1.spec.json, measurements in leagues-smoke/pricecal-P1):
+  now the last version in prices.csv, so new leagues take it.
+  - Tournament (chessai-hybrid4g `--game-cpu`): 33 players at plies 1 and 2 plus the four references, one round
+    robin per ply. Players: version 0 of 12 recipes, and 21 models copied from the live run dirs (2 early, 19
+    mature), covering every recipe kind; trees and DAGs from 21 KB to 2.4 MB.
+  - Each round robin was played three times with the same seed, interleaved with the other ply and the self-play
+    runs: 7992 games, the same games each time.
+  - Noise shows as shifts of the whole machine: the same games cost 0.91 to 1.28 times as much in another repeat
+    (load 7 to 13 while the live league ran), and every kind moved together. The constants from one repeat alone
+    are 0.83 to 1.22 of the three repeats'. P1 averages the three.
+  - Self-play: 25 runs at the live round sizes (depth 0: 1000 games, 1: 860, 2: 40, 4: 10) on the recipe binaries,
+    1 to 24 CPU s each. A first pass of 2 to 100 games a run measured 0.04 to 0.5 s each, too little against the
+    output's 0.01 s timings, and was replaced (kept in sp-small/).
+  - calibrate.py: tournament `repeats` and a report section on them; the report's calibration CPU now comes from
+    the work dir's records (a refit had said 0 s); a copied player's model keeps a `.source` file naming the
+    version copied (the report had named the run dir's newest version at report time); self-play records keep each
+    round's model size (`round_model_bytes`), for a size term later.
+  - P1's errors, priced / measured CPU (tournament):
+    - all 1.00;
+    - by stage: untrained 1.09, early 1.07, mature 0.84;
+    - by length: short 1.02, mid 0.87, long 1.15; early long games 1.14 (6 games), untrained long 1.14;
+    - by repeat: 1.02, 1.11, 0.89.
+  - Self-play runs, priced / measured: flat and mixture models 0.60 to 1.34. Scratch trees are 1.77 (bdt) and 2.33
+    (bdd); mature trees are 0.62 and 0.56.
+  - The full selftest on P1 and the fast binaries passes: 66 rule checks, and the replay test with 25 + 201 items
+    and 176 self-play rounds. CPU 113 user + 4 sys s.
+- 18:05-18:21 Fixed-point binaries and prices P2 (the coordinator's go; nothing launched).
+  - Switch: make_recipes.py maps every row's binaries through leagues/binaries-fast.txt and then
+    leagues/binaries-fx.txt. Its map reader takes md5-checked table rows (`old | md5 | new | md5 | ...`; both files'
+    md5s must match) or `old -> new` lines, and skips everything else. In recipes.txt the 57 rows on hybrid4g (114
+    fields) now name chessai-hybrid4gfx (md5 a3e6d4e6...). The 8 side-branch rows keep their q9 builds, as
+    binaries-fx.txt's BY ROW and UNCHANGED lists say. No other field changed. The driver's default tournament
+    binary is chessai-hybrid4gfx.
+  - Replay (leagues-smoke/replay-fx): the replay test passes on hybrid4gfx (root b, interrupted 18 times, equals
+    root a). Root a also equals a hybrid4g reference (leagues-smoke/replay-h4g) in all 25 + 201 items: 641 + 1027
+    game lines, ratings, 9 + 185 model and state files, 176 self-play rounds and every record. Only the binary paths
+    in lines.csv and the measured columns are left out. CPU 58 + 3 s (fx) and 106 + 4 s (reference); the straight
+    run took 30 s on hybrid4gfx and 53 s on hybrid4g.
+  - The reference had to be re-run. Between 17:42 and 18:09, someone other than this fork deleted most of
+    leagues-smoke: the 17:20-17:40 references (selftest-full, replay-fast, selftest-P1), the smoke 3 leagues and
+    old-1609. pricecal-P0 and pricecal-P1 are intact. The reference ran on P1 from a temporary copy of the code
+    whose recipes still named hybrid4g; the copy was removed after.
+  - Prices P2 (leagues/prices/P2.md, its spec P2.spec.json, measurements in leagues-smoke/pricecal-P2) is the last
+    version in prices.csv, so new leagues take it.
+    - Tournament: P1's 33 players (the same model files) at plies 1 and 2, three interleaved repeats. These are the
+      same 7992 games as P1 (games.csv identical). CPU P2 / P1 is 0.99 at ply 1 and 0.93 at ply 2 (median game
+      0.92). Games with a flat model gain most: lr 0.90 and 0.74 (plies 1 and 2), cnbp 0.89 and 0.75, probit 0.94
+      and 0.86. In the fitted constants, a 60-move flat side at ply 2 costs 0.29 (lr), 0.33 (cnbp) and 0.70
+      (probit) of P1's. Trees, DAGs, mixtures and FM stay within 0.82-1.06.
+    - Self-play: 43 runs at the live round sizes on the recipe binaries. lr, probit and cnbp ran at depths 0, 1, 2
+      and 4, from scratch and from the latest live versions (F-P and F-N at depths 1 and 4 by an item's `depth`).
+      FM ran at depth 2. Trees, the DAG, HT and the mixtures ran at depth 0; bdt and hybrid also at depth 2.
+    - Each kind and depth's self-play ratio is fitted on its mature runs (`selfplay_fit_stages`), the stage
+      experiments spend most cycles in. Scratch runs are only checked, priced / measured:
+      - lr 0.74-1.31, probit 1.03-1.52, cnbp 0.74-1.10;
+      - mixtures 0.88-1.03, HT 1.09, FM 1.27;
+      - scratch trees 2.35 (bdt) and 4.99 (bdd), the size effect of open question 4;
+      - all 20 untrained runs together, 1.23.
+    - Tournament errors: all 1.00; by stage untrained 1.10, early 1.06, mature 0.83. The same games cost 1.36 and
+      0.84 of repeat 1 at ply 1 and 1.05 and 1.07 at ply 2: the machine's load moves them.
+    - costs.csv: five rows `lr d0 jitter10` to `lr d4 jitter10` (`refresh_costs`): P2's lr self-play prices at the
+      mature runs' plies per game, which are those runs' measured generation CPU (depth 3 derived). Self-play
+      rounds at anchor 1000 are now 1000, 750, 70, 10 and 10 games at depths 0-4 (were 1000, 860, 40, 10, 10). The
+      live league reads cycles/champ/costs.csv, not this file.
+    - Calibration fixes: a tree version is copied only with its own and its previous version's states. The live run
+      keeps states sparsely; T-L-Ne's newest version had none, and its self-play failed. The copy also checks that
+      size and mtime didn't change while it copied.
+    - Calibration CPU 446 s (tournaments 239 s, self-play 208 s).
+  - Quick selftest on P2: 66 rule checks pass.
+- 18:22-18:45 The first batch's five specs (nothing launched): leagues-smoke/batch1/specs/, with root leagues/, so
+  `leagues.py create leagues-smoke/batch1/specs/<spec>.json` makes them there once the user decides.
+  - 1a lr-settings: F-L with train --lr-rate 0.0125, 0.025, 0.05 (the default) and 0.1, and F-L with train
+    --label-depth 2 --label-result 0.5. Local, 500 cycles of 5 rounds; 5 lines.
+  - 1b probit-settings: F-P with train --probit-tau 0, 1e-6, 1e-5 (the default) and 1e-4. Local, 500 cycles of
+    5 rounds; 4 lines.
+  - 1c nb-settings: F-N with train --alpha 0.1, 1 (the default) and 10. Local, 500 cycles of 5 rounds; 3 lines.
+  - 1a-1c become 100 cycles of 25 rounds by setting `cycles` 100 and `rounds_per_cycle` 25.
+  - 3 selfplay-depth: F-L, F-P and F-N with self-play --depth 0, 1, 2 and 4, and a second F-L at depth 2 (#2:
+    self-play seed 22). Self-play only, 60 priced s a line a cycle, 100 cycles; 13 lines. Rounds of 1000, 750, 70
+    and 10 games. F-L's depth lines have the live F-L-d1jit, d2jit and d4jit's self-play arguments.
+  - 4 leaf-sources: F-L twice (#2: seeds moved), F-P and F-N, each under self-play and local, 100 cycles; 8 lines.
+  - Checks: all five were created in a scratch root (leagues-smoke/batch1/check) and give the lines above. Each
+    also ran 2 cycles in another scratch root (leagues-smoke/batch1/mini) at nice 19, 2 threads and 1 job. Spec 3
+    ran at 4 priced s a line a cycle and without its depth-4 lines, which P2 ran.
+  - In the checks every line made version 0, calibrated, played, and trained or self-played; nothing failed.
+    The label variant's training labels by a depth-2 search: 5.8 s a cycle, against 0.6 s for plain training.
+  - CPU a cycle in the checks' cycle 2, where the fields have their full size (3 entries a line and the 4
+    references), and over a whole run at that rate:
+
+    | Spec | Lines | Tournament | Training | Self-play | Calibration | A cycle | Run |
+    |---|---:|---:|---:|---:|---:|---:|---:|
+    | 1a lr-settings | 5 | 16.0 s | 8.1 s | | 4.8 s | 29 s | 500 cycles: 4.0 h |
+    | 1b probit-settings | 4 | 20.9 s | 0.8 s | | 5.2 s | 27 s | 500 cycles: 3.7 h |
+    | 1c nb-settings | 3 | 10.5 s | 0.4 s | | 3.2 s | 14 s | 500 cycles: 2.0 h |
+    | 3 selfplay-depth, estimated | 13 | 115 s | | 760-880 s | 16 s | 890-1010 s | 100 cycles: 25-28 h |
+    | 4 leaf-sources | 8 | 40.7 s | 3.1 s | 136.7 s | 9.2 s | 190 s | 100 cycles: 5.3 h |
+
+    - Spec 3 is scaled from its reduced check: 9030 games a cycle (43 entries) at the check's 12.9 ms a game, and
+      13 x 60 priced s of self-play, which cost 0.98-1.13 times their price in the check, with the training inside
+      self-play. Its depth-4 lines will likely cost less than their price early on (scratch runs in P2: 0.66-0.91).
+    - Spec 4's self-play lines each get the price of the cycle's local data, 28 priced s in cycle 2.
+    - At 100 cycles of 25 rounds, 1a-1c would take 3.5, 3.2 and 1.6 h (calibrating 100 versions a line instead of
+      500), against 4.0, 3.7 and 2.0 h.
+    - These are early-cycle rates. Later cycles change with game lengths. The leagues record their own CPU in
+      totals.csv.
+  - CPU of the checks: 636 s (1c 24 s, 1b 45 s, 1a 51 s, 4 295 s, 3 221 s).
+
+## Self-games, entry ply and scaled plateau (2026-11-10 ~22:15-22:50)
+
+- How self-games are played: no new binary. The tournament binary's `replay-games` replays any game of a
+  tournament exactly (the same players, policy, temperature and move choice, seeded derive_seed(seed, t, g)), and
+  checked against tournament games byte for byte it reproduces them. An entry plays itself as a pair with a twin,
+  `<entry>.twin`, the same depth and spec under another name, in a players list of the entries and then the twins;
+  replay-games runs with `--seed` the league's seed + 1000003 (no shared seed stream with the round-robins) and the
+  tournament's policy and temperature flags. Its output games are renamed `<entry>~<entry>` in selfpool/ and
+  training links them with the round-robins' qualifying games, sorted by round and names.
+- Fairness: the self-play budget was the round-robins' qualifying price only, so self-games had to be added: their
+  price joins `data_price_target_s` in the self-games phase (before training and self-play), and with it the
+  self-play budgets, the global carry and the copy step's target. The selftest's self-games test shows cycle 1's
+  budgets higher, by exactly the self-games' price, than in the same experiment without them, with the same games,
+  ratings and decisions.
+- Exclusion: self-games never enter tour/games.csv, so the ratings, the champion test, the head-to-head tables, the
+  plateau rule, and every tool that reads tour/ (the dashboard; models/from-scratch/analysis-2026-11-10's curtab,
+  curcur, champtab, xtab and plyfid) never see them. self_games.csv records them; the dashboard adds their process
+  CPU to a league's CPU (its tooltip names it) and labels a ply-1 experiment's columns and tips `ply 1`.
+- The analysis tools curtab, curcur, champtab and xtab now take the entries' suffix from config.json's
+  `entry_ply` (the same output as before on ply-2 experiments); plyfid needs both plies and prints nothing for a
+  single-ply experiment.
+- Verification: the selftest (rule checks for the three options and 11 refusals; a self-games test at ply 1 and at
+  ply 2: run straight and interrupted 8 times, including inside the new phase, with the same games, ratings,
+  models, self-games and records); the byte-identity runs above; dry-run creates of the two ply-1 specs; and 4
+  cycles of each in a scratch root (both with self-games at ply 1).
+- CPU of this work: about 15 CPU-min (identity runs and their comparisons ~8.5 min, selftests ~4 min, the two
+  ply-1 specs' 4 cycles each ~1.6 min, dashboard renders ~1.5 min).
+
+## Entry ply 3 (2026-11-11 ~01:00-01:35)
+
+- `"entry_ply": 3` (theory-2 6.11 (b), deeper games: flat-p3-cold is its first experiment): the rules of
+  `entry_ply` 1 at ply 3. The main entries are `<line>@<v>-3`; the rating zero, the champion test, the plateau rule
+  and the training rule are at ply 3; create sets `ply1_entries` false (refuses true) and refuses the global option;
+  a self-play line whose depth neither the spec nor its recipe sets self-plays at depth 3 (P2 has self-play prices
+  at depth 3, derived, and costs.csv `lr d3 jitter10` sizes its rounds). The code needed only the accepted values
+  (`ENTRY_PLIES`) and the prices a league needs (`needed_prices`: the lines' kinds at the entry ply too); every
+  other rule already took the entry ply. Audit of the rest: the cycle report, the records' `entry2`/`elo2` columns,
+  self-games (replay-games plays depth 3), events and status all follow the entry ply; the `ply2_*` names stay and
+  mean the qualifying games (FORMATS.md, totals.csv). The analysis tools curtab, curcur, champtab and xtab read the
+  suffix from `entry_ply` and need nothing.
+- Prices: P2 had no tournament constants at ply 3, so create would refuse the spec. They are fitted on the ply-3
+  arenas' measured game CPU (calibrate.py's fit on 32520 games of arenas/diag/ply3-cold, selfplay-depth-ply3-cold
+  and ply3-labels-cold, hybrid9, T 0.02) and put on P2's scale by each kind's ply-2 sides in the same games: lr
+  9677 + 264.9 per move (8.1 times its ply-2 price), probit 34079 + 808.1 (13.2), fm 180358 + 3763 (7.2); the other
+  kinds derived at the pooled ratio 7.95. The rows are added to P2, whose other rows stay as they were, so a spec
+  with `"prices_version": "P2"` (flat-p3-cold's) creates; leagues made before keep their copies. Report:
+  leagues/prices/P2.md, section Ply 3. Price check in the dry run: games priced at 1.01-1.21 of their measured CPU.
+- Verification: the full selftest (116 rule checks; the replay, options and self-games tests, the last at plies 1, 2
+  and 3; 5 min 48 s CPU); byte-identity of two cycles of copies of four experiments (FORMATS.md, Changes); the swap
+  at 01:24:04 (atomic rename of a temp file in leagues/ whose md5 was checked; backup leagues.py.before-ply3);
+  the three running experiments went on with it; a 3-cycle dry run of flat-p3-cold in a scratch root, deleted
+  after; the dashboard's pages rendered with the old and the new code (554 paths, identical; on a ply-3 page only
+  the champion-gap tooltips change, @2 to @3), and the server restarted at 01:29 (pid 2065579, port 8766).
+- CPU of this work: about 20 CPU-min (the full selftest 6 min, the identity replays 11 min, the dry run 2 min, the
+  page renders and price fits about 1 min).
+- Left open: trees and mixtures have derived, not measured, ply-3 prices.
+- Follow-up at 01:38: the three champion-gap tooltips name the entry ply on every page, so a ply-1 page now says
+  current@1 minus champion@1 (dashboard.py: `gap_ply` removed, the tooltips use `ply`; backup
+  leagues/dashboard.py.before-gap-ply). Pages rendered with the old and the new code, time frozen: 571 paths, 565
+  identical; the other 6, the pages of the six ply-1 experiments (/x/<name>/), differ only in those tooltips, @2
+  to @1 (9-17 strings a page). The server restarted at 01:38 (pid 2072883, port 8766).
+
+## Entry ply 4 and warm starts (2026-11-11 ~03:05-03:35)
+
+For theory-2 6.17's warm-started twins (W4: a ply-4 field whose four F-L lines start from flat-p3's final models;
+W3: the same starts at ply 3).
+- `"entry_ply"`: any whole number from 1 (was 1, 2 or 3; `ENTRY_PLIES` is gone). At any ply other than 2 the ply-3
+  rules hold: no other ply-1 entries, no global option, a self-play line's default depth is the entry ply (costs.csv
+  `lr d4 jitter10` sizes depth-4 self-play rounds at 10 games), and the dashboard's gap tooltips name the ply.
+  create refuses a prices version without the lines' kinds at the entry ply, so ply 5 and up wait for prices.
+- Warm starts: `"start": {"experiment": E, "version": V}` and `"start_forget": F` in a spec's model entry
+  (FORMATS.md, config.json). New: warm_start_request (the spec's shape, in expand_models), warm_start_option (create:
+  the line of the same name in E, its kind, the model file and its md5; the refusals), train_start (train's
+  `--start`; a warm start's first training adds `--init-forget F`), start_detail (the `entered` event's detail);
+  make_untrained copies the start model, checking its md5, instead of making an untrained version 0. Seeds, names
+  and every later training are as for any line. Provenance: config.json `lines[].start` (path, md5, forget) and the
+  `entered` event; lines.csv is unchanged.
+- The trainer flag: `train --help` says `--start` models of cnbp, lr, probit, fm and moe are "forgotten by
+  --init-forget" (and rs/src/main.rs refuses it for trees), and a check on flat-p3's F-L#1 v199 confirms it: the
+  saved AdaGrad sums are the start's divided by F plus the new squares, and the first step moves the weights 0.48,
+  0.80 and 1.67 (L2) at F 1, 8 and 64; no flag and F 1 give the same file.
+- Prices: P2 had no tournament constants at ply 4. lr's row is fitted on arenas/diag/flat-ply4-interim-cold's game
+  CPU (hybrid10, 7280 games) and put on P2's scale by the lr ply-2 sides of arenas/diag/flat-p3-interim-cold (the
+  same binary; b 0.8175): 65395 + 1894.2 per move, 6.99 times its ply-3 price. An LR game at ply 4 costs 0.50 CPU s
+  on hybrid10 and is priced 0.39 s. The other kinds are estimates (their ply-3 rows times 6.992), labelled so in
+  `source`. Report: leagues/prices/P2.md, section Ply 4.
+- Specs, not launched: leagues/specs/ply4/flat-p3-w4.json and flat-p3-w3.json: F-L x4, each line from flat-p3's
+  version 199 with start_forget 8; `entry_ply` 4 and 3; self-games; 6 rounds a cycle; scaled plateau from cycle 60;
+  cycles 100; seed 24 for both; no references; standard T 0.1 tournament on chessai-hybrid10 (no hybrid11 on disk
+  at 03:31); prices P2; a description naming the design.
+- Verification (FORMATS.md, Changes): byte-identity of two cycles of copies of four finished experiments (old and
+  new driver), the full selftest (144 rule checks and the warm-start test), the swap at 03:27:07 (atomic rename of a
+  temp file in leagues/ whose md5 was checked; no league running; backup leagues.py.before-ply4), and a 2-cycle dry
+  run of flat-p3-w4 in a scratch root, deleted after: 62 CPU s for cycle 1 (4 entries) and 249 for cycle 2 (8
+  entries). Its games ran at 1.28 times the arena fit's CPU (load average ~9 on 8 cores), so they were priced at
+  0.64 of their measured CPU; at the arena's speed it would be ~0.78.
+- CPU of this work: about 25 CPU-min (the identity replays 13 min, the full selftest 6 min, the dry run 5 min, the
+  price fits, the forget check and the spec checks about 1 min).
+- Left open: probit and the other kinds have estimated ply-4 prices (measure before a probit or tree experiment at
+  ply 4); the dashboard calls a warm-started line's version 0 "the untrained version 0" in its trained-games
+  tooltips.
+
+## Negative flag values (2026-11-11 ~10:56-11:02)
+
+For theory-2's positive-gain gate (`--revise -2` with `--revise-on fresh`: merge a branch unless it beats its
+shadow by 2 SE on the fresh window), which a spec could not pass: apply_overrides and without_flags rendered
+`--revise -2` and clap refuses a separate `-2`.
+- New flag_tokens(flag, value): the bare flag for true, `--flag=value` for a value that starts with "-", else
+  the flag and the value (as before). apply_overrides and without_flags use it; parse_flags reads a
+  `--flag=value` token as the flag with that value, so every check that parses train_args (the binary's flags,
+  seeds, --init-forget, train_binary.py) sees `--revise` with `-2`. A selftest rule check covers both forms.
+- chessai-hybrid6 `train --revise=-2 --revise-on fresh` parses (it stops only at the missing GAMES and OUT);
+  `--revise -2` gives "unexpected argument '-2' found".
+- Running leagues: no config.json under leagues/ held a negative value or a `--flag=value` token, so every
+  existing line's arguments render exactly as before. The full selftest passed on the new file (4 min 43 s
+  wall at nice 15); the swap was an atomic rename at 11:02 (md5 e7fd28b7...; backup
+  leagues.py.before-negflags, md5 92aa7bbb..., the live file checked equal to it just before), with
+  dag-lr-p1, probit-confirm-p2 and error-growth-p1 running; their next cycles ran without errors.
+- Not changed: make_recipes.py's own copy of the flag helpers (recipes.txt holds no negative values).
+
+## Global league 11-10 design (2026-11-11)
+
+The user's 11-10 design (models/NEW-DESIGN.md "The global league"; rule 6 as revised 2026-11-11 ~13:45-13:50) in
+leagues/leagues.py. Not launched: no league of this design exists under leagues/, and no recipe rows were added.
+
+- Spec `"models": [{"recipe": "F-L", "ply": 1}, ...]`: each model is a line `<recipe>.p<ply>` that plays at its ply
+  only (entries `F-L.p1@<v>-1`, its current version and its champion); the same recipe at two plies is two lines.
+  `add LEAGUE --ply P RECIPE...`. No anchors, no ply-1 entries besides ply-1 models', no second-ply entries.
+  config.json `"global_design": "11-10"`. Lines have no label: the id shows the ply.
+- Champion test at 2 SE, versions G.<major>.<v>, entry as G.0.0 untrained: as before.
+- Training (rule 4): each model trains once a cycle, with its own recipe, on the cycle's round-robin games and
+  self-games (ordered by round and names) whose players are all rated at or above its current version's Elo minus
+  `train.margin` (default 30). "Rated" means in this cycle's fit, as decide saw it. Every entry plays the cycle's
+  round-robins before training, so a new entry is rated in its first cycle like the rest. An unrated player
+  counts, and a model whose own current version is unrated trains on everything (neither happens in a normal
+  cycle). No self-play top-up. cycles.csv keeps train_games, train_positions, train_floor and train_self_games;
+  status and the cycle report show them.
+- Self-games (on by default): every model entry plays one seeded game against itself a round; never rated. A
+  model's set takes an entry's self-games when that entry is rated at or above the model's floor.
+- Rule 6, patience by training positions:
+  - a cycle without a new champion adds the positions the current version trained on: the training that made it,
+    in the cycle before (0 if the line didn't train). Every model accrues, the top one included;
+  - 20,000,000 positions (`patience_rule.positions`) retire a model, but not within 5 cycles (`floor_cycles`) of
+    its entry or last crowning: crowned or entered in cycle c0, never before c0 + 5;
+  - a new champion resets the count to 0. No revivals: add refuses a retired line;
+  - the count is exact, in integers: state `patience_total`, `patience_from`, `trained_positions`; cycles.csv
+    `patience_positions`, `patience_total`, and `patience` in %;
+  - a training log without a position count stops the cycle.
+  The percentile rule (11-10 ~21:40) was built first and then removed. patience_cycles is refused for this design.
+- Calibration unchanged: 600 own games at depth 1 for every version, ply-2 models included. OPEN CHOICE (for the
+  user): a ply-2 model could calibrate on its own ply-2 games instead, at about 10-20x the CPU at P2's prices.
+- References random, random-1, random-2, random-3 (random pinned at 0); 5 double round-robins a cycle: the defaults.
+- The G option is refused against an 11-10 global league: create refuses it, and try_copy also refuses at run time.
+  This is the smaller correct change. Copying "games with a model at ply 2" means nothing when each model has its
+  own ply, and an Elo-cutoff G line is NEW-DESIGN's open proposal.
+- 11-09 global leagues: run and add refuse a global league without `global_design`. The anchor and flat-patience
+  code stays: it is dead for new leagues and still reads old records.
+- Fixed on the way: cmd_add didn't put the new line in L.lines, so writing lines.csv raised KeyError. The bug was
+  latent before.
+- Dashboard (minimal changes), for an 11-10 league:
+  - no Anchors section, no anchor count in the tile or the cycles table;
+  - the Lines panel's Patience shows the level in %, with the positions in its tooltip;
+  - ply labels say "its ply".
+  Other pages render as before: old and new code on live pages differed only where live data changed between the
+  renders. The running dashboard servers were not restarted, so they pick this up at their next restart.
+
+Tests (all at nice 15, scratch under models/from-scratch/global11/):
+- Full selftest on the final file (md5 4c4a1194...): 174 rule checks, then the replay, options, self-games at plies 1-3
+  and warm-start runs; 4 min 02 s wall, 6 min 05 s CPU. The replay's global league:
+  - three 11-10 lines: F-L.p1, T-L-Ne.p2, and F-P.p1 added by `add --ply 1` after cycle 1;
+  - rule 6 scaled down to 10,000 positions and a 2-cycle floor;
+  - run straight and with 21 interruptions, identical;
+  - its records recomputed by global11_record_checks: plies, windows, rule 6;
+  - 2 lines retire in cycle 3, and the floor keeps 2 that were past 10,000 positions.
+- Identity: mirror experiments of error-dag-p1 (lr) and error-dag-probit-p1 (probit), 3 cycles each, run with the old
+  and the new file. Identical config, lines.csv, reports and 21 snapshot items each (52 games, 12 self-games, 6 model
+  md5s). For all 52 live experiment configs, both files give the same field, prices, phases, self-games and lines.
+- Dry run, models/from-scratch/global11/dry:
+  - setup: the six shortlisted recipes (F-L, F-P, T-L-Nc-merge, T-P-Nc-merge, D-L-Ne-ctx, D-P-Ne-ctx) at ply 1,
+    tournament binary chessai-errdag3, P2, the defaults, 5 cycles;
+  - per cycle: 16 entries, 1,200 games and 60 self-games (cycle 1: 10, 450, 30);
+  - wall: 9-15 s a cycle, but 44 s in cycle 2 because of the busy-wait below;
+  - measured CPU: 15-20 s a cycle (tournament process 5-9 s, calibration 8-9 s, self-games 0.5-1.5 s, training
+    0.3-0.6 s);
+  - training sets: 20-600 games (2,847-93,842 positions) per line per cycle. In cycle 5, five lines trained on 180
+    games (30 self-games, 25,240 positions) and F-L on 245 (35, 34,458);
+  - champions: 13 crowned in cycles 2-5;
+  - patience after cycle 5: 0.2% for the three lines whose cycle-5 version failed (36-47k positions), 0.0% for
+    the three crowned in cycle 5;
+  - global11_record_checks found no problems (30 training sets recomputed exactly);
+  - the dashboard renders it.
+  The Elo window gave each model 180-245 of cycle 5's 1,260 games (about 140 positions a game), so rule 6 moves
+  0.1-0.2% a cycle in this field.
+- Pre-existing, not changed: parallel training threads can see each other's new train process as "still working in
+  this league" (the /proc scan races the other thread's Popen) and sleep 30 s. error-dag-probit-p1's log shows it 3
+  times today.
+- Swap: atomic rename at 13:50:45. Before: e7fd28b7..., kept as leagues/leagues.py.before-global11 (checked equal to
+  the live file just before). After: 4c4a1194.... error-dag-probit-p1 and error-dag-p1 were running and went on
+  cycling. dashboard.py was edited in place: 21d740a1... before (copy at
+  models/from-scratch/global11/dashboard.py.orig), ddd91ba8... after.
+- CPU used by this build: about 20 min, at nice 15 (two full selftests about 12 min; the rest replays, the dry run,
+  identity runs and dashboard renders).
+
+## CPU used by this build (all test runs at nice 19)
+
+| Item | CPU |
+|---|---|
+| Rust build of hybrid4g and its cargo test | about 5 min |
+| Identity check, hybrid4 against hybrid4g | about 5 s |
+| Untrained models of all 54 recipes, loaded and played | about 1-2 min |
+| selftest runs | about 1 min |
+| Smoke part 1: global cycles 1-4; three-options' first run | 56 s; about 70 s |
+| Smoke part 2: global cycles 5-7; three-options; sp-vs-local | 56 s; 67 s; 96 s |
+| Follow-ups: P0 calibration (182 games, 5 self-play runs) and refits | about 15 s |
+| Follow-ups: price-shape exploration (fits only) | under 5 s |
+| Follow-ups: selftest with the replay test (2 roots x 2 leagues x 3 cycles) | 124 s |
+| Follow-ups: smoke 3 (global 4 cycles, two experiments 3 cycles each) | 147 s |
+| Follow-ups: F-N and F-P checked in a 2-cycle experiment | 40 s |
+| Fast binaries: the replay test re-run on them (leagues-smoke/replay-fast) | 125 s |
+| P1: measurements (3 x 2 round robins, 25 self-play runs, a first small self-play pass) | 429 s |
+| P1: fits, reports and the size-term study (fits only) | about 2.5 min |
+| P1: the full selftest on P1 | 117 s |
+| Fixed point: the replay test on hybrid4gfx (leagues-smoke/replay-fx) | 62 s |
+| Fixed point: the hybrid4g reference, re-run (leagues-smoke/replay-h4g) | 110 s |
+| P2: measurements (3 x 2 round robins, 43 self-play runs) | 447 s |
+| P2: fits, checks, comparisons, quick selftest | about 25 s |
+| Batch 1: the five specs' 2-cycle checks (leagues-smoke/batch1/mini) | 636 s |
+| Total | about 55 min |
+
+The leagues' own records (totals.csv) agree with the processes' measured CPU within 2%:
+
+| League | Cycles | Tournament | Training | Self-play | Calibration | Total |
+|---|---|---|---|---|---|---|
+| global | 7 | 91.3 s | 3.9 s | 0 | 14.2 s | 109.4 s |
+| three-options | 3 | 34.7 s | 0.4 s | 27.1 s | 4.4 s | 66.6 s |
+| sp-vs-local | 3 | 32.3 s | 0.6 s | 56.1 s | 6.0 s | 95.0 s |
+
+## Node reports: treeview.py and chessai-treeview (2026-11-11)
+
+`leagues/treeview.py MODEL` writes a node-by-node HTML report of a tree or DAG (usage in its docstring; MODEL is
+`EXPERIMENT:LINE@V`, a global `LINE@V`, or `bdt:`/`bdd:PATH`). It generalises models/from-scratch/leafview.
+- Exact numbers come from `models/from-scratch/bin/chessai-treeview`, a new binary (no league uses it), built from
+  `models/from-scratch/fastbin/treeview-src` (chessai-errdag3's source plus three commands; `nice -n 15 cargo build
+  --release -j 2`, installed by copy and rename):
+  - `node-dump MODEL OUT GAMES... [--use-probs] [--leaf-odds] [--routes-stdout]`: `OUT/model.json` (every node:
+    kind, children, classifier text, counters, window means, sibling sets, path tables) and `OUT/games.tsv`; per
+    position its game, ply, result, features, router hops with their scores, leaf, probabilities and (with
+    --leaf-odds) every leaf's log-odds, to `OUT/routes.tsv` or, with --routes-stdout, to stdout (treeview.py streams
+    it; nothing per position is kept). Checked against `eval-loss`: same leaves, same log-loss.
+  - `node-history OUT MODEL...`: one JSON line per model, without classifier texts (window history, node dating).
+  - `path-stats` now also reads round directories of game directories (identical output on merged copies).
+- The cache, `models/from-scratch/treeview-cache/`: `games/` (hard-linked snapshots of the leagues' rounds, reused for
+  two hours), `slots/` (per model directory: model.json, games.tsv, the dump's stderr; rewritten each run), `hist/`
+  (one small JSON per model version read), `pages/` (the dashboard's reports). `dumps/` (2.6 GB) and `parts/`
+  (168 MB) are from the first version and unused: safe to delete.
+- Window standard errors are not in model files. For a DAG's routers the report estimates how close a window came to
+  a router split from the line's latest `.state` (the SE of each router's last window, taken for all its windows),
+  as models/from-scratch/errdag/trigger/closeness.py does; it agrees with it (z=160 #1 of error-dag-p1: t 157.0).
+- Runtime: 4-10 s per model on ~200k positions, about 1.3 cores (the model's and the flat model's dumps stream
+  into one Python process).
+
+## Observers (2026-11-12 ~10:10-10:55)
+
+The user, ~10:15: "use the games generated from uniform fields to train models of other types but not have them
+participate in the field, so that we can later test their strengths in arenas. Maybe we can call these
+'observers'"; "it would be nice to at least be able to define the experiment observers during experiment
+definition" (no keep-all-games feature). An experiment spec's `"observers"` (FORMATS.md: config.json, state.json,
+lines.csv, totals.csv, observers.csv, index.json, Changes) lists model entries, as `models` does. Each observer
+trains every cycle, after the participants, on exactly the local set, from its previous version, with its recipe's
+binary and arguments and its own seed offset. It never plays, isn't rated or calibrated, is never crowned and counts
+nowhere participants are counted. Versions follow the participants' cycles (v = trained on cycles 1 to v).
+
+Files (backups `*.before-observers` beside each; the patch scripts and tests in models/from-scratch/observers-build/):
+
+| File | Before | After |
+|---|---|---|
+| leagues/leagues.py | f20818ff... | a5afab4c... (10:23), a5d6c96a... (10:36: the "train-observer" fault point and observers_test), a1801c9e... (10:41:12: the test's field check) |
+| leagues/dashboard.py | 7bd7619e... | 48b33c2e... |
+| leagues/treeview.py | 5459d854... | f54a0d66... (the report's field without the observers, listed apart) |
+| leagues/FORMATS.md | a5ada731... | c5b792d3... |
+| leagues/DASHBOARD.md | 07490b63... | f3c75261... |
+| leagues/specs/batch6/treeonly-p1.json | (old copy: observers-build/treeonly-p1.json.before-observers) | 9140e086... (observers F-P x2, the 6.78 description) |
+| leagues/specs/batch6/fponly-p1.json | new | 9be937ae... |
+
+Every swap of leagues.py was atomic (a temp file beside it, compiled, then renamed): treeonly-p1 and fponly-p1
+reload it each cycle. a5afab4c... is kept as observers-build/leagues.py.a5afab4c.
+
+Driver (leagues.py): `observers_option` (make_config, last), `observer_lines`, `observers_in_cycle`,
+`new_line_state(lc)` (status `observer`), phase_calibration makes an observer's version 0, phase_train's `one_obs`
+after the participants (`current.observed`), apply_decisions versions them, phase_records writes observers.csv,
+totals.csv's `observers, observer_train_cpu_s` and the report's Observers line; lines.csv leaves an observer's
+champion empty; the index and `status` count observers apart. `needed_prices` skips them. MEASURED gains
+`observer_train_cpu_s`; snapshot reads observers.csv.
+
+Tests:
+- No key, nothing changes: probit-f10-p1's own spec (created and run by f20818ff...) re-created in a scratch root on
+  the new file, pinned to hybrid6 as the real run was, 3 cycles (observers-build/repro_test.py): its 4,608 games (72
+  rounds), the cycles, history, rounds, self_games, events and totals rows of cycles 1-3 with their ratings, config.json
+  (but created and root) and 24 model and state files of versions 0-3: byte for byte.
+- With observers, the participants are untouched: scratch experiment o (T-P-Ne capped x2, ply 1, self-games) with and
+  without observers F-P x2 and T-P-Ne capped x2, 3 cycles: the participants' games, ratings, models and records
+  equal (lines.csv and state without the observer rows, totals.csv without the observer columns); the T-P-Ne
+  observers #1 and #2 hold participants #1 and #2's bdt0-2.model and bdt2.state byte for byte; no observer in
+  players.txt, games.csv, self_games.csv, entries.csv, history.csv, cycles.csv or owncal/.
+- The selftest's observers_test (run by `selftest` without --quick): the same, plus a run interrupted 8 times
+  (cycle 1: tournament, train-observer; cycle 2: tournament-partial, self-games-partial, train-one, train-observer,
+  records-half; cycle 3: records-half) equal to the straight run, reports too; observers.csv against cycles.csv;
+  totals.csv's field and rounds the participants'; create refuses observers in the global league, without the local
+  option, with a warm start, given twice and as an empty list. The full selftest on the final file (a1801c9e..., 10:41-10:52, nice 15, --dir models/from-scratch/observers-build/selftest): 213 rule checks and all 12 runs passed; observers_test: 22 items equal with and without observers, 34 equal straight and interrupted, reports too, CPU 12 s. The quick selftest had passed on a5afab4c... (213 rule checks).
+- The runs, every cycle so far: each observer training on exactly the participants' set (treeonly-p1 226 of 226
+  through cycle 113, fponly-p1 282 of 282 through cycle 141), versions on by one, no observer name in players.txt,
+  games.csv, self_games.csv, entries.csv, history.csv, cycles.csv or events.csv.
+- Arenas: a scratch arena (observers-build/arena/obs-accept; v60 of an F-P observer of treeonly-p1, a T-P-Ne
+  observer of fponly-p1 and a participant of each, ply 1, 2 round-robins, no shared own-games cache) created, played
+  and checked: "calibrations: 2 identical to their experiment's; 2 without a record to compare" (the observers:
+  their experiment never calibrates them). make_split_read.py's tags take observers like any line (`^F-P` in
+  treeonly-p1 gives F-P#1.obs and F-P#2.obs as tag60.L1@60, tag60.L2@60); a tag that matches a participant and an
+  observer of the same replicate stops on its duplicate-name assert, so give each role its own tag (`\.loc`,
+  `\.obs`).
+- Dashboard: pages without observers render as before (probit-f10-p1, the global league and the arenas: the same
+  HTML body, filter factors, colour-by, items but the new role value, and charts); with observers every panel
+  renders; served on a test port, then the dashboard on port 8766 was restarted at 10:48:45 (pid 3209581; the old
+  pid 2476120, started 11-11 15:40). treeview.py on an observer tree (fponly-p1) and a participant tree (treeonly-p1)
+  says which lines are the field and which observe.
+
+The runs (spec analyst 6.78; launched by repeat.sh each, after train_binary.py pinned chessai-hybrid6 on every
+line, observers included):
+- treeonly-p1: created 10:12:12 without observers; F-P x2 added before cycle 1 at 10:25:07 by
+  observers-build/add_observers.py (refuses a league past cycle 0; checks the spec's participants and other keys
+  equal the league's; config/state/lines copies before it in observers-build/treeonly-p1-before/); launched 10:25:17
+  (repeat pid 3189520).
+- fponly-p1: created with observers T-P-Ne capped x2 at 10:25:32; launched 10:25:54 (repeat pid 3190145).
+- Observers get no self-games, and nothing tops that up: the participants' self-games are 25% of cycle 1's set (192
+  of 768 games, 4 entries) and 12.5% from cycle 2 (224 of 1,792, 8 entries), in games and in positions alike; a
+  line's own are about 3%.
+- Cost so far: treeonly-p1's F-P observers 46 CPU-s through cycle 113 (the trees' training 515); fponly-p1's tree
+  observers 402 CPU-s through cycle 141 (the F-P lines' training 129).
+
+Not changed: leagues/library/build_index.py (the library fork's) reads config.json's lines, so its `field_of`
+counts observers as field members (treeonly-p1 would read "T-P-Ne... x4, F-P x2", mixed); skipping lines with
+`"observer": true` there fixes it. Its observer rows have line_status `observer` and no cycles.csv training count
+(theirs is in observers.csv).
+
+Busy-wait false alarms (10:58:57, leagues.py a1801c9e... to c385ee34..., observers-build/patch_leagues4.py; timing
+only): every experiment's driver.log has "waiting for pid N, still working in this league" right after "training N
+lines" (656 times across the experiments so far, ~8% of cycles, 30 s each; the observer runs log their "training 2
+observers" line before the participants train, so it showed there too). run_measured registers a child in CHILDREN
+just after Popen returns, so a parallel thread's league_busy scan could take a sibling's training process for a
+foreign one. wait_not_busy now looks again 1 s later before waiting: a sibling's child is registered or gone by then,
+a foreign process is still there (tested with a fake chessai process: one that ends within the second gives no wait,
+one that stays is waited for after the second look; observers-build/busytest/).
+
+## Cold games (2026-11-12 ~11:00-11:30)
+
+The user's decision at 10:54, on the in-run rating bias (T 0.1 in-run ratings under-rate trees by 30-150): "let's
+see how the addition of the T 0.02 games affects the model strengths (we can run some uniform ply1 tests) if it
+doesn't affect the strength negatively let's add this T 0.02 games into training if not, fine let's run a small
+number of additional games to compute the actual experiment ratings". An experiment spec's `"cold_games":
+{"temperature": T, "share": S, "train": true|false}` (FORMATS.md: config.json, state.json, totals.csv, cold_rounds.csv
+and cold/, index.json, Changes) adds a cold-games phase after the tournament: the field plays R = round(S x
+games_per_cycle / (N (N - 1))) extra double round-robins (halves up, 1 to 48) at temperature T in cold/, seed the
+league's plus 2000003, the tournament's flags and policy otherwise. The in-run ratings are the cold games' fit alone
+(league_ratings and the champion test's SE read cold/: rating_tour), so every decision (champion test, crownings,
+plateau rule, the field) runs on them; tour/ keeps the round-robins and their fit, which decide nothing. With train
+true the cycle's cold games join the shared local set after the round-robin games and self-games, so every line and
+every observer trains on them; with false they rate only. Not built with self-play or global lines, replay, frozen
+references, or without games_per_cycle (create and run refuse them).
+
+Files (backups `*.before-coldgames` beside each; the patch scripts and tests in models/from-scratch/coldgames-build/):
+
+| File | Before | After |
+|---|---|---|
+| leagues/leagues.py | c385ee34... | 8f5cb216... (11:29:15) |
+| leagues/dashboard.py | 48b33c2e... | edf1f355... |
+| leagues/FORMATS.md | c5b792d3... | e535504b... |
+| leagues/DASHBOARD.md | f3c75261... | 38e4c3bd... |
+| leagues/BUILD.md | a0b58b90... | this section |
+| leagues/specs/batch6/treeonly-p1-coldtrain.json, -coldrate.json | new | afcaf72d..., 8ba6924d... |
+| leagues/specs/batch6/fponly-p1-coldtrain.json, -coldrate.json | new | 4a1de804..., b841e015... |
+
+Also in this build (the coordinator's small items, 11:0x): leagues/library/build_index.py 5a8d94cb... to f8f1e1ee...
+(`field_of` skips observer lines, so treeonly-p1 reads "T-P-Ne... x4"; backup build_index.py.before-observers) and
+leagues/treeview.py f54a0d66... to f895a19b... (TOOL_VERSION 3 to 4, so the node pages cached before the observers'
+field text rebuild; the dashboard reads it at each request).
+
+Driver (leagues.py): COLD_* constants and COLD_TOTALS_FIELDS; `cold_games_option` (make_config, after observers),
+`cold_games_of`, `cold_rounds_for`, `cold_flags`, `rating_tour`; `phase_cold` (phase `cold-games`, after the
+tournament; fault point `cold-games-partial`); `write_players` and `clean_partial` take a directory; `league_ratings`
+and phase_decide's `contrast_ses` read `rating_tour`; phase_train appends the cold games to the local set with train
+(links `1000000 + t`, after the rest; the set's data CPU and price include them; `current.cold.in_local`);
+phase_records writes cold_rounds.csv and the cold totals and removes coldpool/; the report's Cold games line and CPU
+lines; the index's `cold_games`; `run` checks the key; `snapshot` takes the cold files; MEASURED gains `cold_cpu_s`,
+`cold_proc_cpu_s`, `cold_wall_s`.
+
+Tests:
+- No key, nothing changes: probit-f10-p1's own spec re-created on the new file, pinned to hybrid6 as the real run,
+  3 cycles (coldgames-build/repro_test.py): 57 items byte for byte (its 4,608 games in 72 rounds, the cycles,
+  history, rounds, self_games, events and totals rows of cycles 1-3 with their ratings, config.json but created and
+  root, 24 model and state files of versions 0-3).
+- The selftest's 5 new rule checks (cold rounds incl. halves up, the cap and the floor, the share read as its decimal;
+  the cold flags; the phase order; the rating directory) and cold_games_test (`selftest` without --quick): a scratch
+  experiment (T-P-Ne capped x2 at ply 1, an F-P observer, self-games, games_per_cycle 45, 3 cycles) without the key,
+  rating only, and training on them straight and interrupted 7 times. Rating only plays and trains as without the key
+  through cycle 2 (round-robins, self-games, versions 0-2 of both lines and the observer byte for byte); training on
+  them, cycle 1's round-robins and cold games are the rating-only run's, and the lines and the observer train on its
+  set plus the cold games (cycle 1: 92 + 12 games); straight and interrupted equal (31 items, reports too); the
+  in-run Elo (history.csv) is cold/'s fit with the key and tour/'s without; cold rounds per cycle as planned
+  (6, 1, 1); coldpool/ gone after every cycle; create refuses 8 bad specs (global, no games_per_cycle, self-play
+  lines, replay, a key missing, share 0, temperature as text, train as text). The full selftest on the final file (11:20-11:28, nice 15, --dir models/from-scratch/coldgames-build/selftest): 217 rule checks and all 13 runs passed.
+- Dashboard: leagues without cold games render byte for byte as before (the cold test's root without the key, and
+  live pages differing only in live data); with them the heading, the Elo and Standings notes, Home's lines cell,
+  the CPU tile and the Cycles panel's Cold games and Cold CPU columns and stack show which games rate. The dashboard on port 8766 was restarted at 11:29:30 (pid 3245237; the old pid 3209581 killed after checking its arguments and directory).
+
+The runs (analyst 6.82; twins of the uniform ply-1 controls, each its control's config but name, cycles 300 for 400,
+and cold_games {0.02, 0.25, train}; plateau scaled K 35 from cycle 300, so each runs exactly 300 cycles and its last
+version is v299; created 11:29:46-11:29:48 and pinned to chessai-hybrid6 by specs/ply1/train_binary.py, observers'
+lines included):
+- treeonly-p1-coldtrain and treeonly-p1-coldrate (seed 59; T-P-Ne capped x4, F-P x2 observers): launched 11:29:54
+  (repeat pids 3245573 and 3245575) by models/from-scratch/coldgames-build/launch_twins.sh (pid 3245569), which then
+  starts fponly-p1-coldtrain and fponly-p1-coldrate (seed 60; F-P x4, T-P-Ne capped x2 observers) when both have
+  finished (if both are done), so at most two twins run at once; after each pair's cycle 1 it runs cycle1_check.py
+  and when a pair ends twins_log.py (crownings, the plateau window's cut cycles, the first cycle whose decisions
+  differ from the control's), both appending to coldgames-build/twins-log.md.
+- Cycle 1 (11:30:14): both treeonly twins' round-robins identical to treeonly-p1's (576 games in rounds 0-47, md5
+  038c0e90... for the header and rows in both), self-games identical (192); coldrate's version 1 of all 6 lines
+  (observers too) byte for byte treeonly-p1's (the same training set); coldtrain's different (the cold games trained
+  it); the twins' cycle-1 cold games identical to each other (396 in 33 rounds, md5 a42c52ea...).
+
+## Train filter and top-up (2026-11-12 ~11:40-12:35)
+
+The user's Elo-filtered multi-kind experiment (the coordinator's relay, ~11:11; analyst 6.85 (b)): the old global
+league's training rule as an experiment, for insight. Build and draft only; nothing was launched. An experiment
+spec's `"train_filter": {"margin": M}` (FORMATS.md: config.json, state.json, cycles.csv, totals.csv, topuppool/,
+index.json, Changes): in each cycle that trains, line L trains only on the local set's games whose players are all
+rated at or above R_L - M, R_L the cold Elo of L's current version in the cycle's fit (decide's `filter_floor`);
+L's own self-games always. Needs cold_games; refused with observers or reference_window. `"self_games_topup": true`
+(needs train_filter and self_games): each line the filter cut plays k = min(games_per_cycle, U - K) top-up games,
+its current version against its champion (colours alternating; against its twin when it crowned this cycle or its
+champion is below its floor), training only, so its set returns to the local set's size U. Crowning SE: the
+existing `champion_se` (default 2.0 unchanged; a spec's "champion_se": 2.5), no code.
+
+Files (backups `*.before-filter` beside each; the patch scripts and tests in models/from-scratch/filter-build/):
+
+| File | Before | After |
+|---|---|---|
+| leagues/leagues.py | 8f5cb216... | 6f801ac3... (12:26:58) |
+| leagues/FORMATS.md | e535504b... | 25298164... |
+| leagues/BUILD.md | 21d24db1... | this section |
+| leagues/dashboard.py | 7d964fb7... | unchanged: the patch is ready, not applied (below) |
+| leagues/specs/global/filtered-p1.DRAFT.json, filtered-p1-twin.DRAFT.json | new | cbae9412..., 2cb2eff8... |
+
+Driver (leagues.py, filter-build/patch_filter.py: 22 anchored edits plus the test): TOPUP_* constants,
+FILTER_CYCLES_FIELDS, FILTER_TOTALS_FIELDS, TOPUP_GAMES_FIELDS; `train_filter_option`/`train_filter_of` and
+`self_games_topup_option`/`topup_of` (make_config, after cold_games; `run` checks both); decide's `filter_floor`; a
+new section: `filter_keeps` (the rule for one game), `local_set_games`, `train_filter_costs`, `train_filter_plan`
+(the cut, once a cycle, in `current.train_filter`, logged), `phase_topup` (phase `topup-games` after the
+self-games; one replay-games run, seed the league's plus 3000017, t = c x 10,000,000 + i; fault point
+`topup-partial`), `train_filter_sets` (phase_train: an own set trainsets/<line> for each line cut or topped up;
+the others keep the shared set), `filter_cycle_columns`, `train_filter_report_line`; `build_set` names a 5-tuple's
+link `<t>~<white>~<black>~<j>` (4-tuples as before); phase_records' columns and topuppool/ cleanup; the report's
+Train filter line and its CPU lines; the index's `train_filter` and `self_games_topup`; MEASURED gains
+`topup_proc_cpu_s`, `topup_wall_s`.
+
+Readings and choices (for the user):
+- "Self-games are always kept": read as L's OWN self-games (its current version's and its champion's) always;
+  another line's self-game, whose one player is that line's entry, follows the rule (6.85's rule: every player at
+  or above the floor). One line in `filter_keeps` if every self-game should be kept.
+- The top-up formula: k = min(games_per_cycle, U - K), counted in games. Plies per game differ by under ~3%
+  between pairing classes, so this matches positions to within ~3%, and games are known before play (positions
+  only after). The analyst's "(1 - kept share) x U" is the same number. The cap binds when K < U - games_per_cycle:
+  in the draft U = 2,160 with cold train (1,620 round-robin games, 180 self-games, 360 cold), so a line keeping
+  under 576 (the top line, ~80: its own games and self-games) trains on ~1,664 against the others' 2,160; without
+  cold train U = 1,800 and it binds under 216. No better formula found; the cap is the coordinator's.
+- The opponent: the champion as decided this cycle (the game a line's self-play would have), or the twin when that
+  champion is the current version or is under the line's floor (so every top-up game passes the filter).
+- R_L is noisy: a current version's cold rating rests on its cycle's cold games (98 in the running twins, ci95
+  ~109; 72 in the draft's 10-entry field, ci95 ~125), so the floor moves by about the margin from cycle to cycle and
+  entries near it flip in and out. The analyst's "m = 50, about 1.5 SE of a ~100-game cold set" assumed SE ~33.
+  Replayed on real records (filter-build/sim/kept_share.py and kept_dist.py: margin 50 on each cycle's ratings,
+  history.csv, and its games): treeonly-p1-coldtrain's last 40 cycles (uniform trees, cold ratings) keep 67-85% a
+  line on average, but each line swings between 100% and under 50% (quartiles 0.38-0.76 / 0.76-1.00 / 1.00; 4-12
+  cycles of 40 under half), so in a uniform field the cut follows the noise; probit-f10-p1's last 40 (F-P and capped
+  trees, T 0.1 ratings, which compress the kind gap) keep 89-100%.
+- End rule (confirmed in the code): experiments never retire (decide's `retire` is false); a run ends at the
+  plateau (no crowning for K cycles from min_cycles, K = round(50 x sqrt(2 / lines)): 32 for 5 lines, 29 for 6) or
+  at the cap; with cold_games every decision (crownings at champion_se, the plateau) is on the cold fit.
+- Rating history (6.84 (2), 6.85 (c)): it does grow superlinearly, but stays bounded at the cap. tour/
+  elo_history.csv gets a row per player ever rated after every round (quadratic in cycles: 789 MB at treeonly-p1's
+  cycle 400, 8 entries and 28 rounds a cycle); the draft's run would reach ~1.4 GB (tour) plus ~0.3 GB (cold) at
+  cycle 600 (588 GB free). Nothing in leagues/ reads it. The fits run over all games (hybrid17 appends to
+  elo_history via its fast path), so their CPU grows linearly per cycle: treeonly-p1 0.75 to 2.66 CPU-s a cycle by
+  cycle 400, probit-f10-p1 1.5 to 2.6 by 338; contrast_ses 0.56 s at 1,600 entries. At 600 cycles that is ~3 CPU-s
+  of a ~23-27 CPU-s cycle, ~0.2 CPU-h extra over the run. No window was built: a real one needs the binary (rs/),
+  and trimming elo_history.csv from the driver would break the binary's fast path (key mtime and counts), making it
+  rewrite the history every round, which is worse.
+
+Tests:
+- No key, nothing changes: three running or finished experiments re-created from their own specs on the new file,
+  pinned to hybrid6 as the real runs, 3 cycles each (filter-build/repro_test.py), byte for byte against the real
+  runs: treeonly-p1-coldtrain (61 items: 4,892 games of tour/ and cold/, 24 model and state files, config.json but
+  created and root, the cycles, history, rounds, self_games, events, totals, observers and cold_rounds rows with
+  their ratings), treeonly-p1-coldrate (61 items, 4,892 games) and probit-f10-p1 (57 items, 4,608 games).
+- The selftest's 4 new rule checks (filter_keeps; train_filter_of's 10 refusals; topup_of's 5; the phase order with
+  and without the top-up) and train_filter_test (`selftest` without --quick; filter-build/ft1.out, 31 CPU-s):
+  experiment k (F-L, F-P, a capped T-P-Ne; ply 1, games_per_cycle 45, cold games T 0.02 share 0.25 with train, 4
+  cycles, seed 61) without the key (c), filtered at margin 0 (f), filtered and topped up straight (g) and
+  interrupted 6 times (h: at cycle 1's top-up start and after its games, after a line's training and in the records
+  of cycle 2, after a line's training in cycle 3, at cycle 4's top-up start), and topped up with cold games that
+  rate only (r). Cycle 1's games are the unfiltered run's; every line's kept set, top-up games and opponent (both
+  kinds seen: champion and self), training games and positions recomputed from the records; g and h the same (33
+  items, reports too); create refuses 9 bad specs. Example (g, cycle 3): F-L kept 44 of 102 and played 45 top-up
+  games against its champion; T-P-Ne kept 4 of 102 and played 45 against itself.
+- The full selftest on the final file (12:05:30-12:26, nice 15, --dir models/from-scratch/filter-build/selftest):
+  221 rule checks and all 14 runs passed (filter-build/selftest-full.out).
+- Dashboard (not applied): filter-build/patch_dashboard_filter.py, 12 anchored edits against dashboard.py
+  7d964fb7... (re-checked 12:23: it applies and compiles). Leagues without the keys render byte for byte as before
+  (the test's root without them: league and home pages identical); with them the heading and Home's lines cell say
+  "filtered", the CPU tile and total include the top-up games, the Cycles panel gets Top-up games and Top-up CPU
+  columns and a stack band, and each line's training tooltip gives its floor, kept share and top-up games. Not
+  applied because another fork changed dashboard.py at 11:54-11:59 (the arena rating views; backup
+  dashboard.py.before-refit): it needs the coordinator's go once dashboard.py is free, then a dashboard restart.
+
+Drafts (leagues/specs/global/, not created; `create` refuses them as they are, since cold_games.train is "TODO"
+until 6.82's twins decide it): filtered-p1.DRAFT.json, the five firm lines of the six (F-L, F-P, T-P-Ne-grow bar
+on, T-P-Ne capped, T-L-Ne capped forget 10; the optional T-L-Ne-grow-f10 is one more models row) at ply 1, seed 63,
+games_per_cycle 1584, self-games, cold_games {0.02, 0.25, TODO}, train_filter margin 50, self_games_topup,
+champion_se 2.5, plateau scaled (K 32) from 300, cap 600, hybrid17 games, hybrid6 training after create (the grow
+line keeps chessai-grow4); filtered-p1-twin.DRAFT.json, the same without train_filter and self_games_topup (the
+analyst's control; whether to run it is the user's call). Both created cleanly in a scratch root with train true
+and false (and the six-line variant: K 29, T-L-Ne-grow-f10 on chessai-grow5); train_binary.py --check: 4 of 5 lines
+to hybrid6. The descriptions carry 6.85's predictions.
+
+Cost to expect (the running ply-1 twins' and probit-f10-p1's measured rates): the twin ~10 CPU-s a cycle early to
+~17-20 late (own calibrations ~6, training ~7-8.5 for 2 flats and 3 trees on 2,160 games, tournament process ~4,
+cold ~0.8, self-games ~0.4); the filtered run adds ~4,000-5,500 top-up games a cycle at ply 1 (the top line capped
+at 1,584; worst case 7,920), ~6-8 CPU-s, so ~23-27 CPU-s a cycle late. Over 300-600 cycles: filtered ~1.8-4.2
+CPU-h, the twin ~1.2-3 CPU-h. The top-up count rests on the kind gap: on cold ratings the flats should sit more than
+50 under every tree (in-run T 0.1 under-rates trees by 100-150), so each tree line loses at least the two thirds of
+the games that have a flat in them and tops up ~1,400-1,584; a uniform field (the coldtrain replay above) would top
+up ~1,900 a cycle on average (at most 4,752), ~2.5 CPU-s.
+
+## Train filter, 6.87's rule (2026-11-12 ~12:45-13:20)
+
+The analyst's ruling on the first rule's floor noise (6.87, relayed by the coordinator ~12:45; nothing had run with
+the first rule, so the new one is the default; nothing launched). (i) A line's own games always count, whoever the
+opponent; the filter applies only to games between other players, which enter line L's set iff both players'
+smoothed ratings are at or above R_L - m. (ii) Every rating the filter uses is smoothed over k = 5 cycles, m = 50 on
+the smoothed ratings: R_L the mean of the cold Elo of L's last 5 versions, each as rated in its own cycle's fit (this
+cycle's included); another line's current version at its line's R; a champion at the mean of its own last 5 cycles'
+cold Elo. (iii) The top-up stays k = min(games_per_cycle, U - K), K now counting all of L's own games. Spec:
+`"train_filter": {"margin": 50, "smooth": 5}` (`smooth` defaults to 5; FORMATS.md: config.json, state.json,
+cycles.csv, totals.csv, index.json, Changes).
+
+Files (backups `*.before-filter2` beside each; the patch scripts and tests in models/from-scratch/filter-build/):
+
+| File | Before | After |
+|---|---|---|
+| leagues/leagues.py | 6f801ac3... | 05e0ec76... (13:15:12) |
+| leagues/dashboard.py | dc37b78a... (the first rule's patch, applied 12:42:47) | 9cd5695f... (13:15:22, restarted) |
+| leagues/FORMATS.md | 25298164... | 591cf095... |
+| leagues/DASHBOARD.md | 38e4c3bd... | fa4b3348... (a Train filter note; the first rule's display was not in it) |
+| leagues/BUILD.md | ae57b90b... | this section |
+| leagues/specs/global/filtered-p1.DRAFT.json | cbae9412... | e86bb5af... (train_filter {"margin": 50, "smooth": 5}; description) |
+| leagues/specs/global/filtered-p1-twin.DRAFT.json | 2cb2eff8... | unchanged, as asked |
+
+Driver (leagues.py, filter-build/patch_filter2.py: 13 anchored edits plus the test): TRAIN_FILTER_SMOOTH_DEFAULT
+(5); `train_filter_option` writes `{"margin", "smooth"}` into config.json; `train_filter_of` accepts `smooth` (a
+whole number from 1) and `train_filter_smooth` reads it; `filter_keeps(g, low, own)`: a game one of the line's
+entries plays always, any other when neither player is in `low`; `smoothed_ratings` (the means, pure) and
+`train_filter_ratings` (in decide: this cycle's fit rounded to 0.1 as the records keep it, the earlier cycles from
+cycles.csv's `elo2` and history.csv's `elo`; sets the decisions' `filter_rating` and `filter_floor` and
+`current.filter_smoothed`); `train_filter_plan` cuts on the smoothed ratings, records `smooth`, `rating` and
+`own_games`, and its opponent rule drops the "champion below the floor" clause; FILTER_CYCLES_FIELDS gains
+`filter_rating` and `filter_own_games`, FILTER_TOTALS_FIELDS `filter_smooth`; the log and report lines name the
+smoothing, each line's rating and its own games.
+
+Readings and choices (for the user):
+- Built as ruled, from the records: R_L from cycles.csv's `elo2` of L's rows in the last k - 1 cycles plus this
+  cycle's fit; a champion from history.csv's `elo`. This cycle's values are rounded to 0.1 as the records keep them,
+  so the cut can be recomputed from the records alone (the test does). The cold fit's zero is a fixed entry
+  (rating_zero), so means across fits are on one scale.
+- What the fit's structure suggests: the cold fit is cumulative, so a champion's rating in the current fit already
+  pools all its games, and averaging its last 5 fits barely moves it (|5-fit mean - current fit|, median 0.3 Elo in
+  treeonly-p1-coldtrain's cycles 263-300 and 3.7 in fponly-p1-coldtrain's 12-49; filter-build/sim/
+  champ_smooth_gap.py). The smoothing that matters is the line's: a current version is rated on its own cycle's
+  ~72-98 cold games, and the 5-version mean moves it by a median 14.5 (treeonly) to 38 Elo (fponly), lagging an
+  improving line by ~2 cycles. A champion could simply take its current fit's rating; no visible difference.
+- Own = every field entry of the line this cycle (its current version and its champion; one entry when it is its
+  own champion); their games always count, self-games included.
+- The top-up's opponent: the champion, or the twin when the champion is the current version. The first rule's
+  "champion below the floor" clause is gone: every top-up game is the line's own and kept anyway.
+- An unrated current version with rated earlier versions still gets a rating (the mean of the rated ones); nothing
+  is cut only while none of the last k is rated.
+- The cap: K is at least the line's own games, ~36% of U in the draft's 10-entry field, so k stays under ~1,380 <
+  1,584; it can bind only in a cycle where a line is its own champion (9 entries, own ~22%) and keeps under ~27%.
+
+Tests:
+- No key, nothing changes: the three experiments re-created from their own specs on the new file and run 3 cycles
+  each (filter-build/repro_test2.py, fresh repro2/ roots), byte for byte against the real runs: treeonly-p1-coldtrain
+  (61 items, 4,892 games), treeonly-p1-coldrate (61 items, 4,892 games), probit-f10-p1 (57 items, 4,608 games).
+- The selftest's rule checks: filter_keeps' new cases (own games against a below-floor player kept), smoothed_ratings
+  (k 3 with gaps and unrated cycles; k 1), train_filter_of's refusals of `smooth` 0, 2.5, true, "5" and a missing
+  margin, train_filter_option's default. train_filter_test rewritten (filter-build/filter_test2.py.txt): experiment
+  k (F-L, F-P, a capped T-P-Ne; ply 1, games_per_cycle 45, cold T 0.02 share 0.25, 4 cycles, seed 61) without the
+  key (c), filtered at margin 0 smoothed over 5 (f), over 2 and topped up straight (g) and interrupted 6 times (h),
+  and topped up with cold games that rate only (r); every line's smoothed rating and floor, own games, kept set,
+  top-up games and opponent recomputed from the records and checked against the filter columns; g and h the same
+  (33 items, reports too); create refuses 10 bad specs; 21 cut sets kept some of the others' games (the rule is not
+  vacuous). The full selftest on the final file passed (222 rule checks, 14 runs; filter-build/
+  f2-selftest.out).
+- Dashboard (filter-build/dash2/patch_dashboard_filter2.py, 4 edits): the heading's and Home's text of the rule, each
+  line's training tooltip with its smoothed rating, floor and own games. Leagues without the key render byte for byte
+  as before (the test's unfiltered league; the frozen root's treeonly-p1-coldtrain, probit-f10-p1 and ladder-1
+  pages; Home the same once its "N min ago" times are masked).
+- The draft: created cleanly in scratch roots with cold_games.train true and false; "TODO" refused, as meant.
+
+Expected kept shares (filter-build/sim/kept_share2.py: the new rule replayed on real records, margin 50; a line's
+mean kept share over the cycles, and top-up games a cycle summed over the lines, k = min(1584, U - K)):
+
+| Run (cycles) | smooth 5 | smooth 1 | top-up a cycle, smooth 5 / 1 |
+|---|---|---|---|
+| treeonly-p1-coldtrain (261-300; 4 tree lines, cold) | 96-100% | 87-99% | ~110 / ~670 |
+| fponly-p1-coldtrain (9-46; 4 F-P lines, cold) | 96-98% | 78-82% | ~250 / ~1,680 |
+| probit-f10-p1 (last 40; F-P and capped trees, T 0.1) | ~100% | | ~11 |
+
+The first rule, for comparison: treeonly-p1-coldtrain 67-85% a line, ~1,900 top-up games a cycle. Own games are 44%
+of these 8-entry fields' sets, so a line's worst cycle still keeps 57% (smooth 5).
+
+The draft's mixed field (5 lines, 10 entries; U 2,160 with cold train: 1,620 round-robin games, 180 self-games, 360
+cold): a line's own games are ~36% of U (34 of each round's 90 games, 2 of its 10 self-games). If the trees sit more
+than 50 above the flats on cold ratings (likely: in-run T 0.1 bunches the kinds within ~15-35 Elo and under-rates
+trees by ~100-150), each tree line keeps its own games plus those among the other trees (~52%; ~36-40% for a tree
+also more than 50 above the other trees) and tops up ~1,040-1,380; the flats see the trees above them and keep
+nearly all. So ~3,100-4,000 top-up games a cycle. If the kinds sit within 50, ~100-700.
+
+Cost: ply-1 replay-games cost ~1.8-2.5 ms CPU a game (the running ply-1 experiments' self-games, last 40 cycles), so
+the top-up adds ~6-9 CPU-s a cycle in the kind-gap case (~0.2-1.5 without it), on the twin's ~10 CPU-s a cycle early
+to ~17-20 late: ~24-29 CPU-s a cycle late, ~2-4.5 CPU-h over 300-600 cycles (the twin ~1.2-3).
+
+## Train filter, the user's SE rule (2026-11-12 ~13:30-14:03)
+
+The user's ruling (13:22-13:24, relayed by the coordinator; supersedes analyst 6.87; nothing had run with the
+filter): "You should cut a model's own games against significantly weaker opponents. I don't think we should use an
+averaged rating, instead we should just play more games per round so that the standard error is lower", then "both
+players need to be at least the current model's strength - standard error based on last round" (the global league's
+qualify rule). Built: line L's floor is R_L - SE_L, R_L its CURRENT version's cold Elo in this cycle's fit, SE_L that
+rating's standard error in the fit (the fit's 95% interval over 1.96, ratings.csv's ci95: relative to the rated
+players' mean, from its games this cycle); spec `"train_filter": {"margin": "se"}`, numeric margins still a fixed
+Elo. No averaging: `smooth` defaults to 1 (the option stays for numeric margins; "se" refuses smooth > 1). No
+exemption for own games: every game of the local set trains L iff both players are rated at or above the floor
+(unrated players count; L's current version is never below its own floor, so its self-games always pass). Top-up:
+k = min(games_per_cycle, U - K), against the champion if it is at or above the floor, else against the twin (the
+first build's rule). Drafts: filtered-p1 `{"margin": "se"}`, both drafts cold share 1.0 (the coordinator, for a
+lower SE), cold train still "TODO", both descriptions rewritten (the rule, the share, kept shares and cost below).
+
+Files (backups `*.before-filter3` beside each; patch scripts, tests and replays in
+models/from-scratch/filter-build/r3/ and sim/):
+
+| File | Before | After |
+|---|---|---|
+| leagues/leagues.py | 05e0ec76... | 8748a886... (14:02:33) |
+| leagues/dashboard.py | 2c25e594... (the ladder fork's, 13:28:39) | f9ea60b0... (14:02:42, restarted) |
+| leagues/FORMATS.md | 591cf095... | 485445bb... |
+| leagues/DASHBOARD.md | 3e3259cc... | c2e0f5d4... (the Train filter note) |
+| leagues/BUILD.md | 54b3c031... | this section |
+| leagues/specs/global/filtered-p1.DRAFT.json | 9f42c610... (the coordinator's 13:21) | 19647061... |
+| leagues/specs/global/filtered-p1-twin.DRAFT.json | 4269df93... (the coordinator's 13:21) | f33c4dd5... |
+
+Driver (r3/patch_filter3.py: 17 anchored edits plus the test): TRAIN_FILTER_SMOOTH_DEFAULT 1, TRAIN_FILTER_SE;
+`train_filter_of` accepts "se" (refused with smooth > 1); `filter_keeps(g, low)` without the own-games exemption;
+`filter_floor(m, rating, se)`; `filter_rule_text`; `train_filter_ratings` reads each current version's SE from the
+fit's ratings (decisions' `filter_se`), `current.filter_ratings` (was `filter_smoothed`); `train_filter_plan`
+records `se` and `own_kept`, its `below` includes the line's own champion, and its opponent is the twin when the
+champion is below the floor; cycles.csv gains `filter_se` and `filter_own_kept`; totals.csv's `filter_margin` is
+"se" or the Elo; the log and report lines give each line's rating, SE, floor and own games kept.
+
+Readings and choices (for the user):
+- SE_L is the binary's: ratings.csv's ci95 over 1.96, the error relative to the rated players' mean in the cycle's
+  cold fit (its cold games this cycle). R_L is taken at the records' 0.1 Elo and SE_L from the same ci95 history.csv
+  keeps, so every cut can be recomputed from the records (the test does).
+- "se" with smooth > 1 is refused: an averaged rating has no SE of its own in the fit. `smooth` stays for numeric
+  margins only (`{"margin": 50, "smooth": 5}` is 6.87's floor, but without its own-games exemption).
+- No exemption means L's games against its own champion are cut when the champion is below L's floor, the
+  champion's self-games too; L's current version is never below its own floor, so its self-games always count.
+- The top-up's opponent is the champion only while it is at or above the floor, else the twin, so every top-up game
+  passes L's filter (the first build's rule, which 6.87 had dropped).
+- `filter_se` is recorded with numeric margins too; `filter_own_kept` is new, since own games can now be cut.
+- The SE at share 1.0 in the draft's field is ~22-26 from the measured twins, not ~17: their current versions'
+  median SE (40-47 on 98 games) is ~1.15-1.35 times a binomial count's.
+
+Tests:
+- No key, nothing changes: treeonly-p1-coldtrain (61 items, 4,892 games), treeonly-p1-coldrate (61, 4,892) and
+  probit-f10-p1 (57, 4,608) re-created and run 3 cycles on the new file, byte for byte (r3/repro_test3.py).
+- Rule checks (223): the rule without exemption (an own game against a below-floor player cut, a below-floor
+  champion's self-game cut), filter_floor ("se", numeric, unrated, no SE), the margin ("se", "SE" and "50" refused,
+  "se" with smooth 2 refused, default smooth 1 written into the config). train_filter_test rewritten
+  (r3/filter_test3.py.txt; 38 CPU-s): experiment k without the key (c), on the SE (f), at margin 0 topped up straight
+  (g) and interrupted 6 times (h), on the SE topped up with cold games that rate only (r), at margin 0 smoothed over
+  2 cycles (s); every line's rating, SE, floor, kept set, own games kept, top-up games and opponent (both kinds seen)
+  recomputed from the records (cycles.csv, history.csv's elo and ci95); its current version's self-games always
+  kept; g = h (33 items, reports too); 12 bad specs refused; 31 sets cut some of their own games, 11 cuts on the SE.
+  The full selftest on the final file passed (223 rule checks, 14 runs; r3/selftest.out).
+- Dashboard (r3/dash/patch_dashboard_filter3.py, 3 edits on 2c25e594): the heading's and Home's text of the rule,
+  each line's tooltip with its rating, SE, floor and own games kept. Pages without the key render as before (the
+  test's unfiltered league; the frozen root's pages; relative "N min ago" times masked).
+- Drafts: both created cleanly in scratch roots with cold train true and false; "TODO" refused, as meant.
+
+Expected kept shares (r3: sim/kept_share3.py replays the rule on the cold twins' last 40 cycles, uniform fields of 4
+lines, 8 entries; the SE as recorded at share 0.25, median 40-47, and halved for share 1.0, the ratings' own noise
+left as it is, so an upper bound on the cut):
+
+| Twin (cycles) | SE as recorded: kept a line (own kept); top-up a cycle | SE halved: kept; top-up |
+|---|---|---|
+| treeonly-p1-coldtrain (261-300) | 77-96% (81-96%); ~1,200 | 54-81%; ~3,000 |
+| treeonly-p1-coldrate (261-300) | 70-85% (72-84%); ~1,640 | 37-64%; ~3,340 |
+| fponly-p1-coldtrain (195-234) | 85-94% (87-96%); ~860 | 65-76%; ~2,540 |
+| fponly-p1-coldrate (213-252) | 85-95% (88-96%); ~710 | 62-79%; ~2,120 |
+
+The draft's mixed field (10 entries, U 1,800 with rating-only cold games): every ordered pair plays equally often
+and every entry its self-games, so a line keeps n²/100 of the set, n the entries rated at or above its floor.
+Simulated (sim/mixed_se_sim.py: line offsets N(0, 15), champions N(10, 17) under their current versions, rating
+noise = SE): at SE 20-24, the trees keep ~20-33% and top up ~1,170-1,400 each if they sit 50-150 above the flats,
+the flats ~80% (~330-410): ~4,300-4,900 top-up games a cycle; ~3,900-4,100 with no kind gap (each line ~55%). With
+cold train (U 3,420) most tree lines would top up the full 1,584.
+
+Cost (measured on the running ply-1 runs: replay-games ~1.8-2.5 ms CPU a game; cold games ~1.2-2 ms each with their
+fit): cold share 1.0 adds ~2-4 CPU-s a cycle over 0.25 (4x the games, a fit growing 4x faster), so the twin runs ~12
+CPU-s a cycle early to ~21-24 late (~1.4-3.6 CPU-h over 300-600 cycles); the top-up adds ~8-12 CPU-s, so the
+filtered run ~20-24 early to ~30-35 late (~2-5 CPU-h).
+
+The SE: ratings.csv's ci95 is 1.96 x the fit's error relative to the rated players' mean (rs/src/tournament.rs). The
+cold twins' current versions (98 cold games each at share 0.25) have a median SE of 40-47, more than the ~35 a
+binomial count gives (draws at T 0.02 and the relative-to-mean error); at share 1.0 in the draft's field (324 games
+an entry) ~22-26.
+
+## Openings (2026-11-12 ~15:05-15:45)
+
+The user (~15:03, relayed by the coordinator): "I'm not sure different opening moves will help but we can test it":
+game variety from random opening plies instead of the temperature, then near-argmax play (T 0.02), so one game set
+could serve both training and fair ratings. Analyst 6.91 set the design: K = 6 plies, uniformly random (not the
+model's softmax), and the opening plies are training positions labelled with the game's result like any other;
+`--opening-temperature` stays an option, unused. Built: the binary chessai-hybrid19 and the experiment option
+`"openings": {"plies": K}` or `{"plies": K, "temperature": T}` (FORMATS.md, config.json). Nothing launched.
+
+Files (backups `*.before-openings` beside each; scripts, tests and measurements in models/from-scratch/openings-build/):
+
+| File | Before | After |
+|---|---|---|
+| models/from-scratch/bin/chessai-hybrid19 | new | f88040dd27273a4f689c8bb368e06270 (15:21:38, cp -n) |
+| leagues/leagues.py | 8748a886... | f7177b40... (15:39:00) |
+| leagues/dashboard.py | f9ea60b0... | 67b32e47... (15:39:05; the server restarted at 15:39:14, pid 3468296; the old pid 3377341 killed after checking its arguments and directory) |
+| leagues/DASHBOARD.md | c2e0f5d4... | 4d0809c0... (the Openings note) |
+| leagues/FORMATS.md | 485445bb... | 6266be1d... |
+| leagues/BUILD.md | 4e4e1bfd... | this section |
+| leagues/specs/batch6/treeonly-p1-open.DRAFT.json | new | 4aeb77f8... |
+| leagues/specs/batch6/fponly-p1-open.DRAFT.json | new | db632887... |
+
+Binary (models/from-scratch/fastbin/hybrid19-src, a copy of hybrid18-src; src/selfplay.rs, src/tournament.rs,
+src/main.rs; Cargo files unchanged; built at nice 19, -j 2): `tournament` and `replay-games` take `--opening-plies K`
+(default 0) and `--opening-temperature T`. selfplay::Opening {plies, temperature}; play_game_opening (play_game is it
+with Opening::NONE); the move choice moved unchanged into choose_move. Ply i < K is `legal_moves()[rng.random_range(0..n)]`
+from the game's own StdRng (derive_seed(seed, t, g), as before), or with T the mover's log-odds softmax at T (its
+model, ply, value and calibration; a random player stays random); later plies are the player's policy from the same
+random-number stream. The opening plies are in the game's moves, positions (so the saved games' training positions),
+movetext, games.csv's plies and the game CPU. tournament::Options.opening reaches the round-robins and the catch-up
+games; replay-games plays its games with the same flags, so it replays a tournament's opening games exactly.
+`--opening-temperature` without `--opening-plies` (or not above 0) is refused.
+
+Identity (against bin/chessai-hybrid18, no opening flags: games.csv, every tour file but tournament.log (game_cpu.csv
+without its CPU column), every saved game, stdout with times masked; openings-build/tour19.py, replay19.py,
+suite.log), 15 of 15 SAME:
+- Tournaments on hybrid18's 12-player identity field (probit trees ×2, F-P ×2, T-L-Ne, LR- and TAN-router trees, a
+  DAG with cells, a cell-less DAG, a 121-node tree, F-L, random) at ply 1 (3 round-robins, 396 games each) and plies 2
+  and 3 (1 round-robin, 132 games), each at T 0.1 and T 0.02; argmax at ply 1; `--opening-plies 0` at ply 2, T 0.02.
+- Self-games (replay-games as phase_selfgames: entries and twins, seed 1000064) at plies 1-3, T 0.1 and T 0.02, and
+  with `--opening-plies 0`.
+- With openings: replay-games replays a tournament's opening games exactly (results, plies and every saved file): plies
+  1, 2 and 3, K 3 and 6, uniform and at T 1 (openrep.py; 4 of 4 SAME). The first moves of 132 opening games: all 20,
+  11 at most.
+- Unit tests: 206 pass (3 new: no opening is play_game; the first K plies are uniform draws from the game's seed and
+  then the player's policy from the same stream, every position encoded; an opening at the player's own softmax and
+  temperature is no opening, a hotter one changes the games).
+
+Driver (leagues.py; openings-build/leagues/patch_openings.py, 10 anchored edits plus the test): `openings_option`
+(make_config, last; refuses the flags in tournament.flags even without the key), `openings_of` (create and run),
+`openings_flags`: `--opening-plies K` (and `--opening-temperature T`) on the round-robins' `tournament` command, the
+self-games' and the top-up games' `replay-games`; never on the cold games (cold_flags is unchanged: the flags are not
+in tournament.flags) or the own calibration games (`arena`). The index's `openings`; the module docstring.
+
+Readings and choices (for the user):
+- The opening plies train (analyst 6.91). Each is labelled with the game's result, like every other position.
+- Top-up games (self_games_topup) open too: they are training games played as the round-robins and self-games are.
+- The cold games never open: they are the rating set (T 0.02 without openings), so an experiment with openings is
+  rated on the same kind of games as one without.
+- The global league is refused (not built: its round-robins are its ratings).
+
+Tests:
+- No key, nothing changes: treeonly-p1-t002 (52 items, 4,892 games), filtered-p1 (58 items, 8,400 games; train
+  filter, top-up and cold share 1.0) and grow-dag-p1 (57 items, 4,608 games) re-created from their own specs on the
+  new file, pinned as their runs were (train_binary.py; filtered-p1 `--from chessai-hybrid4gfx`, grow-dag-p1
+  chessai-grow6), and run 3 cycles: config.json (but created and root), every version 0-3 model and state file, the
+  cycles' games and records with their ratings, byte for byte (openings-build/leagues/repro_open.py, repro.log).
+- The selftest's rule checks (225; 2 new: the flags, none without the key, never in cold_flags; 14 malformed values
+  and the global league refused). openings_test (12 CPU-s): experiment k (T-P-Ne capped ×2, ply 1, T 0.02, rating-only
+  cold games) without openings, with 4 random plies straight and interrupted 5 times (cycle 1: tournament-partial,
+  self-games-partial, train-one; cycle 2: cold-games-partial, records-half), and with them, train_filter at margin 0
+  and top-up games: every round-robin, self-game and top-up command opens, no cold-games or own-calibration command
+  does (nor any of the run without them); cycle 1's cold games and version 0's own calibration results and fits are
+  the run without openings', its round-robins and self-games are not; every line's training positions equal its
+  set's plies (12,675 with openings, 12,165 without: the opening plies train); straight equals interrupted (26 items,
+  reports too); 8 bad specs refused (global, plies 0, plies as text, no plies, an unknown key, temperature 0, an old
+  binary (hybrid17), the flags in tournament.flags). The full selftest on the final file passed (225 rule checks, 15 runs; openings-build/selftest.out).
+- Dashboard (openings-build/dash/patch_dashboard_openings.py, 3 edits): the heading's and Home's text "games open with
+  K random plies (not the cold games)". Pages without the key render as before (treeonly-p1-t002, probit-f10-p1 and an
+  arena identical; Home and filtered-p1 differ only in live data that moved between renders); the draft's pages render
+  the text.
+- Drafts: both created cleanly in scratch roots on the new file; after train_binary.py their configs differ from
+  treeonly-p1-t002's / fponly-p1-t002's only in name, openings and the tournament binary (and created, root).
+
+Measured (openings-build/meas; ply 1, chessai-hybrid19, nice 19, 2 threads). Fields: the coldrate twins' 4 lines at
+v299 and v250 (8 entries, as a late cycle's field), their own calibration games remade as the runs make them and every
+fit checked equal to the one the run logged (26 of 26). A cycle's games: 28 round-robins (1,568 games, seed 59 / 60)
+and 224 self-games. Distinct positions (the saved encoded position after the ply, as training sees it) among the
+round-robin games that reach the ply:
+
+| Field | Games | Ply 8 | Ply 12 | Ply 20 | Plies a game | Game CPU |
+|---|---|---|---|---|---|---|
+| T-P-Ne capped ×4 | T 0.02 | 1,029 of 1,568 (66%) | 1,349 of 1,568 (86%) | 1,532 of 1,565 (98%) | 108.7 | 1.50 ms |
+| | T 0.02, 6 random plies | 1,563 of 1,564 | 1,553 of 1,553 | 1,539 of 1,539 | 106.2 | 1.35 ms (×0.90 a game, ×0.92 a ply) |
+| | T 0.1 | 1,567 of 1,567 | 1,562 of 1,562 | 1,543 of 1,543 | 111.3 | 1.43 ms |
+| F-P ×4 | T 0.02 | 303 of 1,568 (19%) | 659 of 1,566 (42%) | 1,268 of 1,549 (82%) | 97.8 | 0.65 ms |
+| | T 0.02, 6 random plies | 1,562 of 1,563 | 1,557 of 1,557 | 1,531 of 1,531 | 99.7 | 0.69 ms (×1.05 a game, ×1.03 a ply) |
+| | T 0.1 | 1,546 of 1,567 (99%) | 1,557 of 1,557 | 1,531 of 1,531 | 125.3 | 0.82 ms |
+
+The game CPU of T 0.02 with and without openings is ABBA (two runs each, the same games); T 0.1 one run. Self-games (224
+a cycle): at T 0.02 the F-P entries' reach 94, 152 and 201 distinct positions at plies 8, 12 and 20, the trees' 200,
+218 and 223; with openings 216-222 of 216-222. So the cost of openings is the cost of T 0.02 games (±10%), and
+they give T 0.1's variety from ply 8 on.
+
+Elo scale (the analyst's question): field S10, tree line #1 and F-P line #1 of the coldrate twins at v2, v10, v30, v100
+and v299 (10 players, wide strengths), 60 round-robins (5,400 games) per regime, seed 61; maximum-likelihood Elo
+(draws as half points; the binary's fit to 0.05 Elo), centred; slope of one regime's ratings on the other's, 95%
+bootstrap over round-robins (1,000 draws; openings-build/meas/scale.py):
+- T 0.02 with 6 random plies on plain T 0.02: slope **0.927 (0.869-0.991)**, SD ratio 0.934 (0.879-0.999): random
+  openings compress the scale by ~7% (1-13%), less than the analyst's 10-20%. No kind shift: the trees' mean and the
+  F-P's mean move by under 1 Elo.
+- For reference, T 0.1 on plain T 0.02: slope 1.134 (1.063-1.208), with kind-dependent moves (fv100 85 → 174, tv10
+  −44 → −110).
+
+CPU of this build: the binary's builds and tests ~3 CPU-min, the identity suite ~2, the driver's checks (three runs,
+openings_test, selftest) ~6 (the selftest's runs 164 s), the measurements ~2 (all at nice 19).
+
+## Rate every N (2026-11-12 ~15:40-16:30)
+
+The user (~15:10): "We can split cycles into sub-cycles. each sub-cycle is like today's cycle but we don't update
+champions (we still play and train). That way the ratio of training to testing games is increased"; the plateau rule
+has to change with it (the user agreed). Analyst 6.92 and the coordinator made it an experiment option, "rate every N
+cycles". Built: `"rate_every": N` (FORMATS.md, config.json "Rate every N"). Nothing launched; no running experiment's
+config changed.
+
+Files (backups `*.before-rateevery` beside each; scripts, tests and runs in models/from-scratch/rateevery-build/):
+
+| File | Before | After |
+|---|---|---|
+| leagues/leagues.py | f7177b40... | 1ade33c3... (16:25:27) |
+| leagues/dashboard.py | 67b32e47... | f3bf796d... (16:25:27; the server restarted at 16:25:36, pid 3535388; the old pid 3468296 killed after checking its arguments, directory and port) |
+| leagues/FORMATS.md | 6266be1d... | the option, the columns, state.json, Changes |
+| leagues/DASHBOARD.md | 4d0809c0... | the Rate every N note |
+| leagues/BUILD.md | 9e90aea1... | this section |
+
+The rule, and the choices made (for the user):
+- Rated cycles: c with (c - 1) mod N = 0, so 1, N + 1, 2N + 1, ... (cycle 1 crowns the first champions). Only they
+  play the cold games, test champions, crown, check the plateau and, with train_filter, compute floors.
+- The cap must be a rated cycle, so an experiment always ends on one: create and run refuse any other and name the
+  nearest two ("e.g. 9 or 13, not 10"). Refusing, not rounding up, keeps config.json's `cycles` the cycles that run.
+  `plateau.min_cycles` may be any number: the stop comes on the first rated cycle at or after it.
+- Unrated cycles play the round-robins, self-games and top-up games exactly as configured (same flags; openings
+  honoured; the round-robins' own fit in tour/ runs and decides nothing, as with any cold-games experiment) and train
+  every line. No cold games, no champion test, no crowning, no plateau check, no floors. Their decision is
+  `unrated-cycle`; their Elo columns are empty.
+- The plateau: crownings only on rated cycles; the rule stays c - last_crown >= K in training cycles, checked on
+  rated cycles only. A scaled plateau needs `"rate_scale"`: sqrt, linear or none multiply K = round(K2 x sqrt(2 /
+  lines)) by sqrt(N), N or 1 (rounded half up; 4 lines at N 4: 35 becomes 70, 140 or 35). No default: the user
+  hasn't chosen. An explicit `"cycles": K` counts training cycles as given. config.json's plateau records K and its
+  inputs (`scaled`: k2, lines, rate_every, rate_scale).
+- train_filter between rated cycles: the last rated cycle's floors (state.json `rate_carry`). A player rated since
+  then takes its line's last rated rating (and the line its SE and floor); the champions keep theirs (a champion
+  changes only on a rated cycle, where it was rated). The top-up's "champion at or above the floor" check uses the
+  same carried values. smooth above 1 is refused (its means need every cycle's ratings).
+- Refused too: without cold_games; cold games that train (`"train": true`: unrated cycles would have none; not
+  built); reference_window; the global league.
+- Records: cycles.csv `rated` and `champion_age` (the cycle's champion: the cycle minus its crowning cycle), totals.csv
+  `rated`, state.json `champion_cycle` and `rate_carry`, the index's `rate_every`, driver.log's "cycle C: not rated
+  (...)", the report's Rated cycle / Unrated cycle line (an unrated cycle's Cold games line says none; its CPU lines
+  have no cold games).
+
+Driver (rateevery-build/leagues/patch_rateevery.py, 27 anchored edits plus the test): `rate_every_option`
+(make_config, last; normalises 1 away), `rate_every_of` (create and run), `rated_cycle`, `next_rated_cycle`,
+`rate_scaled_cycles`; phase_cold returns at once on an unrated cycle; phase_decide calls `decide_unrated` (the
+decisions, `train_filter_carry`, last_crown_cycle carried, plateau_stop false); apply_decisions keeps
+`champion_cycle` and, on a rated cycle with train_filter, `rate_carry`; phase_records writes no Elo on an unrated
+cycle and the rate columns; the report, status and the index.
+
+Tests:
+- No key, nothing changes: grow-dag-p1 (57 items, 4,608 games), filtered-p1 (58 items, 8,400 games) and
+  filtered-p1-twin (56 items, 8,400 games) re-created from their own specs, pinned as their runs were, and run 3
+  cycles: config.json (but created and root), every version 0-3 model and state file, the cycles' games and records
+  with their ratings, byte for byte (rateevery-build/leagues/repro_rate.py; repro.log, and repro2.log on 13df52c7,
+  the final logic).
+- Rule checks: 227 (2 new: the rated cycles and the next one for N 4 and 3, every cycle without the key; K by
+  rate_scale).
+- rate_every_test (44 CPU-s): experiment k (F-L, F-P, T-P-Ne capped; ply 1; rating-only cold games at share 0.25;
+  train_filter at margin 0 with top-up games; cap 9) without the key for 2 cycles, with rate_every 4 straight and
+  interrupted 9 times (phase starts and mid-phase points in cycles 1, 2, 3, 5 and 6, an unrated cycle's cold-games
+  and decide included), and F-L/F-P with a 1-cycle plateau from cycle 2:
+  cycles 1, 5 and 9 rate (cold rounds, decisions, Elo; history.csv blank elsewhere) and the others are
+  `unrated-cycle`; every floor, SE and rating of an unrated cycle is the last rated row's, and every kept set, top-up
+  count and opponent is recomputed from the carried ratings (18 carried line-cycles, 15 of them cut; the carried
+  champion as opponent seen); champion ages 0-8; cycle 9 trains nothing; cycles 1 and 2's round-robins and
+  self-games, cycle 1's cold games, records and v1 models equal the run without the key's; straight equals
+  interrupted (48 items, reports too); the plateau run ends on cycle 5 (rated; a per-cycle check would end on 2);
+  rate_every 1 makes the config without the key; K x2/x4/x1 by rate_scale; 14 bad specs refused.
+- The full selftest passed on 13df52c7 (227 rule checks, 16 runs; rateevery-build/selftest2.out). The swapped file,
+  1ade33c3, differs from it only in status's text ("no cycle is left to rate" once done, in place of a next rated
+  cycle past the cap), outside every run: the quick selftest (227) and rate_every_test (46 CPU-s) passed on it.
+- Scratch end-to-end (rateevery-build/e2e; the final driver's logic, at nice 19): rate4-e2e, F-L, F-P and T-P-Ne
+  capped at ply 1, games_per_cycle 45, cold games T 0.02 share 1.0 rating only, train_filter on the SE with top-up,
+  scaled plateau k2 4 with rate_scale sqrt (K 3 x 2 = 6) from cycle 5, cap 13, seed 71 (73 s): cycles 1, 5, 9 and 13
+  rate; the floors carried (cycles 2-4 cycle 1's: F-L -41.8, F-P -85.4, T-P-Ne -130.0; 6-8 cycle 5's: 31.2, 92.1,
+  61.4; 10-12 cycle 9's: 38.4, 132.1, 69.1); the top-up opponents the carried champions (F-L.loc@0-1 and F-P.loc@0-1
+  in 2-4, F-P.loc@8-1, crowned in cycle 9, in 10-12); F-P crowned in 9 (z 2.45), F-L and T-P-Ne in 13 (z 3.09, 2.31);
+  F-P's champion age 8 in cycle 9, 1 in 10; the plateau checked on 5 (4 < 6) and 9 (a crowning), so the run went to
+  the cap, whose cycle 13 trained nothing. rate4-e2e-plateau, the same with rate_scale none (K 3) from cycle 2: it
+  stopped on cycle 5 ("plateau: no new champion for 4 cycles (rule: 3 cycles, from cycle 2)") where a per-cycle check
+  would have stopped on cycle 4; cycle 5 trained nothing; its cycle-5 z's are rate4-e2e's (the same games).
+  rate4-e2e-open, the same with openings 6 and cap 5, 2 cycles: the unrated cycle 2's round-robin, self-games and
+  top-up commands carry `--opening-plies 6` as cycle 1's do, the cold games' never, and cold_rounds.csv has cycle 1's
+  8 rounds only.
+- Dashboard (rateevery-build/leagues/patch_dashboard.py, 27 edits): pages without the key render as before (Home,
+  /global/, /a/, the ladder and 10 experiments, running and done: they differ only in live data that moved between the
+  two renders: the nav's order, "N min ago", driver.log's tail); rate4-e2e's pages and a copy cut back to cycle 11
+  with cycle 12 running (rateevery-build/dash/sim_check.py) show the schedule tile ("the last: cycle 9 · the next:
+  cycle 13"), the unrated-cycle note, Elo points at 1, 5 and 9 joined, Standings, the grid and Lines from cycle 9
+  (Change against cycle 5; champion ages 10, 2 and 10), the carried filter tooltips (24) and the Rated column.
+
+What a spec needs: `"rate_every": N`; cold_games with `"train": false`; `cycles` 1 + a multiple of N; with
+train_filter, smooth 1 (the default); with a scaled plateau, `"rate_scale"` in it ("sqrt", "linear" or "none").
+
+Also seen: filtered-p1-twin ended on its own plateau in cycle 380 at 16:19:20 (no crowning since cycle 348; K 32),
+on the previous file, before the swap. The running experiments (grow-dag-p1, filtered-p1, fponly-p1-open,
+treeonly-p1-open) went on with the new file from their next cycle.
+
+Cost of this build: the two identity runs ~6 min wall each, the full selftest ~19 min wall (one more aborted after 2
+min for a report fix), rate_every_test ~45 CPU-s twice, the scratch runs ~3 min wall, page renders ~3 min; all at
+nice 10-19 on a machine at load ~20.
+
+## Tree warm starts (2026-11-12 ~16:35-16:56)
+
+The coordinator's directive for the ply-4 mixed field (the user, ~16:25: "Alright let's train ply4", then "Can we
+continue to add at least a couple of DAGs in which we may have reason to believe that the routers will split please"
+/ "If we're doing diverse groups that is"): warm starts for tree kinds, so that the field's trees and DAGs can start
+from trained lines. Built, and the draft leagues/specs/ply4/probit-p4w.DRAFT.json written; nothing launched; no
+running experiment's config changed.
+
+Files (backups `*.before-treewarm` beside each; scripts, tests and runs in models/from-scratch/ply4-prep/):
+
+| File | Before | After |
+|---|---|---|
+| leagues/leagues.py | 1ade33c3... | 6fb93c92... (16:56:27) |
+| leagues/FORMATS.md | c0fa8deb... | Warm starts for trees, the `entered` detail, version 0, Changes |
+| leagues/BUILD.md | 8ffc5b37... | this section |
+
+The rule:
+- A tree kind (bdt, bdd, ht, tan) trains on from its training state (`train --start <kind>N.state`), so its warm start
+  copies both files of version V: version 0's state (`<kind>0.state`) first, then its model (the model marks version 0
+  made). `start` records `state` and `state_md5` too; each copy is checked against its md5; the `entered` event and
+  runs/<line>.log's version-0 line name both files.
+- Its first training is `train --start <version 0's state>`, as every later one runs from the previous version's
+  state. Never a forget: start_forget must be 1 (the trainer refuses `--init-forget` with a tree's `--start`).
+- A state continues the tree under its own options (grow6 refuses a state trained under other encourage options), so
+  create refuses a start line of another recipe or with other train arguments, and a missing state.
+- A run keeps its current version's state only (the cycle's cleanup), so V must be a finished run's last version or a
+  frozen copy: leagues/starts/grow-dag-p1@395/ (16:32; config.json, lines.csv, README.md and the two DAG lines'
+  bdd395.model and .state, md5-checked; KEEP: the draft starts from it).
+- Flat warm starts are unchanged (records, log line, event text).
+
+Driver (ply4-prep/leagues/patch_treewarm.py, 8 anchored edits): warm_start_option (the tree checks; state and
+state_md5), make_untrained (the state, then the model), start_detail, train_start (version 0's state for a tree);
+the selftest's "a tree kind" refusal becomes "a tree without a start line of its name", and new: a tree's records,
+train_start and detail, and 4 refusals (start_forget 8, no state, other train arguments, another recipe).
+
+Tests:
+- Without a tree warm start nothing changes: grow-dag-p1 (57 items, 4,608 games), filtered-p1 (58 items, 8,400
+  games) and treeonly-p1-open (53 items, 4,892 games; openings) re-created from their own specs, pinned as their runs
+  were, and run 3 cycles: config.json, every version 0-3 model and state file, the games and the records byte for
+  byte (ply4-prep/leagues/repro_tw.py; repro.log).
+- Rule checks: 232 (5 new). The full selftest passed on it (232 rule checks, 16 runs; ply4-prep/selftest-full.out), and the quick one after the swap.
+- Scratch proof (ply4-prep/proof2; the draft's six lines at ply 1, 60 games a cycle, 3 cycles, seed 64): version 0's
+  model and state equal the sources' (probit-p3 v301; starts/grow-dag-p1@395) and its own calibration games (600,
+  seed 5) give the sources' recorded results, 6 of 6. Cycle 1 was stopped right after its first training
+  (LEAGUES_FAIL_AT=1:train-one) so its training set could be kept (dereferenced), then resumed. Each line's version 1
+  equals byte for byte its logged cycle-1 training replayed on the kept set with `--start` the SOURCE file (state,
+  or model for F-P), 6 of 6; the control without `--start` gives a 1-leaf tree (34 KB against 353 KB and 2.5 MB).
+  Cycle 2 trained from version 1's state. ply4-prep/proof is an earlier run of the same (its kept set was links).
+- The draft: created in a scratch root (ply4-prep/createcheck; starts as absolute paths) and pinned
+  (`train_binary.py --from chessai-hybrid4gfx LDIR chessai-hybrid6`: F-P and T-P-Ne on hybrid6, the DAGs keep
+  grow6): every line's recipe and train arguments equal its start line's; plateau K 58 (29 x sqrt 4) from cycle 41,
+  cap 101; 1ade33c3 refuses it ("a tree ... not supported").
+
+Binary: chessai-hybrid19 plays grow-dag-p1's DAGs (v395) byte for byte as chessai-grow6 and chessai-hybrid17, with
+probit-p3's F-P and T-P-Ne v301 in the same games: own calibration games (600 each, 6 models), tournaments at ply 1
+(T 0.1, T 0.02, argmax; 120 games each), ply 2 (the same three; 60 each), ply 3 (T 0.1; 30, hybrid18 too) and ply 4
+(T 0.1 with hybrid17 and hybrid18 too, and T 0.02; 30 each), and self-games at plies 1, 2 (T 0.1 and 0.02) and 4:
+games, saved games, tables and output all equal (ply4-prep/ident/ident.py). So no hybrid20; the draft's tournament
+binary is chessai-hybrid19.
+
+Cost of this build: about 25 CPU-min (the identity runs ~15, the repro runs ~6 min wall, the full selftest, the proofs
+~2 min wall each); all at nice 10-19 on a machine at load ~16-23.
+
+## Draw-aware champion test and plateau guard (2026-11-12 ~17:05-17:22)
+
+For the training standard v1 (models/STANDARD.md): the coordinator asked for analyst 6.93's champion test (crown at 3
+draw-aware SEs) as an option, off by default and byte-identical when off, then (~17:15, after analyst 6.94) a plateau
+guard: never stop on plateau while the last rated test's current-minus-champion is above G draw-aware SEs (G 1.0 in
+the standard). Work copy leagues/.leagues-drawsewip.py from 6fb93c92 by models/from-scratch/std-v1/leagues/
+patch_drawse.py (every anchor checked to occur once). Nothing launched; no running experiment's config changed.
+
+Files (backups `*.before-drawse` beside each; scripts, tests and runs in models/from-scratch/std-v1/):
+
+| File | Before | After |
+|---|---|---|
+| leagues/leagues.py | 6fb93c92... | dfba7832... (17:22:24) |
+| leagues/FORMATS.md | cfa5cb7b... | "Champion SE kind", "Plateau guard", cycles.csv's `se_nominal, z_nominal`, the index, Changes |
+| leagues/BUILD.md | 850e6fc6... | this section |
+
+Also for the standard, not the driver: the recipe row D-L-Ne-ctx-grow (leagues/make_recipes.py HAND, after
+D-P-Ne-ctx-grow; leagues/recipes.txt regenerated, its only change the new row; backups `*.before-std`): D-P-Ne-ctx-grow
+with `--leaf lr` and without `--split-noise`, trained by chessai-grow6, games by chessai-hybrid19.
+
+What changed in leagues.py:
+- `contrast_ses_draws(tour, ratings, pairs, anchor)`: contrast_ses' contrasts on the HC0 sandwich. It reads
+  games.csv's results (pair counts, score sums and squared score sums), builds A exactly as contrast_ses does
+  (n p(1-p) per pair, the anchor pinned) and B from (s - p)^2 per game, eliminates the players in no pair in
+  contrast_ses' order while recording each step, Cholesky-factors the small rest, solves each contrast's y = A^-1 e
+  there, back-substitutes the eliminated players (their e is 0) and sums B's weights times the squared differences of
+  y. contrast_ses itself is untouched (so nominal SEs are bit for bit as before).
+- `champion_se_kind_option` (create): "nominal" or "draw-aware", in config.json only for "draw-aware"; experiments
+  only. It also refuses a `champion_se` that isn't a number above 0 (create took any value before).
+- `plateau_guard_option` (create): `plateau.guard_z` from 0, kept in config.json's plateau; batch4_options lets the
+  spec's plateau carry the key.
+- phase_decide: with "draw-aware" both SEs are computed; the draw-aware one decides (se, z), the nominal one and its
+  z are kept for the records. With guard_z, a plateau stop is held while any line's test this cycle has z above G
+  (state current.plateau_held, a driver.log line).
+- Records: cycles.csv's DRAWSE_CYCLES_FIELDS (`se_nominal`, `z_nominal`, last, only with "draw-aware"); the cycle
+  report's "Champion test" line (cycles that decide, with either key); the index's `champion_se_kind`; status's
+  "champion test:" line.
+
+Tests:
+- Without either key nothing changes: grow-dag-p1 (57 items, 4,608 games), filtered-p1 (58 items, 8,400 games) and
+  treeonly-p1-open (53 items, 4,892 games; openings) re-created from their own specs, pinned as their runs were, and
+  run 3 cycles on the work copy: config.json, every version 0-3 model and state file, the games and the records byte
+  for byte (std-v1/leagues/repro_ds.py, ply4-prep's repro_tw.py pointed at the work copy; std-v1/repro.log).
+- Rule checks: 234 (2 new): contrast_ses_draws equals a dense HC0 sandwich (A^-1 B A^-1 by explicit inversion) on a
+  synthetic games.csv with draws, for 3 contrasts (one of them 2 entries against 1), and doesn't depend on the pinned
+  player. The full selftest passed on dfba7832 (234 rule checks, 17 runs; std-v1/selftest-full.out), and the quick
+  one after the swap.
+- New selftest run drawse_test (scratch experiments of F-L and F-P at ply 1, cold games rating only, hybrid19
+  games): create refuses 9 bad specs (champion_se as text, 0 or true; another kind; the kind true; the global league;
+  guard_z negative, as text or true); "nominal" gives the config without the key; a guarded scaled plateau keeps
+  guard_z. Run d (draw-aware at 2.0, 4 cycles): cycle 4's `se_diff` equals contrast_ses_draws recomputed on the cold
+  fit and `se_nominal` contrast_ses, each z is diff over its SE, each decision is z >= 2.0 on the draw-aware z. Run h
+  (guard_z 0, a 1-cycle plateau from cycle 2): cycle 2's stop held (z 0.71 and 1.75; driver.log, the report,
+  state.json), cycle 3 ended it (z -0.82 and -1.03). Run s (guard_z 1000): ended in cycle 2, as without the guard.
+- The standard's drafts (leagues/specs/standard/std-v1-p1-s1.DRAFT.json and -s2): created on the work copy in a
+  scratch root (std-v1/createcheck) and pinned as their description says; 6fb93c92 refuses them (plateau.guard_z).
+  s1 ran 81 cycles there (17:16-17:29; 1,329 CPU-s, 12 min wall): only cycles 1, 5, ..., 81 rated; all 8 lines
+  crowned on rated cycles 5-17, then 0-4 lines a rated cycle (0-2 from cycle 45); every test carried both SEs, the
+  draw-aware one 0.54-0.85 of the nominal one (median 0.69, steady from cycle 13), so its bar of 3 was ~2.1 nominal
+  SEs; the "Champion test" line on every rated cycle. The DAGs' first router split (cycle 48, 10M positions) was
+  kept at its trial's verdict (cycle 71) at z +19.4 (LR) and +3.2 (probit) against the +2 bar of
+  `--router-trial-z=-2`; both DAGs had 13 nodes at cycle 81, the grow trees 10.
+
+Not done: the dashboard shows se_diff and z as before (with "draw-aware" they are the draw-aware ones; it doesn't
+show se_nominal or the guard). The train filter's SE ("margin": "se") stays the nominal one.
+
+Cost of this build: about 45 CPU-min, all at nice 19: the drafts' scratch run 22 (81 cycles of s1), the full selftest
+(17:13-17:22 wall), the repro runs (~1 min wall), the quick selftests and drawse_test, and the recipe's smoke run
+(std-v1/smoke, 5 cycles).
+
+## The Play page's engine: chessai-play1 (2026-11-12 ~17:05-17:40)
+
+For the dashboard's Play page (DASHBOARD.md, Play; `leagues/play.py`). The user: "I'd like another option in the
+menu that leads to a chess board where I can play against a game against a chosen model in the library at a chosen
+ply."
+
+| Binary | Status | md5 |
+|---|---|---|
+| models/from-scratch/bin/chessai-play1 | new | 26f4a93578e818af92c2d10a1392bf6c (built 17:11:36, cp -n 17:26) |
+
+- Source: models/from-scratch/fastbin/play1-src, a copy of hybrid19-src. rs/ is untouched.
+- The change: a `play-serve` subcommand (src/main.rs) and `selfplay::choose_in` and `root_values_in`
+  (src/selfplay.rs). They call the tournament's own `choose_move` and `Search::root_values` at the player's depth.
+  Every other path is hybrid19's.
+- The protocol: one request a line on stdin, tab-separated KEY=VALUE, with `op` legal, load, eval or move. One
+  answer a line on stdout, `@@play <json>`. Other printed lines (a model's calibration report) pass through.
+- Checked:
+  - An argmax tournament on play1 (12 players: a flat, a capped tree, a DAG and a grow6 DAG, each at plies 1-3;
+    seed 11) is byte-identical to hybrid19's: games, ratings, head-to-head.
+  - play-serve's move equals the tournament's in all 12,255 positions at plies 1-4, with 0 mismatches. In 201 of
+    them the move differs but both moves share the best value; the tournament broke the tie with its own random
+    numbers.
+  - The engine's legal moves and game ends equal chess.js's in random games. That covers castling, en passant and
+    every promotion.
+  - The outputs are in models/from-scratch/play1/verify/ (positions-games19.txt, positions-games4.txt, rules.txt).
+- Nothing else uses it. No running experiment or arena is affected.
+- Cost: two builds at nice 10 (1 min 17 s and 16 s wall, 2 jobs) and the checks at nice 19 (a few CPU-min).

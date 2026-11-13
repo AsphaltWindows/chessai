@@ -1,0 +1,55 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 600,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid13"
+ },
+ "name": "router-kind-p1",
+ "seed": 28,
+ "train": {
+  "seed": 28
+ },
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Lc-merge",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03",
+    "--revise-on": "fresh"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Nc-merge",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03",
+    "--revise-on": "fresh"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "description": "G1, the router kind (theory-2 6.24): fresh-gate probit trees, limit 4, threshold 1M, split noise 0.03, with an LR cluster router (T-P-Lc-merge) x2 against the NB router (T-P-Nc-merge, seat 1) x2; the router the one factor. Prediction: LR 20-40 below NB unless the fresh gate steadies the LR router. Launched 11-11 08:47 by the coordinator for the user's six-model shortlist (theory-2 6.24). F-P x2 added to the field (a deviation from 6.24's four-line design) so the gain over the same leaf's flat is measured in the same field, as in probit-widen-p1b/p1c. Own games at T 0.1 (T 0.02 training costs 100-200); read cold at T 0.02 at plies 1-2."
+}

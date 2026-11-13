@@ -1,0 +1,57 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "models": [
+  "F-L",
+  {
+   "model": "T-L-Tc-merge",
+   "set": {
+    "--split-limit": "1",
+    "--split-threshold": "1000000"
+   },
+   "to": "train"
+  }
+ ],
+ "options": [
+  "local"
+ ],
+ "seed": 10,
+ "train": {
+  "seed": 10,
+  "qualify": "a model at ply 2"
+ },
+ "name": "small-field-new",
+ "references": [],
+ "ply1_entries": false,
+ "plateau": {
+  "cycles": 50,
+  "min_cycles": 100
+ },
+ "cycles": 1000,
+ "rounds_per_cycle": 204,
+ "min_rounds": 204,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid9"
+ },
+ "prices_version": "P2",
+ "batch4": {
+  "original": "small-field",
+  "note": "Batch 4: small-field rerun without random players or ply-1 entries until the champions plateau. Rounds: 2454 games with a model at ply 2 per cycle in the original over 12 per round (2 lines, two ply-2 entries each).",
+  "binaries": {
+   "F-L.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "T-L-Tc-merge+split-limit=1+split-threshold=1000000.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   }
+  },
+  "rounds_from": {
+   "original": "small-field",
+   "ply2_games_per_cycle": 2453.75,
+   "lines": 2,
+   "games_per_round": 12
+  }
+ }
+}

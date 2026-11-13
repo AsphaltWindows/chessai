@@ -1,0 +1,75 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "models": [
+  {
+   "model": "F-L",
+   "sweep": {
+    "--lr-rate": [
+     "0.0125",
+     "0.025",
+     "0.05",
+     "0.1"
+    ]
+   },
+   "to": "train"
+  },
+  {
+   "model": "F-L",
+   "set": {
+    "--label-depth": "2",
+    "--label-result": "0.5"
+   },
+   "to": "train"
+  }
+ ],
+ "options": [
+  "local"
+ ],
+ "name": "lr-settings-new",
+ "references": [],
+ "ply1_entries": false,
+ "plateau": {
+  "cycles": 50,
+  "min_cycles": 100
+ },
+ "cycles": 1000,
+ "rounds_per_cycle": 15,
+ "min_rounds": 15,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid8"
+ },
+ "prices_version": "P2",
+ "batch4": {
+  "original": "lr-settings",
+  "note": "Batch 4: lr-settings rerun without random players or ply-1 entries until the champions plateau. Rounds: 1345 games with a model at ply 2 per cycle in the original over 90 per round (5 lines, two ply-2 entries each).",
+  "binaries": {
+   "F-L+lr-rate=0.0125.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "F-L+lr-rate=0.025.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "F-L+lr-rate=0.05.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "F-L+lr-rate=0.1.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "F-L+label-depth=2+label-result=0.5.loc": {
+    "train": "chessai-hybrid4gfx",
+    "selfplay": null
+   }
+  },
+  "rounds_from": {
+   "original": "lr-settings",
+   "ply2_games_per_cycle": 1345.35,
+   "lines": 5,
+   "games_per_round": 90
+  }
+ }
+}

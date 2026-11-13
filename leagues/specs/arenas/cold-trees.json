@@ -1,0 +1,117 @@
+{
+ "name": "cold-trees",
+ "dir": "leagues/arenas/diag/cold-trees",
+ "description": "theory-2 6.8: do the tree-vs-flat ply-2 gains of the new-league experiments survive near-argmax play? The final versions of every flat line and its gaining trees (and T-L-Ne as a losing control), each at ply 1 and ply 2, softmax temperature 0.02 (standard 0.1), own depth-1 calibrations as in the experiments. Read each tree against its OWN experiment's flat line (same field, same age). The T 0.1 twin is the experiments' own last-window tables; if a direct T 0.1 twin is wanted, copy this spec without the --temperature pair.",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid9",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "plies": [
+  1,
+  2
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 5,
+  "min_rounds": 15,
+  "max_rounds": 15
+ },
+ "entries": [
+  {
+   "version": "single-split:F-L.loc@999",
+   "name": "ss.F-L",
+   "label": "single-split F-L v999"
+  },
+  {
+   "version": "single-split:T-L-Nc-merge+split-limit=1+split-threshold=1000000.loc@999",
+   "name": "ss.T-L-Nc-merge",
+   "label": "single-split, league gain 88 at ply 2"
+  },
+  {
+   "version": "single-split:T-L-Tc-merge+split-limit=1+split-threshold=1000000.loc@999",
+   "name": "ss.T-L-Tc-merge",
+   "label": "single-split, league gain 99"
+  },
+  {
+   "version": "single-split:T-L-Ne+split-limit=1+split-threshold=1000000.loc@999",
+   "name": "ss.T-L-Ne",
+   "label": "single-split, league -16"
+  },
+  {
+   "version": "single-split-probit:F-P.loc@999",
+   "name": "ssp.F-P",
+   "label": "single-split-probit F-P v999"
+  },
+  {
+   "version": "single-split-probit:T-P-Nc-merge+split-limit=1+split-threshold=1000000.loc@999",
+   "name": "ssp.T-P-Nc-merge",
+   "label": "league gain 77"
+  },
+  {
+   "version": "single-split-probit:T-P-Tc-merge+split-limit=1+split-threshold=1000000.loc@999",
+   "name": "ssp.T-P-Tc-merge",
+   "label": "league gain 75"
+  },
+  {
+   "version": "single-split-probit:T-P-Ne+split-limit=1+split-threshold=1000000.loc@999",
+   "name": "ssp.T-P-Ne",
+   "label": "league gain 44"
+  },
+  {
+   "version": "split-growth:F-L.loc@399",
+   "name": "sg.F-L",
+   "label": "split-growth F-L v399"
+  },
+  {
+   "version": "split-growth:T-L-Nc-merge+split-limit=1+split-threshold=1000000.loc@399",
+   "name": "sg.T-L-Nc-merge-L1",
+   "label": "league gain 35"
+  },
+  {
+   "version": "split-growth:T-L-Nc-merge+split-limit=4+split-threshold=1000000.loc@399",
+   "name": "sg.T-L-Nc-merge-L4",
+   "label": "league gain 53"
+  },
+  {
+   "version": "split-growth-probit:F-P.loc@999",
+   "name": "sgp.F-P",
+   "label": "split-growth-probit F-P v999"
+  },
+  {
+   "version": "split-growth-probit:T-P-Nc-merge+split-limit=1+split-threshold=1000000.loc@999",
+   "name": "sgp.T-P-Nc-merge-L1",
+   "label": "league gain 20"
+  },
+  {
+   "version": "split-growth-probit:T-P-Ne+split-limit=1+split-threshold=1000000.loc@999",
+   "name": "sgp.T-P-Ne-L1",
+   "label": "league gain 40"
+  },
+  {
+   "version": "small-field:F-L.loc@399",
+   "name": "sf.F-L",
+   "label": "small-field F-L v399"
+  },
+  {
+   "version": "small-field:T-L-Tc-merge+split-limit=1+split-threshold=1000000.loc@399",
+   "name": "sf.T-L-Tc-merge",
+   "label": "league gain 29"
+  }
+ ]
+}

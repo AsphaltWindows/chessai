@@ -1,0 +1,102 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid8",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid8",
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "plies": [
+  2
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 10,
+  "min_rounds": 40,
+  "max_rounds": 40
+ },
+ "name": "diag-cal2-routing",
+ "dir": "leagues/arenas/diag/cal2-routing",
+ "calibration": {
+  "games": 600,
+  "depth": 2,
+  "seed": 5,
+  "policy": "log-odds-softmax",
+  "temperature": 0.1,
+  "heldout": {
+   "lr": "/home/iv/dev/chessai/games/heldout-lr-d2-s555/round0",
+   "cnbp": "/home/iv/dev/chessai/games/heldout-cnbp-d2-s555/round0"
+  }
+ },
+ "description": "Diagnostic (a), 11-10 ~19:50: the same champions as diag-cal1-routing at ply 2, but calibrated on 600 own games at depth 2 instead of 1. Does the LR trees' ply-2 deficit against F-L shrink?",
+ "entries": [
+  {
+   "file": "leagues/experiments/split-growth/runs/F-L.loc/lr390.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "sg.F-L",
+   "label": "split-growth champion v390, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/split-growth/runs/T-L-Nc-merge+split-limit=1+split-threshold=1000000.loc/bdt381.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "sg.T-L-Nc-merge-L1",
+   "label": "split-growth champion v381, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/split-growth/runs/T-L-Nc-merge+split-limit=4+split-threshold=1000000.loc/bdt398.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "sg.T-L-Nc-merge-L4",
+   "label": "split-growth champion v398, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/split-growth/runs/T-L-Nc+split-limit=1+split-threshold=1000000.loc/bdt337.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "sg.T-L-Nc-L1",
+   "label": "split-growth champion v337, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/split-growth/runs/T-L-Nc+split-limit=4+split-threshold=1000000.loc/bdt394.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "sg.T-L-Nc-L4",
+   "label": "split-growth champion v394, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/single-split/runs/F-L.loc/lr150.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "ss.F-L",
+   "label": "single-split champion v150, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/single-split/runs/T-L-Le+split-limit=1+split-threshold=1000000.loc/bdt287.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "ss.T-L-Le",
+   "label": "single-split champion v287, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/single-split/runs/T-L-Nc-merge+split-limit=1+split-threshold=1000000.loc/bdt517.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "ss.T-L-Nc-merge",
+   "label": "single-split champion v517, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/single-split/runs/T-L-Tc-merge+split-limit=1+split-threshold=1000000.loc/bdt746.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "ss.T-L-Tc-merge",
+   "label": "single-split champion v746, own cal at depth 2"
+  }
+ ]
+}

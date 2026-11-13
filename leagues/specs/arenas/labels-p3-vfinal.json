@@ -1,0 +1,134 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid18",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": "field"
+ },
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 30,
+  "min_rounds": 30,
+  "max_rounds": 30
+ },
+ "name": "labels-p3-vfinal",
+ "dir": "leagues/arenas/diag/labels-p3-vfinal",
+ "plies": [
+  3
+ ],
+ "description": "Cold read labels-p3-vfinal: ply 3, version 400, only the contrast's lines, near argmax (T 0.02), 30 round-robins; Elo 0 = the field's mean, no random player. Tags: pa=labels-p1-s1:^F-P\\.loc$@400, la=labels-p1-s1:label-depth@400, pb=labels-p1-s2:^F-P\\.loc$@400, lb=labels-p1-s2:label-depth@400, f3=flat-p3:^F-L@199, f3b=flat-p3-b:^F-L@199, p3fp=probit-p3:^F-P#@301, x4=fponly-p2:^F-P@299, bfp=base-probit-p2:^F-P@299",
+ "entries": [
+  {
+   "version": "labels-p1-s1:F-P.loc@400",
+   "name": "pa400.L1@400",
+   "label": "labels-p1-s1 F-P.loc version v400"
+  },
+  {
+   "version": "labels-p1-s1:F-P+label-depth=2+label-result=0.5.loc@400",
+   "name": "la400.L1@400",
+   "label": "labels-p1-s1 F-P+label-depth=2+label-result=0.5.loc version v400"
+  },
+  {
+   "version": "labels-p1-s2:F-P.loc@400",
+   "name": "pb400.L1@400",
+   "label": "labels-p1-s2 F-P.loc version v400"
+  },
+  {
+   "version": "labels-p1-s2:F-P+label-depth=2+label-result=0.5.loc@400",
+   "name": "lb400.L1@400",
+   "label": "labels-p1-s2 F-P+label-depth=2+label-result=0.5.loc version v400"
+  },
+  {
+   "version": "flat-p3:F-L#1.loc@199",
+   "name": "f3199.L1@199",
+   "label": "flat-p3 F-L#1.loc version v199"
+  },
+  {
+   "version": "flat-p3:F-L#2.loc@199",
+   "name": "f3199.L2@199",
+   "label": "flat-p3 F-L#2.loc version v199"
+  },
+  {
+   "version": "flat-p3:F-L#3.loc@199",
+   "name": "f3199.L3@199",
+   "label": "flat-p3 F-L#3.loc version v199"
+  },
+  {
+   "version": "flat-p3:F-L#4.loc@199",
+   "name": "f3199.L4@199",
+   "label": "flat-p3 F-L#4.loc version v199"
+  },
+  {
+   "version": "flat-p3-b:F-L#1.loc@199",
+   "name": "f3b199.L1@199",
+   "label": "flat-p3-b F-L#1.loc version v199"
+  },
+  {
+   "version": "flat-p3-b:F-L#2.loc@199",
+   "name": "f3b199.L2@199",
+   "label": "flat-p3-b F-L#2.loc version v199"
+  },
+  {
+   "version": "flat-p3-b:F-L#3.loc@199",
+   "name": "f3b199.L3@199",
+   "label": "flat-p3-b F-L#3.loc version v199"
+  },
+  {
+   "version": "flat-p3-b:F-L#4.loc@199",
+   "name": "f3b199.L4@199",
+   "label": "flat-p3-b F-L#4.loc version v199"
+  },
+  {
+   "version": "probit-p3:F-P#1.loc@301",
+   "name": "p3fp301.L1@301",
+   "label": "probit-p3 F-P#1.loc version v301"
+  },
+  {
+   "version": "probit-p3:F-P#2.loc@301",
+   "name": "p3fp301.L2@301",
+   "label": "probit-p3 F-P#2.loc version v301"
+  },
+  {
+   "version": "fponly-p2:F-P#1.loc@299",
+   "name": "x4299.L1@299",
+   "label": "fponly-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "fponly-p2:F-P#2.loc@299",
+   "name": "x4299.L2@299",
+   "label": "fponly-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "fponly-p2:F-P#3.loc@299",
+   "name": "x4299.L3@299",
+   "label": "fponly-p2 F-P#3.loc version v299"
+  },
+  {
+   "version": "fponly-p2:F-P#4.loc@299",
+   "name": "x4299.L4@299",
+   "label": "fponly-p2 F-P#4.loc version v299"
+  },
+  {
+   "version": "base-probit-p2:F-P#1.loc@299",
+   "name": "bfp299.L1@299",
+   "label": "base-probit-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "base-probit-p2:F-P#2.loc@299",
+   "name": "bfp299.L2@299",
+   "label": "base-probit-p2 F-P#2.loc version v299"
+  }
+ ]
+}

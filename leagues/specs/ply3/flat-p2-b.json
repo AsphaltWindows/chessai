@@ -1,0 +1,34 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "models": [
+  {
+   "model": "F-L",
+   "replicates": 4
+  }
+ ],
+ "seed": 23,
+ "train": {
+  "seed": 23
+ },
+ "references": [],
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 200
+ },
+ "cycles": 600,
+ "rounds_per_cycle": 15,
+ "min_rounds": 15,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid10"
+ },
+ "prices_version": "P2",
+ "name": "flat-p2-b",
+ "entry_ply": 2,
+ "ply1_entries": false,
+ "description": "Seed replicate of flat-p2 (seed 23; identical otherwise). The run-to-run spread of 50-90 is the known hazard for a one-run-per-arm comparison, so the ply-3 against ply-2 field verdict uses two runs per arm (the analyst's plan theory-2 6.15 for flat-p3-b; the coordinator added flat-p2-b for balance). The ply-2 twin of flat-p3. 4 F-L lines (default settings) in a pure field with self-games and no references, 15 rounds a cycle, scaled plateau with min_cycles 200, standard T 0.1 tournament on chessai-hybrid10 (byte-identical to hybrid9; ply-3 search about 21% cheaper for LR). The twins flat-p3 and flat-p2 differ only in the field's ply, so the ply of the training games is the one factor. Verdict: a T 0.02 arena of every line's final version at ply 2 and 3, with lr-settings-new's F-L lines and F-L-d4mix-c v426 alongside. The analyst's first-priority plan (theory-2 6.11; the twin added by the coordinator for one factor), launched 11-11 ~01:40 under the user's standing instruction to launch without them."
+}

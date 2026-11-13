@@ -1,0 +1,56 @@
+{
+ "name": "cold-final-lr-trees-p1",
+ "dir": "leagues/arenas/diag/cold-final-lr-trees-p1",
+ "description": "Near-argmax (T 0.02) read of lr-trees-p1's last versions at plies 1, 2 (its own tables are at T 0.1, which RESULTS section 8 found confounded by each model's calibrated scale).",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "plies": [
+  1,
+  2
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 5,
+  "min_rounds": 15,
+  "max_rounds": 15
+ },
+ "entries": [
+  {
+   "version": "lr-trees-p1:F-L#1.loc@301",
+   "name": "F-L#1@301",
+   "label": "F-L#1.loc final version v301"
+  },
+  {
+   "version": "lr-trees-p1:F-L#2.loc@301",
+   "name": "F-L#2@301",
+   "label": "F-L#2.loc final version v301"
+  },
+  {
+   "version": "lr-trees-p1:T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#1.loc@301",
+   "name": "T-L-Nc-merge#1@301",
+   "label": "T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#1.loc final version v301"
+  },
+  {
+   "version": "lr-trees-p1:T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#2.loc@301",
+   "name": "T-L-Nc-merge#2@301",
+   "label": "T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#2.loc final version v301"
+  }
+ ]
+}

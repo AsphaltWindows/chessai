@@ -1,0 +1,73 @@
+{
+ "name": "offline-flat-curve",
+ "dir": "leagues/arenas/diag/offline-flat-curve",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "plies": [
+  1,
+  2
+ ],
+ "description": "Analyst 6.43 check (ii) (11-11 ~21:05): the flat's data curve. Offline F-P (one pass, seed 7101) after 12, 36 and 108 rounds (2.4M, 7.2M, 21.6M positions: a level-2 leaf's, a level-1 leaf's and the whole stream) of pools P1 (ply-1 field) and P2 (ply-2 field), cold at T 0.02 at plies 1-2. Prediction: at ply 2 the 7.2M P2 flat is 30-60 Elo behind the full one (data-hungry), at ply 1 the 7.2M P1 flat within 15. Tags p1r12, p1r36, p1r108, p2r12, p2r36, p2r108.",
+ "entries": [
+  {
+   "file": "models/from-scratch/offline-ply/models/P1/fp/probit12.model",
+   "kind": "probit",
+   "name": "p1r12.S1@12",
+   "label": "offline P1 F-P after 12 rounds (2.4M positions), seed 1"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/models/P1/fp/probit36.model",
+   "kind": "probit",
+   "name": "p1r36.S1@36",
+   "label": "offline P1 F-P after 36 rounds (7.2M positions), seed 1"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/models/P1/fp/probit108.model",
+   "kind": "probit",
+   "name": "p1r108.S1@108",
+   "label": "offline P1 F-P after 108 rounds (21.6M positions), seed 1"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/models/P2/fp/probit12.model",
+   "kind": "probit",
+   "name": "p2r12.S1@12",
+   "label": "offline P2 F-P after 12 rounds (2.4M positions), seed 1"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/models/P2/fp/probit36.model",
+   "kind": "probit",
+   "name": "p2r36.S1@36",
+   "label": "offline P2 F-P after 36 rounds (7.2M positions), seed 1"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/models/P2/fp/probit108.model",
+   "kind": "probit",
+   "name": "p2r108.S1@108",
+   "label": "offline P2 F-P after 108 rounds (21.6M positions), seed 1"
+  }
+ ]
+}

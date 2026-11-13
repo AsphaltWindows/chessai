@@ -1,0 +1,33 @@
+[Event "chessai play page"]
+[Site "leagues dashboard"]
+[Date "2026.11.13"]
+[Round "-"]
+[White "You"]
+[Black "flatp3b_a v199 at ply 3"]
+[Result "1-0"]
+[Termination "checkmate"]
+[PlyCount "41"]
+[Time "01:42:03"]
+[LibraryId "flatp3b_a"]
+[Experiment "flat-p3-b"]
+[Line "F-L#1.loc"]
+[Version "199"]
+[VersionRole "final"]
+[Model "F-L#1"]
+[Archetype "F-L"]
+[Kind "lr"]
+[TrainPly "3"]
+[Ply "3"]
+[Policy "log-odds argmax"]
+[Seed "509060470"]
+[Takebacks "0"]
+[Engine "chessai-play2 play-serve (e68822d1)"]
+[ModelFile "leagues/library/models/flat-p3-b/runs/F-L#1.loc/lr199.model"]
+[ModelMd5 "9d33a2bc3f63773d57f24e1eab226a6a"]
+[Calibration "own games 0ea1c8f455163245f9fb83a4f0da2815 (play-games)"]
+[Started "2026-11-13T06:41:12.848Z"]
+
+1. e4 Nf6 2. e5 Ne4 3. d3 Nc5 4. d4 Ne6 5. Nf3 Nc6 6. Nc3 Rb8 7. Be3 a6 8. Bd3
+b5 9. d5 Nb4 10. dxe6 dxe6 11. O-O g6 12. a3 Nc6 13. Be4 Bd7 14. Bc5 Rg8 15.
+Ng5 Nxe5 16. f4 f5 17. fxe5 fxe4 18. Nxh7 Rh8 19. Qg4 Rxh7 20. Qxg6+ Rf7 21.
+Qxf7# 1-0

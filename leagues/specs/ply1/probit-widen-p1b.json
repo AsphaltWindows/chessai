@@ -1,0 +1,65 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 200
+ },
+ "cycles": 1000,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid9"
+ },
+ "prices_version": "P2",
+ "name": "probit-widen-p1b",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Nc-merge",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--revise-on": "fresh"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Nc-merge",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03",
+    "--revise-on": "fresh"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Nc-merge",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.1",
+    "--revise-on": "fresh"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 14,
+ "train": {
+  "seed": 14
+ },
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "description": "Probit trees (T-P-Nc-merge, split limit 4, threshold 1M) with copies widened at each split: --split-noise 0 (comparator) / 0.03 / 0.1, 2 seeds each, beside F-P x2 (the flat base leaf); every tree line uses the fresh-scored merge gate (--revise-on fresh). Ply 1, self-games, scaled plateau with min_cycles 200. Drafted by the analyst (models/from-scratch/theory-2/summary.txt section 6, plan P1). Restarts probit-widen-p1 (stopped at cycle ~63) with F-P added, at the user's request (11-11 ~00:20: 'yeah restart it')."
+}

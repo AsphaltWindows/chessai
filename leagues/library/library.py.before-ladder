@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+"""The model library's tool (leagues/library/LIBRARY.md). Reads index.csv (build_index.py writes it).
+
+    python3 leagues/library/library.py list  [FILTERS] [--cols id,experiment,line,version,...]
+    python3 leagues/library/library.py tags  [FILTERS] [--versions final,final-20,299]
+        tags for leagues/specs/arenas/make_split_read.py: ID=EXPERIMENT:^LINE$@V (lines named ...#k only; the
+        global league's lines are not experiments, so they need `spec`)
+    python3 leagues/library/library.py spec  NAME PLY ROUNDS|ciX [FILTERS] [--versions ...] [--source S]
+        [--binary B] [--threads T] [--jobs J] [--skip-missing]
+        writes leagues/specs/arenas/NAME.json (arena dir leagues/arenas/diag/NAME), make_split_read.py's settings
+        (near argmax, T 0.02, one random reference as the Elo anchor) on chessai-hybrid17 unless --binary.
+        Entry names ID<v>.L<k>@<v> (k = the line's replicate), so arm_panel.py / h2h tools group them by ID<v>.
+        --source experiment (default): entries read from leagues/experiments (arena.py checks each calibration
+        against the experiment's log); library: from the snapshot leagues/library/models/<experiment> (the
+        fallback if an experiment's directory is ever gone; no calibration check, the rest identical).
+    python3 leagues/library/library.py smoke [FILTERS]
+        one load-and-play test (2 games at ply 1 against rand) per (kind, training binary) in chessai-hybrid17;
+        writes the result into index.csv's loads_hybrid17 column.
+
+FILTERS (all regexes, re.search, AND-ed): --id --experiment --line --model --archetype --kind --train-ply
+  --end-reason --plateaued (yes|no) --setup-group --field-class (pure|mixed) --train-binary
+VERSIONS: comma list of final, final-K (K versions before the final) and plain numbers (kept only if <= final).
+"""
+import argparse, csv, json, os, re, subprocess, sys, time
+
+REPO = '/home/iv/dev/chessai'
+LIB = f'{REPO}/leagues/library'
+INDEX = f'{LIB}/index.csv'
+HYBRID17 = 'models/from-scratch/bin/chessai-hybrid17'
+FILTERS = ['id', 'experiment', 'line', 'model', 'archetype', 'kind', 'train_ply', 'end_reason', 'plateaued',
+           'setup_group', 'field_class', 'train_binary']
+
+
+def rows():
+    return list(csv.DictReader(open(INDEX)))
+
+
+def add_filters(ap):
+    for f in FILTERS:
+        ap.add_argument('--' + f.replace('_', '-'), dest=f)
+
+
+def select(args, rs=None):
+    out = []
+    for r in rs if rs is not None else rows():
+        if all(getattr(args, f, None) is None or re.search(getattr(args, f), r[f]) for f in FILTERS):
+            out.append(r)
+    return out
+
+
+def versions_of(r, spec):
+    final = int(r['version'])
+    out = []
+    for s in spec.split(','):
+        s = s.strip()
+        if s == 'final':
+            v = final
+        elif s.startswith('final-'):
+            v = final - int(s[6:])
+        else:
+            v = int(s)
+        if 0 <= v <= final and v not in out:
+            out.append(v)
+    return out
+
+
+def replicate(line):
+    m = re.search(r'#(\d+)', line)
+    return int(m.group(1)) if m else 1
+
+
+def model_file(r, v, source):
+    if source == 'library':
+        base = f"{LIB}/models/{r['experiment']}"
+    elif r['experiment'] == 'global':
+        base = f'{REPO}/leagues/global'
+    else:
+        base = f"{REPO}/leagues/experiments/{r['experiment']}"
+    return base, f"{base}/runs/{r['line']}/{r['kind']}{v}.model"
+
+
+def entry(r, v, source, skip_missing=False):
+    base, path = model_file(r, v, source)
+    if not os.path.exists(path):
+        if skip_missing:
+            return None
+        sys.exit(f'no model file {path} (snapshot it with build_index.py --extra, or use --source experiment)')
+    exp = r['experiment'] if source == 'experiment' and r['experiment'] != 'global' else base
+    return {'version': f"{exp}:{r['line']}@{v}", 'name': f"{r['id']}{v}.L{replicate(r['line'])}@{v}",
+            'label': f"{r['experiment']} {r['line']} version v{v} (library {r['id']}; {r['end_reason']}, "
+                     f"train ply {r['train_ply']})"}
+
+
+def write_spec(name, ply, rounds, entries, binary=HYBRID17, threads=2, jobs=2, note=''):
+    if str(rounds).startswith('ci'):
+        # 11-12 (cohort-fp-p2): with the one random reference as the anchor, the tournament rates nobody (every
+        # entry beats random in every game, so none is linked both ways to the anchor), every interval stays
+        # infinite and the ci stop runs to max_rounds (200). Use fixed round-robins until arenas can anchor elsewhere.
+        sys.exit('ciX needs a rated anchor: with random as the only reference no entry is ever rated '
+                 '(LIBRARY.md, Cautions); give a number of round-robins')
+        ci = float(str(rounds)[2:])
+        stop = {'ci95': ci, 'chunk_rounds': 10, 'min_rounds': 10, 'max_rounds': 200}
+        howlong = f'round-robins until every 95% interval is at most {ci:g} Elo'
+    else:
+        stop = {'ci95': 0.0, 'chunk_rounds': 30, 'min_rounds': int(rounds), 'max_rounds': int(rounds)}
+        howlong = f'{int(rounds)} round-robins'
+    names = [e['name'] for e in entries]
+    dup = sorted({n for n in names if names.count(n) > 1})
+    if dup:
+        sys.exit(f'duplicate entry names {dup}')
+    spec = {'seed': 1, 'nice': 15, 'threads': threads, 'jobs': jobs, 'binary': binary, 'owncal_binary': binary,
+            'flags': ['--reports-last', '--sparse-fit', '--policy', 'log-odds-softmax', '--temperature', '0.02'],
+            'references': ['random'], 'stop': stop, 'name': name, 'dir': f'leagues/arenas/diag/{name}',
+            'plies': [int(ply)],
+            'description': f'Library arena {name}: ply {ply}, near argmax (T 0.02), {howlong}, {len(entries)} '
+                           f'entries from leagues/library. {note}',
+            'entries': entries}
+    out = f'{REPO}/leagues/specs/arenas/{name}.json'
+    if os.path.exists(out):
+        sys.exit(f'{out} exists')
+    json.dump(spec, open(out, 'w'), indent=1)
+    print('wrote', out, len(entries), 'entries')
+    return out
+
+
+def cmd_list(args):
+    cols = args.cols.split(',') if args.cols else ['id', 'experiment', 'line', 'version', 'model', 'train_ply',
+                                                    'end_reason', 'field_class', 'setup_group']
+    rs = select(args)
+    w = csv.writer(sys.stdout)
+    w.writerow(cols)
+    for r in rs:
+        w.writerow([r[c] for c in cols])
+
+
+def cmd_tags(args):
+    for r in select(args):
+        if r['experiment'] == 'global' or '#' not in r['line']:
+            print(f"# {r['id']}: {r['experiment']} {r['line']} has no '#k' line name; use `spec`", file=sys.stderr)
+            continue
+        for v in versions_of(r, args.versions):
+            print(f"{r['id']}={r['experiment']}:^{re.escape(r['line'])}$@{v}")
+
+
+def cmd_spec(args):
+    es = []
+    for r in select(args):
+        for v in versions_of(r, args.versions):
+            e = entry(r, v, args.source, args.skip_missing)
+            if e:
+                es.append(e)
+    write_spec(args.name, args.ply, args.rounds, es, args.binary, args.threads, args.jobs)
+
+
+def cmd_smoke(args):
+    rs = rows()
+    sel = {id(r) for r in select(args, rs)}
+    combos = {}
+    for r in rs:
+        if id(r) in sel:
+            combos.setdefault((r['kind'], r['train_binary']), r)
+    result = {}
+    stamp = time.strftime('%Y%m%d-%H%M%S')
+    os.makedirs(f'{REPO}/models/from-scratch/library-smoke/{stamp}', exist_ok=True)  # new each run, nothing deleted
+    for (kind, tb), r in sorted(combos.items()):
+        path = f"{REPO}/{r['snapshot']}"
+        out = f"{REPO}/models/from-scratch/library-smoke/{stamp}/{kind}-{tb}"
+        p = subprocess.run([f'{REPO}/{HYBRID17}', 'arena', f'{kind}:{path}', 'rand', '--games', '2', '--a-depth', '1',
+                            '--b-depth', '1', '--a-policy', 'log-odds', '--b-policy', 'rand', '--out', out],
+                           capture_output=True, text=True, timeout=600)
+        ok = p.returncode == 0 and 'score' in p.stdout
+        result[(kind, tb)] = f"yes (smoke {kind}/{tb}: {r['id']}@{r['version']})" if ok else \
+            f"NO ({kind}/{tb}: exit {p.returncode}: {(p.stderr or p.stdout).strip()[-120:]})"
+        print(f"{kind:7s} {tb:20s} {r['id']:22s} {'ok' if ok else 'FAILED'}")
+    for r in rs:
+        if id(r) in sel:
+            r['loads_hybrid17'] = result[(r['kind'], r['train_binary'])]
+    with open(INDEX, 'w', newline='') as f:
+        w = csv.DictWriter(f, list(rs[0].keys()))
+        w.writeheader()
+        w.writerows(rs)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    sub = ap.add_subparsers(dest='cmd', required=True)
+    p = sub.add_parser('list'); add_filters(p); p.add_argument('--cols')
+    p = sub.add_parser('tags'); add_filters(p); p.add_argument('--versions', default='final')
+    p = sub.add_parser('spec'); add_filters(p)
+    p.add_argument('name'); p.add_argument('ply'); p.add_argument('rounds')
+    p.add_argument('--versions', default='final'); p.add_argument('--source', default='experiment',
+                                                                   choices=['experiment', 'library'])
+    p.add_argument('--binary', default=HYBRID17); p.add_argument('--threads', type=int, default=2)
+    p.add_argument('--jobs', type=int, default=2); p.add_argument('--skip-missing', action='store_true')
+    p = sub.add_parser('smoke'); add_filters(p)
+    args = ap.parse_args()
+    {'list': cmd_list, 'tags': cmd_tags, 'spec': cmd_spec, 'smoke': cmd_smoke}[args.cmd](args)
+
+
+if __name__ == '__main__':
+    main()

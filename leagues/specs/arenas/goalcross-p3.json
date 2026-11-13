@@ -1,0 +1,219 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid18",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": "field"
+ },
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 30,
+  "min_rounds": 30,
+  "max_rounds": 30
+ },
+ "name": "goalcross-p3",
+ "dir": "leagues/arenas/diag/goalcross-p3",
+ "plies": [
+  3
+ ],
+ "description": "Cold read goalcross-p3: ply 3, version 300, only the contrast's lines, near argmax (T 0.02), 30 round-robins; Elo 0 = the field's mean, no random player. Tags: tfa=labels-tree-p2:label-model=F-P-lab@322, fla=labels-tree-p2:^F-P-lab\\.loc$@322, tfa=labels-tree-p2:label-model=F-P-lab@327, fla=labels-tree-p2:^F-P-lab\\.loc$@327, tfa=labels-tree-p2:label-model=F-P-lab@332, fla=labels-tree-p2:^F-P-lab\\.loc$@332, tfb=labels-tree-p2-s2:label-model=F-P-lab@390, flb=labels-tree-p2-s2:^F-P-lab\\.loc$@390, tfb=labels-tree-p2-s2:label-model=F-P-lab@395, flb=labels-tree-p2-s2:^F-P-lab\\.loc$@395, tfb=labels-tree-p2-s2:label-model=F-P-lab@400, flb=labels-tree-p2-s2:^F-P-lab\\.loc$@400, xfp=std-v1-p2-x3:^F-P\\.loc$@426, xfl=std-v1-p2-x3:^F-L\\.loc$@426, xtp=std-v1-p2-x3:^T-P-Ne\\+split@426, xfp=std-v1-p2-x3:^F-P\\.loc$@431, xfl=std-v1-p2-x3:^F-L\\.loc$@431, xtp=std-v1-p2-x3:^T-P-Ne\\+split@431, xfp=std-v1-p2-x3:^F-P\\.loc$@436, xfl=std-v1-p2-x3:^F-L\\.loc$@436, xtp=std-v1-p2-x3:^T-P-Ne\\+split@436, wfp=std-v1-p2-s2:^F-P\\.loc$@300, wfl=std-v1-p2-s2:^F-L\\.loc$@300, lvp=levers2-p2:^F-P\\.loc$@400, lvl=levers2-p2:label-depth@400, yfp=replay-p2:^F-P#@299, ytr=replay-p2:^T-P-Ne\\+@299, vfp=diversity-p2:^F-P#@299, vtr=diversity-p2:^T-P-Ne\\+@299, lfp=probit-late-p2:^F-P#@299, ltr=probit-late-p2:^T-P-Ne\\+@299",
+ "entries": [
+  {
+   "version": "labels-tree-p2:T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P-lab.loc@322",
+   "name": "tfa322.L1@322",
+   "label": "labels-tree-p2 T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P-lab.loc version v322"
+  },
+  {
+   "version": "labels-tree-p2:F-P-lab.loc@322",
+   "name": "fla322.L1@322",
+   "label": "labels-tree-p2 F-P-lab.loc version v322"
+  },
+  {
+   "version": "labels-tree-p2:T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P-lab.loc@327",
+   "name": "tfa327.L1@327",
+   "label": "labels-tree-p2 T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P-lab.loc version v327"
+  },
+  {
+   "version": "labels-tree-p2:F-P-lab.loc@327",
+   "name": "fla327.L1@327",
+   "label": "labels-tree-p2 F-P-lab.loc version v327"
+  },
+  {
+   "version": "labels-tree-p2:T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P-lab.loc@332",
+   "name": "tfa332.L1@332",
+   "label": "labels-tree-p2 T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P-lab.loc version v332"
+  },
+  {
+   "version": "labels-tree-p2:F-P-lab.loc@332",
+   "name": "fla332.L1@332",
+   "label": "labels-tree-p2 F-P-lab.loc version v332"
+  },
+  {
+   "version": "labels-tree-p2-s2:T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P-lab.loc@390",
+   "name": "tfb390.L1@390",
+   "label": "labels-tree-p2-s2 T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P-lab.loc version v390"
+  },
+  {
+   "version": "labels-tree-p2-s2:F-P-lab.loc@390",
+   "name": "flb390.L1@390",
+   "label": "labels-tree-p2-s2 F-P-lab.loc version v390"
+  },
+  {
+   "version": "labels-tree-p2-s2:T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P-lab.loc@395",
+   "name": "tfb395.L1@395",
+   "label": "labels-tree-p2-s2 T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P-lab.loc version v395"
+  },
+  {
+   "version": "labels-tree-p2-s2:F-P-lab.loc@395",
+   "name": "flb395.L1@395",
+   "label": "labels-tree-p2-s2 F-P-lab.loc version v395"
+  },
+  {
+   "version": "labels-tree-p2-s2:T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P-lab.loc@400",
+   "name": "tfb400.L1@400",
+   "label": "labels-tree-p2-s2 T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P-lab.loc version v400"
+  },
+  {
+   "version": "labels-tree-p2-s2:F-P-lab.loc@400",
+   "name": "flb400.L1@400",
+   "label": "labels-tree-p2-s2 F-P-lab.loc version v400"
+  },
+  {
+   "version": "std-v1-p2-x3:F-P.loc@426",
+   "name": "xfp426.L1@426",
+   "label": "std-v1-p2-x3 F-P.loc version v426"
+  },
+  {
+   "version": "std-v1-p2-x3:F-L.loc@426",
+   "name": "xfl426.L1@426",
+   "label": "std-v1-p2-x3 F-L.loc version v426"
+  },
+  {
+   "version": "std-v1-p2-x3:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc@426",
+   "name": "xtp426.L1@426",
+   "label": "std-v1-p2-x3 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc version v426"
+  },
+  {
+   "version": "std-v1-p2-x3:F-P.loc@431",
+   "name": "xfp431.L1@431",
+   "label": "std-v1-p2-x3 F-P.loc version v431"
+  },
+  {
+   "version": "std-v1-p2-x3:F-L.loc@431",
+   "name": "xfl431.L1@431",
+   "label": "std-v1-p2-x3 F-L.loc version v431"
+  },
+  {
+   "version": "std-v1-p2-x3:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc@431",
+   "name": "xtp431.L1@431",
+   "label": "std-v1-p2-x3 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc version v431"
+  },
+  {
+   "version": "std-v1-p2-x3:F-P.loc@436",
+   "name": "xfp436.L1@436",
+   "label": "std-v1-p2-x3 F-P.loc version v436"
+  },
+  {
+   "version": "std-v1-p2-x3:F-L.loc@436",
+   "name": "xfl436.L1@436",
+   "label": "std-v1-p2-x3 F-L.loc version v436"
+  },
+  {
+   "version": "std-v1-p2-x3:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc@436",
+   "name": "xtp436.L1@436",
+   "label": "std-v1-p2-x3 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc version v436"
+  },
+  {
+   "version": "std-v1-p2-s2:F-P.loc@300",
+   "name": "wfp300.L1@300",
+   "label": "std-v1-p2-s2 F-P.loc version v300"
+  },
+  {
+   "version": "std-v1-p2-s2:F-L.loc@300",
+   "name": "wfl300.L1@300",
+   "label": "std-v1-p2-s2 F-L.loc version v300"
+  },
+  {
+   "version": "levers2-p2:F-P.loc@400",
+   "name": "lvp400.L1@400",
+   "label": "levers2-p2 F-P.loc version v400"
+  },
+  {
+   "version": "levers2-p2:F-P+label-depth=2+label-result=0.5.loc@400",
+   "name": "lvl400.L1@400",
+   "label": "levers2-p2 F-P+label-depth=2+label-result=0.5.loc version v400"
+  },
+  {
+   "version": "replay-p2:F-P#1.loc@299",
+   "name": "yfp299.L1@299",
+   "label": "replay-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "replay-p2:F-P#2.loc@299",
+   "name": "yfp299.L2@299",
+   "label": "replay-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299",
+   "name": "ytr299.L1@299",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v299"
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@299",
+   "name": "ytr299.L2@299",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v299"
+  },
+  {
+   "version": "diversity-p2:F-P#1.loc@299",
+   "name": "vfp299.L1@299",
+   "label": "diversity-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "diversity-p2:F-P#2.loc@299",
+   "name": "vfp299.L2@299",
+   "label": "diversity-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "diversity-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299",
+   "name": "vtr299.L1@299",
+   "label": "diversity-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v299"
+  },
+  {
+   "version": "diversity-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@299",
+   "name": "vtr299.L2@299",
+   "label": "diversity-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@299",
+   "name": "lfp299.L1@299",
+   "label": "probit-late-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@299",
+   "name": "lfp299.L2@299",
+   "label": "probit-late-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299",
+   "name": "ltr299.L1@299",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@299",
+   "name": "ltr299.L2@299",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v299"
+  }
+ ]
+}

@@ -1,0 +1,51 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "grow-l-p1",
+ "description": "The growth rule's first LR test at ply 1 (analyst 6.55, 11-12 ~02:00): the recipe the next global league would carry if the user takes the analyst's 6.54 six (F-L, F-P, T-P-Ne-grow, T-L-Ne-grow, optionally capped T-P-Ne and T-L-Ne) has never been played, and its trial statistic is untested on LR leaves. One factor: growing vs capped LR error tree. Lines: F-L x2; T-L-Ne capped (limit 4, threshold 1M, as error-dag-p1's tree, 46 / 55 over F-L at plies 1 / 2) x2; T-L-Ne-grow on the recommended leaf rule (grow4: --grow-mdl 0 --grow-gate age --grow-priority snapshot; W 1M, C 2, z 2, D 5M = the default, like for like with the probit series grow-p1/b/c) x2. Every line trains on chessai-grow4 (byte-identical to hybrid6 for trees and flats without growth flags; train_binary.py after create); games chessai-hybrid16; seed 49; games_per_cycle 1584 (the user's standard; 12 entries -> 12 rounds); floor 300, cap 400. Read: cold, T 0.02, one arena per ply (1, 2), v150 and the final; head to head grow vs capped, each vs F-L; plus the growth log (kept/undone trials, trial z). Predictions (6.55; ply 1 / ply 2, +-28): capped over F-L 30-60 / 20-60; grow minus capped -10..10 / -10..20; grow over F-L 25-65 at ply 1; grow 25-33 leaves by v400, 0-3 undone, kept trials at z 3-10. Nulls that pull T-L-Ne-grow from the six: grow 20+ below capped at ply 1 at the final, or fewer than 6 kept splits by v400 with trials failing the z bar (then W 2M, not a lower z). Null for the LR seats: capped within 15 of F-L.",
+ "models": [
+  {
+   "model": "F-L",
+   "replicates": 2
+  },
+  {
+   "model": "T-L-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-L-Ne-grow",
+   "set": {
+    "--grow-mdl": "0",
+    "--grow-gate": "age",
+    "--grow-priority": "snapshot"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 49,
+ "train": {
+  "seed": 49
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 400,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid16"
+ }
+}

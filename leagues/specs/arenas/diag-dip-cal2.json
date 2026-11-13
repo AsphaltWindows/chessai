@@ -1,0 +1,142 @@
+{
+ "name": "diag-dip-cal2",
+ "dir": "leagues/arenas/diag/dip-cal2",
+ "description": "Twin of diag-dip with every entry calibrated on 600 of its own games at DEPTH 2 instead of the experiment's depth-1 own calibration (theory-2 6.7, cause (3)): if the dip versions' ply-2 deficit closes towards their ply-1 gap, the dip is the depth-1 calibration of a young split applied at ply 2. Entries are model files, not versions (arena.py gives version entries their experiment's calibration, so the depth-2 calibration applies only to file entries; changed 11-11 ~00:30).",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid9",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "plies": [
+  1,
+  2
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 5,
+  "min_rounds": 15,
+  "max_rounds": 15
+ },
+ "entries": [
+  {
+   "file": "leagues/experiments/residual-leaves/runs/T-L-Nc+split-limit=4+split-threshold=1000000.loc/bdt60.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "tree@60",
+   "label": "copy tree v60 (dip), own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/residual-leaves/runs/T-L-Nc+split-limit=4+split-threshold=1000000.loc/bdt90.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "tree@90",
+   "label": "copy tree v90 (dip), own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/residual-leaves/runs/T-L-Nc+split-limit=4+split-threshold=1000000.loc/bdt120.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "tree@120",
+   "label": "copy tree v120 (dip), own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/residual-leaves/runs/T-L-Nc+split-limit=4+split-threshold=1000000.loc/bdt150.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "tree@150",
+   "label": "copy tree v150 (dip end), own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/residual-leaves/runs/T-L-Nc+split-limit=4+split-threshold=1000000.loc/bdt300.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "tree@300",
+   "label": "copy tree v300 (late), own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/residual-leaves/runs/T-L-Nc+split-limit=4+split-threshold=1000000.loc/bdt350.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "tree@350",
+   "label": "copy tree v350 (late), own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/residual-leaves/runs/T-L-Nc+split-limit=4+split-threshold=1000000.loc/bdt399.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "tree@399",
+   "label": "copy tree v399 (late), own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/residual-leaves/runs/F-L.loc/lr60.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "flat@60",
+   "label": "F-L v60, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/residual-leaves/runs/F-L.loc/lr90.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "flat@90",
+   "label": "F-L v90, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/residual-leaves/runs/F-L.loc/lr120.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "flat@120",
+   "label": "F-L v120, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/residual-leaves/runs/F-L.loc/lr150.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "flat@150",
+   "label": "F-L v150, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/residual-leaves/runs/F-L.loc/lr300.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "flat@300",
+   "label": "F-L v300, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/residual-leaves/runs/F-L.loc/lr350.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "flat@350",
+   "label": "F-L v350, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/residual-leaves/runs/F-L.loc/lr399.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "flat@399",
+   "label": "F-L v399, own cal at depth 2"
+  }
+ ],
+ "calibration": {
+  "games": 600,
+  "depth": 2,
+  "seed": 5,
+  "policy": "log-odds-softmax",
+  "temperature": 0.1,
+  "heldout": {
+   "lr": "/home/iv/dev/chessai/games/heldout-lr-d2-s555/round0",
+   "cnbp": "/home/iv/dev/chessai/games/heldout-cnbp-d2-s555/round0"
+  }
+ }
+}

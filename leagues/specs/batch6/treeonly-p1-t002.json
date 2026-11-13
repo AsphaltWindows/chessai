@@ -1,0 +1,51 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "treeonly-p1-t002",
+ "description": "treeonly-p1-t002: the T 0.02 TRAINING test redone (the user, 11-12 ~13:45: 'Can we repeat the experiment that confirmed that our models are weaker if trained on 0.02 data vs 0.1 knowing what we know now about how to construct better experiments'). One factor, the temperature of the games the lines play AND train on (round-robins and self-games at T 0.02 instead of 0.1). Comparator: treeonly-p1-coldrate (same lines T-P-Ne capped x4, seed 59, 1,584 games a cycle, self-games, 300 cycles, hybrid17 games, hybrid6 training), which trains on T 0.1 games; both rate on the same rating-only cold set (cold_games T 0.02, share 0.25, train false), so in-run decisions rest on the same kind of games. No observers (they never play; the comparator's don't touch its field). Fixes against 11-11's train-t002-p1 / train-t01-p1 (-106 at ply 1, -221 at ply 2): 144 games a cycle there (rounds_per_cycle 12), each arm rated at its own temperature (a second factor), a direct arm-vs-arm verdict, F-L x2 read once at the end. Read (cold-read.sh style): plies 1 and 2, v150 and v299, against the standing ply-1 panel r/e/g/h at v300, same-kind panel the verdict. Cost ~0.25 (F-P) / ~0.8 (trees) CPU-h.",
+ "models": [
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "replicates": 4
+  }
+ ],
+ "seed": 59,
+ "train": {
+  "seed": 59
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 300,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid17",
+  "flags": [
+   "--reports-last",
+   "--sparse-fit",
+   "--policy",
+   "log-odds-softmax",
+   "--temperature",
+   "0.02"
+  ]
+ },
+ "cold_games": {
+  "temperature": 0.02,
+  "share": 0.25,
+  "train": false
+ }
+}

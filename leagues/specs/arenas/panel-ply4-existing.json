@@ -1,0 +1,163 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 30,
+  "min_rounds": 30,
+  "max_rounds": 30
+ },
+ "name": "panel-ply4-existing",
+ "dir": "leagues/arenas/diag/panel-ply4-existing",
+ "plies": [
+  4
+ ],
+ "description": "Cold read panel-ply4-existing: ply 4, version 299, only the contrast's lines, near argmax (T 0.02), 30 round-robins. Tags: x4=fponly-p2:^F-P@299, x4b=fponly-p2b:^F-P@299, bfp=base-probit-p2:^F-P@299, pfp=probit-late-p2:^F-P@299, f3=flat-p3:^F-L@199, f3b=flat-p3-b:^F-L@199, w4=flat-p3-w4:^F-L@99, rtr=error-routing-p1:^T-P-Ne\\+@300",
+ "entries": [
+  {
+   "version": "fponly-p2:F-P#1.loc@299",
+   "name": "x4299.L1@299",
+   "label": "fponly-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "fponly-p2:F-P#2.loc@299",
+   "name": "x4299.L2@299",
+   "label": "fponly-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "fponly-p2:F-P#3.loc@299",
+   "name": "x4299.L3@299",
+   "label": "fponly-p2 F-P#3.loc version v299"
+  },
+  {
+   "version": "fponly-p2:F-P#4.loc@299",
+   "name": "x4299.L4@299",
+   "label": "fponly-p2 F-P#4.loc version v299"
+  },
+  {
+   "version": "fponly-p2b:F-P#1.loc@299",
+   "name": "x4b299.L1@299",
+   "label": "fponly-p2b F-P#1.loc version v299"
+  },
+  {
+   "version": "fponly-p2b:F-P#2.loc@299",
+   "name": "x4b299.L2@299",
+   "label": "fponly-p2b F-P#2.loc version v299"
+  },
+  {
+   "version": "fponly-p2b:F-P#3.loc@299",
+   "name": "x4b299.L3@299",
+   "label": "fponly-p2b F-P#3.loc version v299"
+  },
+  {
+   "version": "fponly-p2b:F-P#4.loc@299",
+   "name": "x4b299.L4@299",
+   "label": "fponly-p2b F-P#4.loc version v299"
+  },
+  {
+   "version": "base-probit-p2:F-P#1.loc@299",
+   "name": "bfp299.L1@299",
+   "label": "base-probit-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "base-probit-p2:F-P#2.loc@299",
+   "name": "bfp299.L2@299",
+   "label": "base-probit-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@299",
+   "name": "pfp299.L1@299",
+   "label": "probit-late-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@299",
+   "name": "pfp299.L2@299",
+   "label": "probit-late-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "flat-p3:F-L#1.loc@199",
+   "name": "f3199.L1@199",
+   "label": "flat-p3 F-L#1.loc version v199"
+  },
+  {
+   "version": "flat-p3:F-L#2.loc@199",
+   "name": "f3199.L2@199",
+   "label": "flat-p3 F-L#2.loc version v199"
+  },
+  {
+   "version": "flat-p3:F-L#3.loc@199",
+   "name": "f3199.L3@199",
+   "label": "flat-p3 F-L#3.loc version v199"
+  },
+  {
+   "version": "flat-p3:F-L#4.loc@199",
+   "name": "f3199.L4@199",
+   "label": "flat-p3 F-L#4.loc version v199"
+  },
+  {
+   "version": "flat-p3-b:F-L#1.loc@199",
+   "name": "f3b199.L1@199",
+   "label": "flat-p3-b F-L#1.loc version v199"
+  },
+  {
+   "version": "flat-p3-b:F-L#2.loc@199",
+   "name": "f3b199.L2@199",
+   "label": "flat-p3-b F-L#2.loc version v199"
+  },
+  {
+   "version": "flat-p3-b:F-L#3.loc@199",
+   "name": "f3b199.L3@199",
+   "label": "flat-p3-b F-L#3.loc version v199"
+  },
+  {
+   "version": "flat-p3-b:F-L#4.loc@199",
+   "name": "f3b199.L4@199",
+   "label": "flat-p3-b F-L#4.loc version v199"
+  },
+  {
+   "version": "flat-p3-w4:F-L#1.loc@99",
+   "name": "w499.L1@99",
+   "label": "flat-p3-w4 F-L#1.loc version v99"
+  },
+  {
+   "version": "flat-p3-w4:F-L#2.loc@99",
+   "name": "w499.L2@99",
+   "label": "flat-p3-w4 F-L#2.loc version v99"
+  },
+  {
+   "version": "flat-p3-w4:F-L#3.loc@99",
+   "name": "w499.L3@99",
+   "label": "flat-p3-w4 F-L#3.loc version v99"
+  },
+  {
+   "version": "flat-p3-w4:F-L#4.loc@99",
+   "name": "w499.L4@99",
+   "label": "flat-p3-w4 F-L#4.loc version v99"
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@300",
+   "name": "rtr300.L1@300",
+   "label": "error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v300"
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@300",
+   "name": "rtr300.L2@300",
+   "label": "error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v300"
+  }
+ ]
+}

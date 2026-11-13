@@ -1,0 +1,75 @@
+{
+ "name": "ply1-probit-settings",
+ "dir": "leagues/arenas/ply1/probit-settings",
+ "description": "ply-1 replay of the pair arena: final champions of probit-settings (original) and probit-settings-new (rerun: no random players, no ply-1 entries, plateau stop), with the random players",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid8",
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "plies": [
+  1
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 10,
+  "min_rounds": 46,
+  "max_rounds": 46
+ },
+ "entries": [
+  {
+   "version": "probit-settings:F-P+probit-tau=0.loc@357",
+   "name": "orig.F-P+probit-tau=0.loc@357",
+   "label": "probit-settings E.L.14.357",
+   "note": "crowned in cycle 359"
+  },
+  {
+   "version": "probit-settings:F-P+probit-tau=1e-6.loc@367",
+   "name": "orig.F-P+probit-tau=1e-6.loc@367",
+   "label": "probit-settings E.L.13.367",
+   "note": "crowned in cycle 369"
+  },
+  {
+   "version": "probit-settings:F-P+probit-tau=1e-5.loc@374",
+   "name": "orig.F-P+probit-tau=1e-5.loc@374",
+   "label": "probit-settings E.L.14.374",
+   "note": "crowned in cycle 376"
+  },
+  {
+   "version": "probit-settings:F-P+probit-tau=1e-4.loc@375",
+   "name": "orig.F-P+probit-tau=1e-4.loc@375",
+   "label": "probit-settings E.L.11.375",
+   "note": "crowned in cycle 377"
+  },
+  {
+   "version": "probit-settings-new:F-P+probit-tau=0.loc@205",
+   "name": "new.F-P+probit-tau=0.loc@205",
+   "label": "probit-settings-new E.L.25.205",
+   "note": "crowned in cycle 207"
+  },
+  {
+   "version": "probit-settings-new:F-P+probit-tau=1e-6.loc@173",
+   "name": "new.F-P+probit-tau=1e-6.loc@173",
+   "label": "probit-settings-new E.L.25.173",
+   "note": "crowned in cycle 175"
+  },
+  {
+   "version": "probit-settings-new:F-P+probit-tau=1e-5.loc@151",
+   "name": "new.F-P+probit-tau=1e-5.loc@151",
+   "label": "probit-settings-new E.L.25.151",
+   "note": "crowned in cycle 153"
+  },
+  {
+   "version": "probit-settings-new:F-P+probit-tau=1e-4.loc@162",
+   "name": "new.F-P+probit-tau=1e-4.loc@162",
+   "label": "probit-settings-new E.L.23.162",
+   "note": "crowned in cycle 164"
+  }
+ ]
+}

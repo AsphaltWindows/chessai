@@ -1,0 +1,54 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "grow-p1",
+ "description": "Growth rule phase 1 at ply 1 (growth-spec section 4; the user 11-11 ~18:00-19:30: splits should wait for stagnation and come at a steady rate per unit of data; ~20:15: test splitting at ply 1). One factor, the leaf split rule (the cap goes with it, since grow has none): F-P x2 (comparator); T-P-Ne with the current rule (worse, z 0, --split-limit 4) x2; T-P-Ne with --split-rule grow (stagnation over 2 windows at 2 block-SE, one credit per 5M positions capped at 2, each split a trial against an unsplit shadow kept iff its gain beats 2 block-SE and the MDL bar, back-off on failure, --split-limit 1000000) x2. All T-P-Ne: NB error router, non-merging, 1M windows, noise 0.03. Training binary chessai-grow1 for every line (byte-identical to hybrid6 / hybrid15 without grow flags); the grow lines drop the recipe's --reset-leaves inf (it only logs leaf-vs-shadow comparisons, and grow refuses it; first create failed 20:31 on it; the second at 20:32 for want of --trial-error log, which grow needs to judge trials in nats; flags now as grow1's smoke run; the third at 20:34 on a self-games file name too long, so the grow arm is the recipe row T-P-Ne-g = T-P-Ne without --reset-leaves inf, with --trial-error log); games chessai-hybrid16. Floor 300, cap 400; cold reads at v150 and the final, plies 1-2, T 0.02, plus each line's split table (version, positions, level). Prediction (analyst): grow minus current -15 to 10 at v150 and -10 to 15 at v300; grow 9-11 leaves at v300 with 0-2 undone trials; both trees 70-120 over F-P at ply 1, 40-80 at ply 2. Launched 11-11 ~20:32 in base-lr-p2's slot.",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03",
+    "--split-limit": "4"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne-g",
+   "set": {
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03",
+    "--split-limit": "1000000",
+    "--split-rule": "grow"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 44,
+ "train": {
+  "seed": 44
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 400,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid16"
+ }
+}

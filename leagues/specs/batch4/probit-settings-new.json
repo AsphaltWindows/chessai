@@ -1,0 +1,63 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "models": [
+  {
+   "model": "F-P",
+   "sweep": {
+    "--probit-tau": [
+     "0",
+     "1e-6",
+     "1e-5",
+     "1e-4"
+    ]
+   },
+   "to": "train"
+  }
+ ],
+ "options": [
+  "local"
+ ],
+ "name": "probit-settings-new",
+ "references": [],
+ "ply1_entries": false,
+ "plateau": {
+  "cycles": 50,
+  "min_cycles": 100
+ },
+ "cycles": 1000,
+ "rounds_per_cycle": 16,
+ "min_rounds": 16,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid8"
+ },
+ "prices_version": "P2",
+ "batch4": {
+  "original": "probit-settings",
+  "note": "Batch 4: probit-settings rerun without random players or ply-1 entries until the champions plateau. Rounds: 919 games with a model at ply 2 per cycle in the original over 56 per round (4 lines, two ply-2 entries each).",
+  "binaries": {
+   "F-P+probit-tau=0.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "F-P+probit-tau=1e-6.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "F-P+probit-tau=1e-5.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "F-P+probit-tau=1e-4.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   }
+  },
+  "rounds_from": {
+   "original": "probit-settings",
+   "ply2_games_per_cycle": 918.92,
+   "lines": 4,
+   "games_per_round": 56
+  }
+ }
+}

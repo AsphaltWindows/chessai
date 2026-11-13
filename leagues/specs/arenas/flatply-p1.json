@@ -1,0 +1,233 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 30,
+  "min_rounds": 30,
+  "max_rounds": 30
+ },
+ "name": "flatply-p1",
+ "dir": "leagues/arenas/diag/flatply-p1",
+ "plies": [
+  1
+ ],
+ "description": "Cold read flatply-p1: ply 1, version 300, only the contrast's lines, near argmax (T 0.02), 30 round-robins. Tags: f3=flat-p3:^F-L@199, f3b=flat-p3-b:^F-L@199, w4=flat-p3-w4:^F-L@99, x4=fponly-p2:^F-P@299, cl1=capped-l-f10-p1:^F-L@300, gl1=grow-l-p1:^F-L@299, gl1b=grow-l-p1b:^F-L@300, pf1=probit-f10-p1:^F-P@300, rfp=error-routing-p1:^F-P@300, rtr=error-routing-p1:^T-P-Ne\\+@300, efp=error-dag-probit-p1:^F-P@300, etr=error-dag-probit-p1:^T-P-Ne\\+@300, gfp=grow-p1:^F-P@300, gtr=grow-p1:^T-P-Ne\\+@300, hfp=grow-p1b:^F-P@300, htr=grow-p1b:^T-P-Ne-grow#@300",
+ "entries": [
+  {
+   "version": "flat-p3:F-L#1.loc@199",
+   "name": "f3199.L1@199",
+   "label": "flat-p3 F-L#1.loc version v199"
+  },
+  {
+   "version": "flat-p3:F-L#2.loc@199",
+   "name": "f3199.L2@199",
+   "label": "flat-p3 F-L#2.loc version v199"
+  },
+  {
+   "version": "flat-p3:F-L#3.loc@199",
+   "name": "f3199.L3@199",
+   "label": "flat-p3 F-L#3.loc version v199"
+  },
+  {
+   "version": "flat-p3:F-L#4.loc@199",
+   "name": "f3199.L4@199",
+   "label": "flat-p3 F-L#4.loc version v199"
+  },
+  {
+   "version": "flat-p3-b:F-L#1.loc@199",
+   "name": "f3b199.L1@199",
+   "label": "flat-p3-b F-L#1.loc version v199"
+  },
+  {
+   "version": "flat-p3-b:F-L#2.loc@199",
+   "name": "f3b199.L2@199",
+   "label": "flat-p3-b F-L#2.loc version v199"
+  },
+  {
+   "version": "flat-p3-b:F-L#3.loc@199",
+   "name": "f3b199.L3@199",
+   "label": "flat-p3-b F-L#3.loc version v199"
+  },
+  {
+   "version": "flat-p3-b:F-L#4.loc@199",
+   "name": "f3b199.L4@199",
+   "label": "flat-p3-b F-L#4.loc version v199"
+  },
+  {
+   "version": "flat-p3-w4:F-L#1.loc@99",
+   "name": "w499.L1@99",
+   "label": "flat-p3-w4 F-L#1.loc version v99"
+  },
+  {
+   "version": "flat-p3-w4:F-L#2.loc@99",
+   "name": "w499.L2@99",
+   "label": "flat-p3-w4 F-L#2.loc version v99"
+  },
+  {
+   "version": "flat-p3-w4:F-L#3.loc@99",
+   "name": "w499.L3@99",
+   "label": "flat-p3-w4 F-L#3.loc version v99"
+  },
+  {
+   "version": "flat-p3-w4:F-L#4.loc@99",
+   "name": "w499.L4@99",
+   "label": "flat-p3-w4 F-L#4.loc version v99"
+  },
+  {
+   "version": "fponly-p2:F-P#1.loc@299",
+   "name": "x4299.L1@299",
+   "label": "fponly-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "fponly-p2:F-P#2.loc@299",
+   "name": "x4299.L2@299",
+   "label": "fponly-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "fponly-p2:F-P#3.loc@299",
+   "name": "x4299.L3@299",
+   "label": "fponly-p2 F-P#3.loc version v299"
+  },
+  {
+   "version": "fponly-p2:F-P#4.loc@299",
+   "name": "x4299.L4@299",
+   "label": "fponly-p2 F-P#4.loc version v299"
+  },
+  {
+   "version": "capped-l-f10-p1:F-L#1.loc@300",
+   "name": "cl1300.L1@300",
+   "label": "capped-l-f10-p1 F-L#1.loc version v300"
+  },
+  {
+   "version": "capped-l-f10-p1:F-L#2.loc@300",
+   "name": "cl1300.L2@300",
+   "label": "capped-l-f10-p1 F-L#2.loc version v300"
+  },
+  {
+   "version": "grow-l-p1:F-L#1.loc@299",
+   "name": "gl1299.L1@299",
+   "label": "grow-l-p1 F-L#1.loc version v299"
+  },
+  {
+   "version": "grow-l-p1:F-L#2.loc@299",
+   "name": "gl1299.L2@299",
+   "label": "grow-l-p1 F-L#2.loc version v299"
+  },
+  {
+   "version": "grow-l-p1b:F-L#1.loc@300",
+   "name": "gl1b300.L1@300",
+   "label": "grow-l-p1b F-L#1.loc version v300"
+  },
+  {
+   "version": "grow-l-p1b:F-L#2.loc@300",
+   "name": "gl1b300.L2@300",
+   "label": "grow-l-p1b F-L#2.loc version v300"
+  },
+  {
+   "version": "probit-f10-p1:F-P#1.loc@300",
+   "name": "pf1300.L1@300",
+   "label": "probit-f10-p1 F-P#1.loc version v300"
+  },
+  {
+   "version": "probit-f10-p1:F-P#2.loc@300",
+   "name": "pf1300.L2@300",
+   "label": "probit-f10-p1 F-P#2.loc version v300"
+  },
+  {
+   "version": "error-routing-p1:F-P#1.loc@300",
+   "name": "rfp300.L1@300",
+   "label": "error-routing-p1 F-P#1.loc version v300"
+  },
+  {
+   "version": "error-routing-p1:F-P#2.loc@300",
+   "name": "rfp300.L2@300",
+   "label": "error-routing-p1 F-P#2.loc version v300"
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@300",
+   "name": "rtr300.L1@300",
+   "label": "error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v300"
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@300",
+   "name": "rtr300.L2@300",
+   "label": "error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v300"
+  },
+  {
+   "version": "error-dag-probit-p1:F-P#1.loc@300",
+   "name": "efp300.L1@300",
+   "label": "error-dag-probit-p1 F-P#1.loc version v300"
+  },
+  {
+   "version": "error-dag-probit-p1:F-P#2.loc@300",
+   "name": "efp300.L2@300",
+   "label": "error-dag-probit-p1 F-P#2.loc version v300"
+  },
+  {
+   "version": "error-dag-probit-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@300",
+   "name": "etr300.L1@300",
+   "label": "error-dag-probit-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v300"
+  },
+  {
+   "version": "error-dag-probit-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@300",
+   "name": "etr300.L2@300",
+   "label": "error-dag-probit-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v300"
+  },
+  {
+   "version": "grow-p1:F-P#1.loc@300",
+   "name": "gfp300.L1@300",
+   "label": "grow-p1 F-P#1.loc version v300"
+  },
+  {
+   "version": "grow-p1:F-P#2.loc@300",
+   "name": "gfp300.L2@300",
+   "label": "grow-p1 F-P#2.loc version v300"
+  },
+  {
+   "version": "grow-p1:T-P-Ne+split-threshold=1000000+split-noise=0.03+split-limit=4#1.loc@300",
+   "name": "gtr300.L1@300",
+   "label": "grow-p1 T-P-Ne+split-threshold=1000000+split-noise=0.03+split-limit=4#1.loc version v300"
+  },
+  {
+   "version": "grow-p1:T-P-Ne+split-threshold=1000000+split-noise=0.03+split-limit=4#2.loc@300",
+   "name": "gtr300.L2@300",
+   "label": "grow-p1 T-P-Ne+split-threshold=1000000+split-noise=0.03+split-limit=4#2.loc version v300"
+  },
+  {
+   "version": "grow-p1b:F-P#1.loc@300",
+   "name": "hfp300.L1@300",
+   "label": "grow-p1b F-P#1.loc version v300"
+  },
+  {
+   "version": "grow-p1b:F-P#2.loc@300",
+   "name": "hfp300.L2@300",
+   "label": "grow-p1b F-P#2.loc version v300"
+  },
+  {
+   "version": "grow-p1b:T-P-Ne-grow#1.loc@300",
+   "name": "htr300.L1@300",
+   "label": "grow-p1b T-P-Ne-grow#1.loc version v300"
+  },
+  {
+   "version": "grow-p1b:T-P-Ne-grow#2.loc@300",
+   "name": "htr300.L2@300",
+   "label": "grow-p1b T-P-Ne-grow#2.loc version v300"
+  }
+ ]
+}

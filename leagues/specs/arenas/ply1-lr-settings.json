@@ -1,0 +1,87 @@
+{
+ "name": "ply1-lr-settings",
+ "dir": "leagues/arenas/ply1/lr-settings",
+ "description": "the lr-settings pair arena (original vs rerun final champions, with the random players) replayed at ply 1 instead of ply 2: how much of the rerun's ply-2 gain (424 [396, 452]) holds at ply 1 (11-10 ~19:00, during the user's absence)",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid8",
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "plies": [
+  1
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 10,
+  "min_rounds": 39,
+  "max_rounds": 39
+ },
+ "entries": [
+  {
+   "version": "lr-settings:F-L+lr-rate=0.0125.loc@127",
+   "name": "orig.F-L+lr-rate=0.0125.loc@127",
+   "label": "lr-settings E.L.22.127",
+   "note": "crowned in cycle 129"
+  },
+  {
+   "version": "lr-settings:F-L+lr-rate=0.025.loc@167",
+   "name": "orig.F-L+lr-rate=0.025.loc@167",
+   "label": "lr-settings E.L.20.167",
+   "note": "crowned in cycle 169"
+  },
+  {
+   "version": "lr-settings:F-L+lr-rate=0.05.loc@139",
+   "name": "orig.F-L+lr-rate=0.05.loc@139",
+   "label": "lr-settings E.L.20.139",
+   "note": "crowned in cycle 141"
+  },
+  {
+   "version": "lr-settings:F-L+lr-rate=0.1.loc@124",
+   "name": "orig.F-L+lr-rate=0.1.loc@124",
+   "label": "lr-settings E.L.17.124",
+   "note": "crowned in cycle 126"
+  },
+  {
+   "version": "lr-settings:F-L+label-depth=2+label-result=0.5.loc@135",
+   "name": "orig.F-L+label-depth=2+label-result=0.5.loc@135",
+   "label": "lr-settings E.L.16.135",
+   "note": "crowned in cycle 137"
+  },
+  {
+   "version": "lr-settings-new:F-L+lr-rate=0.0125.loc@136",
+   "name": "new.F-L+lr-rate=0.0125.loc@136",
+   "label": "lr-settings-new E.L.36.136",
+   "note": "crowned in cycle 138"
+  },
+  {
+   "version": "lr-settings-new:F-L+lr-rate=0.025.loc@136",
+   "name": "new.F-L+lr-rate=0.025.loc@136",
+   "label": "lr-settings-new E.L.32.136",
+   "note": "crowned in cycle 138"
+  },
+  {
+   "version": "lr-settings-new:F-L+lr-rate=0.05.loc@129",
+   "name": "new.F-L+lr-rate=0.05.loc@129",
+   "label": "lr-settings-new E.L.27.129",
+   "note": "crowned in cycle 131"
+  },
+  {
+   "version": "lr-settings-new:F-L+lr-rate=0.1.loc@143",
+   "name": "new.F-L+lr-rate=0.1.loc@143",
+   "label": "lr-settings-new E.L.27.143",
+   "note": "crowned in cycle 145"
+  },
+  {
+   "version": "lr-settings-new:F-L+label-depth=2+label-result=0.5.loc@143",
+   "name": "new.F-L+label-depth=2+label-result=0.5.loc@143",
+   "label": "lr-settings-new E.L.26.143",
+   "note": "crowned in cycle 145"
+  }
+ ]
+}

@@ -1,0 +1,123 @@
+{
+ "name": "ply1-leaf-sources",
+ "dir": "leagues/arenas/ply1/leaf-sources",
+ "description": "ply-1 replay of the pair arena: final champions of leaf-sources (original) and leaf-sources-new (rerun: no random players, no ply-1 entries, plateau stop), with the random players",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid8",
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "plies": [
+  1
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 10,
+  "min_rounds": 27,
+  "max_rounds": 27
+ },
+ "entries": [
+  {
+   "version": "leaf-sources:F-L#1.sp@93",
+   "name": "orig.F-L#1.sp@93",
+   "label": "leaf-sources E.S.13.93",
+   "note": "crowned in cycle 95"
+  },
+  {
+   "version": "leaf-sources:F-L#1.loc@86",
+   "name": "orig.F-L#1.loc@86",
+   "label": "leaf-sources E.L.12.86",
+   "note": "crowned in cycle 88"
+  },
+  {
+   "version": "leaf-sources:F-L#2.sp@83",
+   "name": "orig.F-L#2.sp@83",
+   "label": "leaf-sources E.S.10.83",
+   "note": "crowned in cycle 85"
+  },
+  {
+   "version": "leaf-sources:F-L#2.loc@93",
+   "name": "orig.F-L#2.loc@93",
+   "label": "leaf-sources E.L.11.93",
+   "note": "crowned in cycle 95"
+  },
+  {
+   "version": "leaf-sources:F-P.sp@56",
+   "name": "orig.F-P.sp@56",
+   "label": "leaf-sources E.S.8.56",
+   "note": "crowned in cycle 58"
+  },
+  {
+   "version": "leaf-sources:F-P.loc@49",
+   "name": "orig.F-P.loc@49",
+   "label": "leaf-sources E.L.10.49",
+   "note": "crowned in cycle 51"
+  },
+  {
+   "version": "leaf-sources:F-N.sp@63",
+   "name": "orig.F-N.sp@63",
+   "label": "leaf-sources E.S.9.63",
+   "note": "crowned in cycle 65"
+  },
+  {
+   "version": "leaf-sources:F-N.loc@48",
+   "name": "orig.F-N.loc@48",
+   "label": "leaf-sources E.L.8.48",
+   "note": "crowned in cycle 50"
+  },
+  {
+   "version": "leaf-sources-new:F-L#1.sp@263",
+   "name": "new.F-L#1.sp@263",
+   "label": "leaf-sources-new E.S.12.263",
+   "note": "crowned in cycle 265"
+  },
+  {
+   "version": "leaf-sources-new:F-L#1.loc@105",
+   "name": "new.F-L#1.loc@105",
+   "label": "leaf-sources-new E.L.12.105",
+   "note": "crowned in cycle 107"
+  },
+  {
+   "version": "leaf-sources-new:F-L#2.sp@166",
+   "name": "new.F-L#2.sp@166",
+   "label": "leaf-sources-new E.S.12.166",
+   "note": "crowned in cycle 168"
+  },
+  {
+   "version": "leaf-sources-new:F-L#2.loc@144",
+   "name": "new.F-L#2.loc@144",
+   "label": "leaf-sources-new E.L.13.144",
+   "note": "crowned in cycle 146"
+  },
+  {
+   "version": "leaf-sources-new:F-P.sp@63",
+   "name": "new.F-P.sp@63",
+   "label": "leaf-sources-new E.S.9.63",
+   "note": "crowned in cycle 65"
+  },
+  {
+   "version": "leaf-sources-new:F-P.loc@43",
+   "name": "new.F-P.loc@43",
+   "label": "leaf-sources-new E.L.13.43",
+   "note": "crowned in cycle 45"
+  },
+  {
+   "version": "leaf-sources-new:F-N.sp@269",
+   "name": "new.F-N.sp@269",
+   "label": "leaf-sources-new E.S.13.269",
+   "note": "crowned in cycle 271"
+  },
+  {
+   "version": "leaf-sources-new:F-N.loc@148",
+   "name": "new.F-N.loc@148",
+   "label": "leaf-sources-new E.L.14.148",
+   "note": "crowned in cycle 150"
+  }
+ ]
+}

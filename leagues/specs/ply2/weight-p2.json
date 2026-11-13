@@ -1,0 +1,41 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "weight-p2",
+ "description": "Weighting training positions by the model's own uncertainty as the only factor (11-12 ~08:40; analyst 6.72 (c) 3, spec 6.73): a pure F-P field at ply 2 (as fponly-p2), F-P x2 with the flag off (controls; chessai-weight1 trains them byte-identically to hybrid6) and F-P x2 with --weight-by-uncertainty score (s = P(W) + P(D)/2 from the pre-update prediction, u = 4 s(1-s) clipped to [0.2, 1], w = u / running mean (memory 1M), cap 3; probit through the likelihood power). Seed 58, 1,584 games a cycle, self-games, floor 300, cap 400, hybrid17 games, recipe row F-P-w (chessai-weight1 training). Predictions (6.72-6.74): weighted over controls 0-40 at ply 2; within 20 at ply 3. Rule: 30+ over = adopt for the league's flats; within 15 = the lever closes; 30+ below = decided positions carry information the ranking needs (closes it too). Read: models/from-scratch/global11-drafts/weight-p2-read.sh (panel y + v + l at v299 plus x4 and x4b, v150 / v300 / final, plies 2, 1 and 3) and the side read fastbin/weight1/uloss.py (full and winner loss, overall and on undecided positions, weighted vs control in the same run).",
+ "models": [
+  {
+   "model": "F-P-w",
+   "replicates": 2
+  },
+  {
+   "model": "F-P-w",
+   "set": {
+    "--weight-by-uncertainty": "score"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 58,
+ "train": {
+  "seed": 58
+ },
+ "references": [],
+ "entry_ply": 2,
+ "self_games": true,
+ "ply1_entries": false,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 400,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid17"
+ }
+}

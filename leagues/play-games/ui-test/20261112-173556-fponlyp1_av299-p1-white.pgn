@@ -1,0 +1,34 @@
+[Event "chessai play page"]
+[Site "leagues dashboard"]
+[Date "2026.11.12"]
+[Round "-"]
+[White "You"]
+[Black "fponlyp1_a v299 at ply 1"]
+[Result "1-0"]
+[Termination "checkmate"]
+[PlyCount "53"]
+[Time "17:35:56"]
+[LibraryId "fponlyp1_a"]
+[Experiment "fponly-p1"]
+[Line "F-P#1.loc"]
+[Version "299"]
+[VersionRole "final"]
+[Model "F-P#1"]
+[Archetype "F-P"]
+[Kind "probit"]
+[TrainPly "1"]
+[Ply "1"]
+[Policy "log-odds argmax"]
+[Seed "863966717"]
+[Takebacks "0"]
+[Engine "chessai-play1 play-serve (26f4a935)"]
+[ModelFile "leagues/library/models/fponly-p1/runs/F-P#1.loc/probit299.model"]
+[ModelMd5 "a8b4259d2fab7888211f7eb66215ec4e"]
+[Calibration "own games aa6956742fdf68d356cfaa8cdc8dbf28 (play-games)"]
+[Started "2026-11-12T22:35:51.565Z"]
+
+1. a4 c5 2. a5 Qxa5 3. Rxa5 f6 4. b4 cxb4 5. c4 bxc3 6. d4 c2 7. Qxc2 e5 8.
+Qxc8+ Kf7 9. d5 e4 10. d6 Bxd6 11. f4 exf3 12. e4 fxg2 13. Bxg2 Ne7 14. Qxh8 a6
+15. e5 Bxe5 16. Bxb7 d5 17. Bxa8 Kg6 18. Qe8+ Kf5 19. h4 Nbc6 20. Rxa6 Nb4 21.
+h5 Nxa6 22. h6 gxh6 23. Rh5+ Ke4 24. Nd2+ Kf4 25. Ne2+ Kg4 26. Rxh6 Nb4 27.
+Qh5# 1-0

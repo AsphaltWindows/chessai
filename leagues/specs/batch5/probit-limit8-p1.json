@@ -1,0 +1,51 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 200
+ },
+ "cycles": 600,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "prices_version": "P2",
+ "name": "probit-limit8-p1",
+ "seed": 26,
+ "train": {
+  "seed": 26
+ },
+ "models": [
+  {
+   "model": "T-P-Nc-merge",
+   "set": {
+    "--split-limit": "8",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03",
+    "--revise-on": "fresh"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Nc-merge",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03",
+    "--revise-on": "fresh"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid13"
+ },
+ "description": "Growth of the ply-1 winner (theory-2 6.23 item 2): fresh-gate probit trees with split noise 0.03 (probit-widen-p1b/p1c's best arm, ~95 over F-P at ply 1), split limit 8 x2 against limit 4 x2 in a pure ply-1 probit field; the limit is the one factor. Read cold at T 0.02. Prediction: 11-15 leaves held, 20-40 over limit 4 after a 50-100-cycle lag; if nothing, the gain is one phase split and not extensible by leaves. Launched 11-11 ~08:50 by the coordinator, batch 5 (low-ply architecture screening after the user's 11-11 pushback; theory-2 6.23)."
+}

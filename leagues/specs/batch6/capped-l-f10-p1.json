@@ -1,0 +1,51 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "capped-l-f10-p1",
+ "description": "The capped LR error tree's split boost as the only factor (11-12 ~05:15; analyst 6.62 (b), revived by 6.67 after lrdecay failed offline). F-L x2; T-L-Ne capped (limit 4, 1M) at --forget-factor 1 (every recipe's) x2; the same at --forget-factor 10 x2 (a split's LR children start with AdaGrad sums divided by 10, so their steps restart; grow-l-p1b: forget 10 doubled the growing LR tree's split gains, -24/-13 at ply 1 and 30/75 at ply 2 vs forget 1). Seed 54, ply 1, games_per_cycle 1584, self-games, plateau scaled min 300, cap 400, hybrid16 games, chessai-grow5 training (as grow-l-p1's grow4: byte-identical for these lines). Predictions (6.67): forget 10 over forget 1 -10..10 at ply 1 and 20-60 at ply 2; over F-L 30-60 at ply 1 and 20-60 at ply 2. Rule: at or above forget 1 at ply 1 and 20+ over it at ply 2 = forget 10 becomes the capped LR control's setting (confirms 6.62 (b)); 20 below at ply 1 = capped trees keep forget 1 while the growing tree keeps 10. Read: 300 round-robins per (ply, version) arena, v150 and the final, plies 1 and 2 (models/from-scratch/global11-drafts/capped-f10-read.sh).",
+ "models": [
+  {
+   "model": "F-L",
+   "replicates": 2
+  },
+  {
+   "model": "T-L-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-L-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--forget-factor": "10"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 54,
+ "train": {
+  "seed": 54
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 400,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid16"
+ }
+}

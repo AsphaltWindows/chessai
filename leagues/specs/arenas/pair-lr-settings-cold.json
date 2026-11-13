@@ -1,0 +1,95 @@
+{
+ "name": "pair-lr-settings-cold",
+ "dir": "leagues/arenas/diag/pair-lr-settings-cold",
+ "description": "Near-argmax (T 0.02) replay of the lr-settings pair arena (original lr-settings, mixed field, against its ply-2-only rerun lr-settings-new; 424 at T 0.1): does the field-composition gain survive cold? (theory-2 6.9, 11-11 ~00:45) final champions of lr-settings (original) and lr-settings-new (rerun: no random players, no ply-1 entries, plateau stop), with the random players",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid8",
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "plies": [
+  2
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 10,
+  "min_rounds": 39,
+  "max_rounds": 39
+ },
+ "entries": [
+  {
+   "version": "lr-settings:F-L+lr-rate=0.0125.loc@127",
+   "name": "orig.F-L+lr-rate=0.0125.loc@127",
+   "label": "lr-settings E.L.22.127",
+   "note": "crowned in cycle 129"
+  },
+  {
+   "version": "lr-settings:F-L+lr-rate=0.025.loc@167",
+   "name": "orig.F-L+lr-rate=0.025.loc@167",
+   "label": "lr-settings E.L.20.167",
+   "note": "crowned in cycle 169"
+  },
+  {
+   "version": "lr-settings:F-L+lr-rate=0.05.loc@139",
+   "name": "orig.F-L+lr-rate=0.05.loc@139",
+   "label": "lr-settings E.L.20.139",
+   "note": "crowned in cycle 141"
+  },
+  {
+   "version": "lr-settings:F-L+lr-rate=0.1.loc@124",
+   "name": "orig.F-L+lr-rate=0.1.loc@124",
+   "label": "lr-settings E.L.17.124",
+   "note": "crowned in cycle 126"
+  },
+  {
+   "version": "lr-settings:F-L+label-depth=2+label-result=0.5.loc@135",
+   "name": "orig.F-L+label-depth=2+label-result=0.5.loc@135",
+   "label": "lr-settings E.L.16.135",
+   "note": "crowned in cycle 137"
+  },
+  {
+   "version": "lr-settings-new:F-L+lr-rate=0.0125.loc@136",
+   "name": "new.F-L+lr-rate=0.0125.loc@136",
+   "label": "lr-settings-new E.L.36.136",
+   "note": "crowned in cycle 138"
+  },
+  {
+   "version": "lr-settings-new:F-L+lr-rate=0.025.loc@136",
+   "name": "new.F-L+lr-rate=0.025.loc@136",
+   "label": "lr-settings-new E.L.32.136",
+   "note": "crowned in cycle 138"
+  },
+  {
+   "version": "lr-settings-new:F-L+lr-rate=0.05.loc@129",
+   "name": "new.F-L+lr-rate=0.05.loc@129",
+   "label": "lr-settings-new E.L.27.129",
+   "note": "crowned in cycle 131"
+  },
+  {
+   "version": "lr-settings-new:F-L+lr-rate=0.1.loc@143",
+   "name": "new.F-L+lr-rate=0.1.loc@143",
+   "label": "lr-settings-new E.L.27.143",
+   "note": "crowned in cycle 145"
+  },
+  {
+   "version": "lr-settings-new:F-L+label-depth=2+label-result=0.5.loc@143",
+   "name": "new.F-L+label-depth=2+label-result=0.5.loc@143",
+   "label": "lr-settings-new E.L.26.143",
+   "note": "crowned in cycle 145"
+  }
+ ],
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ]
+}

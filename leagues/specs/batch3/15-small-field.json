@@ -1,0 +1,33 @@
+{
+  "kind": "experiment",
+  "root": "/home/iv/dev/chessai/leagues",
+  "name": "small-field",
+  "models": [
+    "F-L",
+    {
+      "model": "T-L-Tc-merge",
+      "set": {
+        "--split-limit": "1",
+        "--split-threshold": "1000000"
+      },
+      "to": "train"
+    }
+  ],
+  "options": [
+    "local"
+  ],
+  "references": [
+    "random",
+    "random-3"
+  ],
+  "seed": 10,
+  "train": {
+    "seed": 10
+  },
+  "rounds_per_cycle": 56,
+  "min_rounds": 56,
+  "tournament": {
+    "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid8"
+  },
+  "cycles": 400
+}

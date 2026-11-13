@@ -1,0 +1,62 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "diversity-p2",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 48,
+ "train": {
+  "seed": 48
+ },
+ "references": [],
+ "entry_ply": 2,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 400,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid16"
+ },
+ "prices_version": "P2",
+ "ply1_entries": false,
+ "frozen_references": [
+  {
+   "name": "xFP1",
+   "version": "error-routing-p1:F-P#1.loc@314"
+  },
+  {
+   "name": "xFP2",
+   "version": "error-routing-p1:F-P#2.loc@314"
+  },
+  {
+   "name": "xTNe1",
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@314"
+  },
+  {
+   "name": "xTNe2",
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@314"
+  }
+ ],
+ "description": "Diversity test at ply 2 (11-12 ~01:05: the user approved the analyst's plan; theory-2 6.45 (2), 6.51, 6.53). 6.51's diagnosis: weaker play is shallower play's blunder structure, and own-field replay (replay-p2, closed) pulled the value function toward ply-1 play; coverage must come from OTHER players above a quality floor.\n- Design: probit-late-p2's lines (F-P x2; T-P-Ne (NB error router, non-merging, limit 4, 1M, noise 0.03) x2), seed 48 (new), plus four frozen external references at ply 2 (frozen_references): error-routing-p1's v314 finals F-P#1, F-P#2 and the two T-P-Ne lines (P2x, models/from-scratch/offline-ply/players-P2x.txt) as xFP1, xFP2, xTNe1, xTNe2. They play every round-robin; they never train, are never crowned or retired, play no self-games and stay out of the plateau rule; their own calibration is recreated as error-routing-p1 made it (its settings and hybrid13, checked against its records). All three kinds of game train the lines (line-line, line-reference, reference-reference), logged each cycle (totals.csv local_*, the report's Local set line).\n- One factor against probit-late-p2: the four frozen references in the field (and so the larger batch).\n- At 12 rounds the field is 12 entries (8 line entries, current + champion, plus 4 references): 1,584 games a cycle. Line-line 672, equal to probit-late-p2's whole round-robin volume; line-ref 768 and ref-ref 144. The batch equals base-probit-p2's.\n- Comparators: base-probit-p2's F-P at equal versions (equal batch; that field also held DAG and cluster-tree lines); probit-late-p2 at equal positions (diversity v169 = pure v399) and at equal versions.\n- Predictions (analyst 6.53, head to head, ply 2): over base-probit-p2's F-P at v300 and v599: 100-200; over probit-late-p2's F-P at equal positions: 60-150, at v300: 120-220; tree over its flat inside diversity at v300: 0-50; ply 1: 0-40; ply 3 within 40.\n- The null that matters: within 30 of base-probit-p2's F-P at equal batch. That would send the next league back to ply 1.\n- ply-2 field (entry_ply 2, no ply-1 entries, no random references), self-games (lines only), hybrid16 games, prices P2; scaled plateau from 300 cycles, cap 400. After create, leagues/specs/ply1/train_binary.py moves training to hybrid6 (exact).\n- Read: cold at plies 1-3 (T 0.02, 75 round-robins), pooled head to heads (h2h_btg.py) against the comparators."
+}

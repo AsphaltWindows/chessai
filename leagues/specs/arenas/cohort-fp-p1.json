@@ -1,0 +1,393 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 4,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid17",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid17",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 30,
+  "min_rounds": 60,
+  "max_rounds": 60
+ },
+ "name": "cohort-fp-p1",
+ "dir": "leagues/arenas/diag/cohort-fp-p1",
+ "plies": [
+  1
+ ],
+ "description": "Library arena cohort-fp-p1: ply 1, near argmax (T 0.02), 60 round-robins (fixed: the ci stop never triggers with a random anchor that never scores, see LIBRARY.md), 72 entries from leagues/library. Cohort-variance read (analyst 6.77): plain F-P lines of plateaued runs trained at ply 1, versions 299/279 (+final), short lines final/final-20.",
+ "entries": [
+  {
+   "version": "error-dag-probit-p1:F-P#1.loc@299",
+   "name": "errordagprobitp1_a299.L1@299",
+   "label": "error-dag-probit-p1 F-P#1.loc version v299 (library errordagprobitp1_a; plateau, train ply 1) [cohort read: run error-dag-probit-p1]"
+  },
+  {
+   "version": "error-dag-probit-p1:F-P#1.loc@279",
+   "name": "errordagprobitp1_a279.L1@279",
+   "label": "error-dag-probit-p1 F-P#1.loc version v279 (library errordagprobitp1_a; plateau, train ply 1) [cohort read: run error-dag-probit-p1]"
+  },
+  {
+   "version": "error-dag-probit-p1:F-P#1.loc@366",
+   "name": "errordagprobitp1_a366.L1@366",
+   "label": "error-dag-probit-p1 F-P#1.loc version v366 (library errordagprobitp1_a; plateau, train ply 1) [cohort read: run error-dag-probit-p1]"
+  },
+  {
+   "version": "error-dag-probit-p1:F-P#2.loc@299",
+   "name": "errordagprobitp1_b299.L2@299",
+   "label": "error-dag-probit-p1 F-P#2.loc version v299 (library errordagprobitp1_b; plateau, train ply 1) [cohort read: run error-dag-probit-p1]"
+  },
+  {
+   "version": "error-dag-probit-p1:F-P#2.loc@279",
+   "name": "errordagprobitp1_b279.L2@279",
+   "label": "error-dag-probit-p1 F-P#2.loc version v279 (library errordagprobitp1_b; plateau, train ply 1) [cohort read: run error-dag-probit-p1]"
+  },
+  {
+   "version": "error-dag-probit-p1:F-P#2.loc@366",
+   "name": "errordagprobitp1_b366.L2@366",
+   "label": "error-dag-probit-p1 F-P#2.loc version v366 (library errordagprobitp1_b; plateau, train ply 1) [cohort read: run error-dag-probit-p1]"
+  },
+  {
+   "version": "error-growth-p1:F-P#1.loc@299",
+   "name": "errorgrowthp1_a299.L1@299",
+   "label": "error-growth-p1 F-P#1.loc version v299 (library errorgrowthp1_a; plateau, train ply 1) [cohort read: run error-growth-p1]"
+  },
+  {
+   "version": "error-growth-p1:F-P#1.loc@279",
+   "name": "errorgrowthp1_a279.L1@279",
+   "label": "error-growth-p1 F-P#1.loc version v279 (library errorgrowthp1_a; plateau, train ply 1) [cohort read: run error-growth-p1]"
+  },
+  {
+   "version": "error-growth-p1:F-P#1.loc@449",
+   "name": "errorgrowthp1_a449.L1@449",
+   "label": "error-growth-p1 F-P#1.loc version v449 (library errorgrowthp1_a; plateau, train ply 1) [cohort read: run error-growth-p1]"
+  },
+  {
+   "version": "error-growth-p1:F-P#2.loc@299",
+   "name": "errorgrowthp1_b299.L2@299",
+   "label": "error-growth-p1 F-P#2.loc version v299 (library errorgrowthp1_b; plateau, train ply 1) [cohort read: run error-growth-p1]"
+  },
+  {
+   "version": "error-growth-p1:F-P#2.loc@279",
+   "name": "errorgrowthp1_b279.L2@279",
+   "label": "error-growth-p1 F-P#2.loc version v279 (library errorgrowthp1_b; plateau, train ply 1) [cohort read: run error-growth-p1]"
+  },
+  {
+   "version": "error-growth-p1:F-P#2.loc@449",
+   "name": "errorgrowthp1_b449.L2@449",
+   "label": "error-growth-p1 F-P#2.loc version v449 (library errorgrowthp1_b; plateau, train ply 1) [cohort read: run error-growth-p1]"
+  },
+  {
+   "version": "error-routing-p1:F-P#1.loc@299",
+   "name": "errorroutingp1_a299.L1@299",
+   "label": "error-routing-p1 F-P#1.loc version v299 (library errorroutingp1_a; plateau, train ply 1) [cohort read: run error-routing-p1]"
+  },
+  {
+   "version": "error-routing-p1:F-P#1.loc@279",
+   "name": "errorroutingp1_a279.L1@279",
+   "label": "error-routing-p1 F-P#1.loc version v279 (library errorroutingp1_a; plateau, train ply 1) [cohort read: run error-routing-p1]"
+  },
+  {
+   "version": "error-routing-p1:F-P#1.loc@314",
+   "name": "errorroutingp1_a314.L1@314",
+   "label": "error-routing-p1 F-P#1.loc version v314 (library errorroutingp1_a; plateau, train ply 1) [cohort read: run error-routing-p1]"
+  },
+  {
+   "version": "error-routing-p1:F-P#2.loc@299",
+   "name": "errorroutingp1_b299.L2@299",
+   "label": "error-routing-p1 F-P#2.loc version v299 (library errorroutingp1_b; plateau, train ply 1) [cohort read: run error-routing-p1]"
+  },
+  {
+   "version": "error-routing-p1:F-P#2.loc@279",
+   "name": "errorroutingp1_b279.L2@279",
+   "label": "error-routing-p1 F-P#2.loc version v279 (library errorroutingp1_b; plateau, train ply 1) [cohort read: run error-routing-p1]"
+  },
+  {
+   "version": "error-routing-p1:F-P#2.loc@314",
+   "name": "errorroutingp1_b314.L2@314",
+   "label": "error-routing-p1 F-P#2.loc version v314 (library errorroutingp1_b; plateau, train ply 1) [cohort read: run error-routing-p1]"
+  },
+  {
+   "version": "grow-p1b:F-P#1.loc@299",
+   "name": "growp1b_a299.L1@299",
+   "label": "grow-p1b F-P#1.loc version v299 (library growp1b_a; plateau, train ply 1) [cohort read: run grow-p1b]"
+  },
+  {
+   "version": "grow-p1b:F-P#1.loc@279",
+   "name": "growp1b_a279.L1@279",
+   "label": "grow-p1b F-P#1.loc version v279 (library growp1b_a; plateau, train ply 1) [cohort read: run grow-p1b]"
+  },
+  {
+   "version": "grow-p1b:F-P#1.loc@352",
+   "name": "growp1b_a352.L1@352",
+   "label": "grow-p1b F-P#1.loc version v352 (library growp1b_a; plateau, train ply 1) [cohort read: run grow-p1b]"
+  },
+  {
+   "version": "grow-p1b:F-P#2.loc@299",
+   "name": "growp1b_b299.L2@299",
+   "label": "grow-p1b F-P#2.loc version v299 (library growp1b_b; plateau, train ply 1) [cohort read: run grow-p1b]"
+  },
+  {
+   "version": "grow-p1b:F-P#2.loc@279",
+   "name": "growp1b_b279.L2@279",
+   "label": "grow-p1b F-P#2.loc version v279 (library growp1b_b; plateau, train ply 1) [cohort read: run grow-p1b]"
+  },
+  {
+   "version": "grow-p1b:F-P#2.loc@352",
+   "name": "growp1b_b352.L2@352",
+   "label": "grow-p1b F-P#2.loc version v352 (library growp1b_b; plateau, train ply 1) [cohort read: run grow-p1b]"
+  },
+  {
+   "version": "grow-p1b2:F-P#1.loc@299",
+   "name": "growp1b2_a299.L1@299",
+   "label": "grow-p1b2 F-P#1.loc version v299 (library growp1b2_a; plateau, train ply 1) [cohort read: run grow-p1b2]"
+  },
+  {
+   "version": "grow-p1b2:F-P#1.loc@279",
+   "name": "growp1b2_a279.L1@279",
+   "label": "grow-p1b2 F-P#1.loc version v279 (library growp1b2_a; plateau, train ply 1) [cohort read: run grow-p1b2]"
+  },
+  {
+   "version": "grow-p1b2:F-P#1.loc@349",
+   "name": "growp1b2_a349.L1@349",
+   "label": "grow-p1b2 F-P#1.loc version v349 (library growp1b2_a; plateau, train ply 1) [cohort read: run grow-p1b2]"
+  },
+  {
+   "version": "grow-p1b2:F-P#2.loc@299",
+   "name": "growp1b2_b299.L2@299",
+   "label": "grow-p1b2 F-P#2.loc version v299 (library growp1b2_b; plateau, train ply 1) [cohort read: run grow-p1b2]"
+  },
+  {
+   "version": "grow-p1b2:F-P#2.loc@279",
+   "name": "growp1b2_b279.L2@279",
+   "label": "grow-p1b2 F-P#2.loc version v279 (library growp1b2_b; plateau, train ply 1) [cohort read: run grow-p1b2]"
+  },
+  {
+   "version": "grow-p1b2:F-P#2.loc@349",
+   "name": "growp1b2_b349.L2@349",
+   "label": "grow-p1b2 F-P#2.loc version v349 (library growp1b2_b; plateau, train ply 1) [cohort read: run grow-p1b2]"
+  },
+  {
+   "version": "grow-p1c:F-P#1.loc@299",
+   "name": "growp1c_a299.L1@299",
+   "label": "grow-p1c F-P#1.loc version v299 (library growp1c_a; plateau, train ply 1) [cohort read: run grow-p1c]"
+  },
+  {
+   "version": "grow-p1c:F-P#1.loc@279",
+   "name": "growp1c_a279.L1@279",
+   "label": "grow-p1c F-P#1.loc version v279 (library growp1c_a; plateau, train ply 1) [cohort read: run grow-p1c]"
+  },
+  {
+   "version": "grow-p1c:F-P#1.loc@354",
+   "name": "growp1c_a354.L1@354",
+   "label": "grow-p1c F-P#1.loc version v354 (library growp1c_a; plateau, train ply 1) [cohort read: run grow-p1c]"
+  },
+  {
+   "version": "grow-p1c:F-P#2.loc@299",
+   "name": "growp1c_b299.L2@299",
+   "label": "grow-p1c F-P#2.loc version v299 (library growp1c_b; plateau, train ply 1) [cohort read: run grow-p1c]"
+  },
+  {
+   "version": "grow-p1c:F-P#2.loc@279",
+   "name": "growp1c_b279.L2@279",
+   "label": "grow-p1c F-P#2.loc version v279 (library growp1c_b; plateau, train ply 1) [cohort read: run grow-p1c]"
+  },
+  {
+   "version": "grow-p1c:F-P#2.loc@354",
+   "name": "growp1c_b354.L2@354",
+   "label": "grow-p1c F-P#2.loc version v354 (library growp1c_b; plateau, train ply 1) [cohort read: run grow-p1c]"
+  },
+  {
+   "version": "growth-300k-p1:F-P#1.loc@299",
+   "name": "growth300kp1_a299.L1@299",
+   "label": "growth-300k-p1 F-P#1.loc version v299 (library growth300kp1_a; plateau, train ply 1) [cohort read: run growth-300k-p1]"
+  },
+  {
+   "version": "growth-300k-p1:F-P#1.loc@279",
+   "name": "growth300kp1_a279.L1@279",
+   "label": "growth-300k-p1 F-P#1.loc version v279 (library growth300kp1_a; plateau, train ply 1) [cohort read: run growth-300k-p1]"
+  },
+  {
+   "version": "growth-300k-p1:F-P#1.loc@340",
+   "name": "growth300kp1_a340.L1@340",
+   "label": "growth-300k-p1 F-P#1.loc version v340 (library growth300kp1_a; plateau, train ply 1) [cohort read: run growth-300k-p1]"
+  },
+  {
+   "version": "growth-300k-p1:F-P#2.loc@299",
+   "name": "growth300kp1_b299.L2@299",
+   "label": "growth-300k-p1 F-P#2.loc version v299 (library growth300kp1_b; plateau, train ply 1) [cohort read: run growth-300k-p1]"
+  },
+  {
+   "version": "growth-300k-p1:F-P#2.loc@279",
+   "name": "growth300kp1_b279.L2@279",
+   "label": "growth-300k-p1 F-P#2.loc version v279 (library growth300kp1_b; plateau, train ply 1) [cohort read: run growth-300k-p1]"
+  },
+  {
+   "version": "growth-300k-p1:F-P#2.loc@340",
+   "name": "growth300kp1_b340.L2@340",
+   "label": "growth-300k-p1 F-P#2.loc version v340 (library growth300kp1_b; plateau, train ply 1) [cohort read: run growth-300k-p1]"
+  },
+  {
+   "version": "probit-f10-p1:F-P#1.loc@299",
+   "name": "probitf10p1_a299.L1@299",
+   "label": "probit-f10-p1 F-P#1.loc version v299 (library probitf10p1_a; plateau, train ply 1) [cohort read: run probit-f10-p1]"
+  },
+  {
+   "version": "probit-f10-p1:F-P#1.loc@279",
+   "name": "probitf10p1_a279.L1@279",
+   "label": "probit-f10-p1 F-P#1.loc version v279 (library probitf10p1_a; plateau, train ply 1) [cohort read: run probit-f10-p1]"
+  },
+  {
+   "version": "probit-f10-p1:F-P#1.loc@337",
+   "name": "probitf10p1_a337.L1@337",
+   "label": "probit-f10-p1 F-P#1.loc version v337 (library probitf10p1_a; plateau, train ply 1) [cohort read: run probit-f10-p1]"
+  },
+  {
+   "version": "probit-f10-p1:F-P#2.loc@299",
+   "name": "probitf10p1_b299.L2@299",
+   "label": "probit-f10-p1 F-P#2.loc version v299 (library probitf10p1_b; plateau, train ply 1) [cohort read: run probit-f10-p1]"
+  },
+  {
+   "version": "probit-f10-p1:F-P#2.loc@279",
+   "name": "probitf10p1_b279.L2@279",
+   "label": "probit-f10-p1 F-P#2.loc version v279 (library probitf10p1_b; plateau, train ply 1) [cohort read: run probit-f10-p1]"
+  },
+  {
+   "version": "probit-f10-p1:F-P#2.loc@337",
+   "name": "probitf10p1_b337.L2@337",
+   "label": "probit-f10-p1 F-P#2.loc version v337 (library probitf10p1_b; plateau, train ply 1) [cohort read: run probit-f10-p1]"
+  },
+  {
+   "version": "probit-widen-p1b:F-P#1.loc@199",
+   "name": "probitwidenp1b_a199.L1@199",
+   "label": "probit-widen-p1b F-P#1.loc version v199 (library probitwidenp1b_a; plateau, train ply 1) [cohort read: run probit-widen-p1b, short]"
+  },
+  {
+   "version": "probit-widen-p1b:F-P#1.loc@179",
+   "name": "probitwidenp1b_a179.L1@179",
+   "label": "probit-widen-p1b F-P#1.loc version v179 (library probitwidenp1b_a; plateau, train ply 1) [cohort read: run probit-widen-p1b, short]"
+  },
+  {
+   "version": "probit-widen-p1b:F-P#2.loc@199",
+   "name": "probitwidenp1b_b199.L2@199",
+   "label": "probit-widen-p1b F-P#2.loc version v199 (library probitwidenp1b_b; plateau, train ply 1) [cohort read: run probit-widen-p1b, short]"
+  },
+  {
+   "version": "probit-widen-p1b:F-P#2.loc@179",
+   "name": "probitwidenp1b_b179.L2@179",
+   "label": "probit-widen-p1b F-P#2.loc version v179 (library probitwidenp1b_b; plateau, train ply 1) [cohort read: run probit-widen-p1b, short]"
+  },
+  {
+   "version": "probit-widen-p1c:F-P#1.loc@250",
+   "name": "probitwidenp1c_a250.L1@250",
+   "label": "probit-widen-p1c F-P#1.loc version v250 (library probitwidenp1c_a; plateau, train ply 1) [cohort read: run probit-widen-p1c, short]"
+  },
+  {
+   "version": "probit-widen-p1c:F-P#1.loc@230",
+   "name": "probitwidenp1c_a230.L1@230",
+   "label": "probit-widen-p1c F-P#1.loc version v230 (library probitwidenp1c_a; plateau, train ply 1) [cohort read: run probit-widen-p1c, short]"
+  },
+  {
+   "version": "probit-widen-p1c:F-P#2.loc@250",
+   "name": "probitwidenp1c_b250.L2@250",
+   "label": "probit-widen-p1c F-P#2.loc version v250 (library probitwidenp1c_b; plateau, train ply 1) [cohort read: run probit-widen-p1c, short]"
+  },
+  {
+   "version": "probit-widen-p1c:F-P#2.loc@230",
+   "name": "probitwidenp1c_b230.L2@230",
+   "label": "probit-widen-p1c F-P#2.loc version v230 (library probitwidenp1c_b; plateau, train ply 1) [cohort read: run probit-widen-p1c, short]"
+  },
+  {
+   "version": "router-kind-p1:F-P#1.loc@299",
+   "name": "routerkindp1_a299.L1@299",
+   "label": "router-kind-p1 F-P#1.loc version v299 (library routerkindp1_a; plateau, train ply 1) [cohort read: run router-kind-p1]"
+  },
+  {
+   "version": "router-kind-p1:F-P#1.loc@279",
+   "name": "routerkindp1_a279.L1@279",
+   "label": "router-kind-p1 F-P#1.loc version v279 (library routerkindp1_a; plateau, train ply 1) [cohort read: run router-kind-p1]"
+  },
+  {
+   "version": "router-kind-p1:F-P#2.loc@299",
+   "name": "routerkindp1_b299.L2@299",
+   "label": "router-kind-p1 F-P#2.loc version v299 (library routerkindp1_b; plateau, train ply 1) [cohort read: run router-kind-p1]"
+  },
+  {
+   "version": "router-kind-p1:F-P#2.loc@279",
+   "name": "routerkindp1_b279.L2@279",
+   "label": "router-kind-p1 F-P#2.loc version v279 (library routerkindp1_b; plateau, train ply 1) [cohort read: run router-kind-p1]"
+  },
+  {
+   "version": "router-p1:F-P#1.loc@299",
+   "name": "routerp1_a299.L1@299",
+   "label": "router-p1 F-P#1.loc version v299 (library routerp1_a; plateau, train ply 1) [cohort read: run router-p1]"
+  },
+  {
+   "version": "router-p1:F-P#1.loc@279",
+   "name": "routerp1_a279.L1@279",
+   "label": "router-p1 F-P#1.loc version v279 (library routerp1_a; plateau, train ply 1) [cohort read: run router-p1]"
+  },
+  {
+   "version": "router-p1:F-P#2.loc@299",
+   "name": "routerp1_b299.L2@299",
+   "label": "router-p1 F-P#2.loc version v299 (library routerp1_b; plateau, train ply 1) [cohort read: run router-p1]"
+  },
+  {
+   "version": "router-p1:F-P#2.loc@279",
+   "name": "routerp1_b279.L2@279",
+   "label": "router-p1 F-P#2.loc version v279 (library routerp1_b; plateau, train ply 1) [cohort read: run router-p1]"
+  },
+  {
+   "version": "stall-p1:F-P#1.loc@299",
+   "name": "stallp1_a299.L1@299",
+   "label": "stall-p1 F-P#1.loc version v299 (library stallp1_a; plateau, train ply 1) [cohort read: run stall-p1]"
+  },
+  {
+   "version": "stall-p1:F-P#1.loc@279",
+   "name": "stallp1_a279.L1@279",
+   "label": "stall-p1 F-P#1.loc version v279 (library stallp1_a; plateau, train ply 1) [cohort read: run stall-p1]"
+  },
+  {
+   "version": "stall-p1:F-P#1.loc@392",
+   "name": "stallp1_a392.L1@392",
+   "label": "stall-p1 F-P#1.loc version v392 (library stallp1_a; plateau, train ply 1) [cohort read: run stall-p1]"
+  },
+  {
+   "version": "stall-p1:F-P#2.loc@299",
+   "name": "stallp1_b299.L2@299",
+   "label": "stall-p1 F-P#2.loc version v299 (library stallp1_b; plateau, train ply 1) [cohort read: run stall-p1]"
+  },
+  {
+   "version": "stall-p1:F-P#2.loc@279",
+   "name": "stallp1_b279.L2@279",
+   "label": "stall-p1 F-P#2.loc version v279 (library stallp1_b; plateau, train ply 1) [cohort read: run stall-p1]"
+  },
+  {
+   "version": "stall-p1:F-P#2.loc@392",
+   "name": "stallp1_b392.L2@392",
+   "label": "stall-p1 F-P#2.loc version v392 (library stallp1_b; plateau, train ply 1) [cohort read: run stall-p1]"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@463",
+   "name": "global_b463.L1@463",
+   "label": "global F-P.p1 version v463 (library global_b; killed (user, cycle 5918), train ply 1) [cohort read: run global, global]"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@365",
+   "name": "global_b365.L1@365",
+   "label": "global F-P.p1 version v365 (library global_b; killed (user, cycle 5918), train ply 1) [cohort read: run global, global]"
+  }
+ ]
+}

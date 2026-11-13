@@ -1,0 +1,54 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "treeonly-p1-open",
+ "description": "treeonly-p1-open: game variety from random opening plies instead of temperature (the user, 11-12 ~15:03: 'I'm not sure different opening moves will help but we can test it'). One factor against treeonly-p1-t002 (the same spec: T-P-Ne capped x4, seed 59, 1,584 games a cycle, self-games, round-robins and self-games at T 0.02, rating-only cold set at T 0.02 share 0.25, 300 cycles, hybrid6 training): every round-robin game and self-game opens with 6 uniformly random plies drawn from its own seeded random numbers, then plays at T 0.02 (\"openings\": {\"plies\": 6}); the opening plies are training positions labelled with the game's result (analyst 6.91). The cold games, the in-run rating set, play without openings as in treeonly-p1-t002, so the in-run decisions rest on the same kind of games. Tournament binary chessai-hybrid19 (the opening flags; without them byte-identical to hybrid17/18, so not a second factor). Second comparator: treeonly-p1-coldrate (T 0.1 games, the same cold set). Read as t002-read.sh: plies 1 and 2, v150 and v299, arms this run, treeonly-p1-t002 and treeonly-p1-coldrate, against the standing ply-1 panel of the same kind. Measured (models/from-scratch/openings-build/meas, the coldrate twins' v250/v299 fields, a cycle's 1,568 round-robin games): distinct positions at plies 8/12/20 ~100% with openings (T 0.1 ~100%, plain T 0.02 66/86/98%); game cost x0.90 a game (x0.92 a ply) of plain T 0.02's; random openings compress the Elo scale by ~7% (slope 0.93, 95% 0.87-0.99, against plain T 0.02 games). After create, pin hybrid6 training: python3 leagues/specs/ply1/train_binary.py LDIR (before cycle 1). Cost ~1.2 CPU-h (as treeonly-p1-t002).",
+ "models": [
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "replicates": 4
+  }
+ ],
+ "seed": 59,
+ "train": {
+  "seed": 59
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 300,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid19",
+  "flags": [
+   "--reports-last",
+   "--sparse-fit",
+   "--policy",
+   "log-odds-softmax",
+   "--temperature",
+   "0.02"
+  ]
+ },
+ "cold_games": {
+  "temperature": 0.02,
+  "share": 0.25,
+  "train": false
+ },
+ "openings": {
+  "plies": 6
+ }
+}

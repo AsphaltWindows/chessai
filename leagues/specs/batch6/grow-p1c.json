@@ -1,0 +1,51 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "grow-p1c",
+ "description": "Growth rule, the trigger as the only factor, at ply 1, stacked on grow-p1b's winner (analyst 6.48 note: B waits for grow-p1b and runs on top of the winning bar setting, comparator the winner, since with the MDL bar on B is inert). grow-p1b (v352, head to head ply 1 / ply 2): no-bar minus grow1 -13 / 40 at v150, -2 / 19 at v352, with 11 of 11 trials kept (23-25 leaves) against 5-6 of 11 (13-15 leaves): the bar goes. In league fields the stagnation test measures drift, and a paired snapshot statistic has a floor (grow4's smoke: 234 snapshot gains, all positive), so arm B has no stagnation GATE: a leaf is eligible after 3 closed own windows plus a credit, and among eligible leaves the smallest paired snapshot gain (the most stagnant) is tried first, keeping 'wait for stagnation' as an order. Lines: F-P x2; T-P-Ne-grow --grow-mdl 0 (A: grow1's stall gate and excess priority, no MDL bar) x2; the same with --grow-gate age --grow-priority snapshot (B) x2. Every line trains on chessai-grow4 (byte-identical to grow1 without its new flags; train_binary.py after create); games chessai-hybrid16; seed 47. Floor 300, cap 400. Read: cold, T 0.02, one arena per ply (1, 2), v150 and the final, head to head B vs A and each vs F-P, plus split_table.py. Prediction (6.47 (b), 6.48): B's trials earlier and more often; within 10 of A.",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne-grow",
+   "set": {
+    "--grow-mdl": "0"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne-grow",
+   "set": {
+    "--grow-mdl": "0",
+    "--grow-gate": "age",
+    "--grow-priority": "snapshot"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 47,
+ "train": {
+  "seed": 47
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 400,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid16"
+ }
+}

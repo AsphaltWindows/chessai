@@ -1,0 +1,60 @@
+{
+  "kind": "experiment",
+  "root": "/home/iv/dev/chessai/leagues",
+  "name": "single-split-probit",
+  "models": [
+    "F-P",
+    {
+      "model": "T-P-Le",
+      "set": {
+        "--split-limit": "1",
+        "--split-threshold": "1000000"
+      },
+      "to": "train"
+    },
+    {
+      "model": "T-P-Ne",
+      "set": {
+        "--split-limit": "1",
+        "--split-threshold": "1000000"
+      },
+      "to": "train"
+    },
+    {
+      "model": "T-P-Te",
+      "set": {
+        "--split-limit": "1",
+        "--split-threshold": "1000000"
+      },
+      "to": "train"
+    },
+    {
+      "model": "T-P-Lc-merge",
+      "set": {
+        "--split-limit": "1",
+        "--split-threshold": "1000000"
+      },
+      "to": "train"
+    },
+    {
+      "model": "T-P-Nc-merge",
+      "set": {
+        "--split-limit": "1",
+        "--split-threshold": "1000000"
+      },
+      "to": "train"
+    },
+    {
+      "model": "T-P-Tc-merge",
+      "set": {
+        "--split-limit": "1",
+        "--split-threshold": "1000000"
+      },
+      "to": "train"
+    }
+  ],
+  "options": [
+    "local"
+  ],
+  "cycles": 1000
+}

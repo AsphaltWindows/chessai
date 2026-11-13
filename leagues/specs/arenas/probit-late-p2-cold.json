@@ -1,0 +1,78 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid13",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "probit-late-p2-cold",
+ "dir": "leagues/arenas/diag/probit-late-p2-cold",
+ "plies": [
+  1,
+  2,
+  3
+ ],
+ "entries": [
+  {
+   "version": "probit-late-p2:F-P#1.loc@241",
+   "name": "fp241.L1@241",
+   "label": "probit-late-p2 F-P#1.loc version v241"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@241",
+   "name": "fp241.L2@241",
+   "label": "probit-late-p2 F-P#2.loc version v241"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@241",
+   "name": "ne241.L1@241",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v241"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@241",
+   "name": "ne241.L2@241",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v241"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@399",
+   "name": "fpF.L1@399",
+   "label": "probit-late-p2 F-P#1.loc version v399"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@399",
+   "name": "fpF.L2@399",
+   "label": "probit-late-p2 F-P#2.loc version v399"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@399",
+   "name": "neF.L1@399",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v399"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@399",
+   "name": "neF.L2@399",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v399"
+  }
+ ],
+ "description": "Cold read of probit-late-p2 (the ply-2 late-gain test): F-P x2 and T-P-Ne x2 at v241 (probit-confirm-p2's stop) and at the finals v399, one field, plies 1-3, T 0.02, 75 round-robins. Tags fp241/ne241/fpF/neF."
+}

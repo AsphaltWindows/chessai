@@ -1,0 +1,33 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "fponly-p2-720",
+ "description": "fponly-p2 at games_per_cycle 720 (11-12 ~05:20; analyst 6.66/6.67: the direct test of 6.66's forbidden outcome and the per-compute question behind the user's games-per-cycle standard). One factor against fponly-p2: games per cycle 720 instead of 1,584 (8 entries: 13 rounds, 728 games, against 28 rounds, 1,568; self-games unchanged, scaled by lines). Same lines (F-P x4), seed 51, ply 2, self-games, no ply-1 entries, hybrid6 training. Floor 560 and cap 700 so the run passes the version of equal measured CPU with fponly-p2's v300 and final v320 (per-cycle overhead, own calibration and self-games, is fixed, so equal CPU is near v510-545, not v660). Predictions (6.67, \u00b120): at equal versions (v300, v320) 1,584 over 720 by 20-60 at ply 2 and 10-50 at ply 1; at equal CPU 720 over 1,584 by 0-40 at ply 2. Rule: 720 at equal CPU 30+ ahead = set the standard per compute (720 for ply-2 fields); within 20 = keep 1,584; 1,584 failing to beat 720 at equal versions by 20 ends the useful-volume account (6.66).",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 4
+  }
+ ],
+ "seed": 51,
+ "train": {
+  "seed": 51
+ },
+ "references": [],
+ "entry_ply": 2,
+ "self_games": true,
+ "ply1_entries": false,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 560
+ },
+ "cycles": 700,
+ "games_per_cycle": 720,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid16"
+ }
+}

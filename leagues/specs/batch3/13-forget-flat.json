@@ -1,0 +1,36 @@
+{
+  "kind": "experiment",
+  "root": "/home/iv/dev/chessai/leagues",
+  "name": "forget-flat",
+  "models": [
+    "F-L",
+    {
+      "model": "F-L",
+      "set": {
+        "--lr-memory": "6000000"
+      },
+      "to": "train"
+    },
+    "F-P",
+    {
+      "model": "F-P",
+      "set": {
+        "--probit-tau": "0"
+      },
+      "to": "train"
+    }
+  ],
+  "options": [
+    "local"
+  ],
+  "seed": 8,
+  "train": {
+    "seed": 8
+  },
+  "rounds_per_cycle": 17,
+  "min_rounds": 17,
+  "tournament": {
+    "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid8"
+  },
+  "cycles": 600
+}

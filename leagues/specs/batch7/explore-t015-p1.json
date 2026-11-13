@@ -1,0 +1,112 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "seed": 65,
+ "train": {
+  "seed": 65
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300,
+  "rate_scale": "sqrt",
+  "guard_z": 1.0
+ },
+ "cycles": 301,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid19",
+  "flags": [
+   "--reports-last",
+   "--sparse-fit",
+   "--temperature",
+   "0.15"
+  ]
+ },
+ "cold_games": {
+  "temperature": 0.02,
+  "share": 0.5,
+  "train": false
+ },
+ "rate_every": 4,
+ "champion_se_kind": "draw-aware",
+ "champion_se": 3,
+ "name": "explore-t015-p1",
+ "models": [
+  {
+   "model": "F-L",
+   "train_binary": "chessai-hybrid6"
+  },
+  {
+   "model": "F-P",
+   "train_binary": "chessai-hybrid6"
+  },
+  {
+   "model": "T-L-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--forget-factor": "10"
+   },
+   "to": "train",
+   "train_binary": "chessai-hybrid6"
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "train_binary": "chessai-hybrid6"
+  },
+  {
+   "model": "T-L-Ne-grow-f10",
+   "set": {
+    "--grow-mdl": "0",
+    "--grow-gate": "age",
+    "--grow-priority": "snapshot"
+   },
+   "to": "train",
+   "train_binary": "chessai-grow6"
+  },
+  {
+   "model": "T-P-Ne-grow",
+   "set": {
+    "--grow-mdl": "1",
+    "--grow-gate": "age",
+    "--grow-priority": "snapshot"
+   },
+   "to": "train",
+   "train_binary": "chessai-grow6"
+  },
+  {
+   "model": "D-L-Ne-ctx-grow",
+   "set": {
+    "--router-chain": "2",
+    "--router-trial-z": "-2",
+    "--grow-mdl": "0",
+    "--forget-factor": "10"
+   },
+   "to": "train",
+   "train_binary": "chessai-grow6"
+  },
+  {
+   "model": "D-P-Ne-ctx-grow",
+   "set": {
+    "--router-chain": "2",
+    "--router-trial-z": "-2"
+   },
+   "to": "train",
+   "train_binary": "chessai-grow6"
+  }
+ ],
+ "description": "Exploration dose (analyst 6.96 A3; launched 2026-11-12 ~21:30 by the coordinator on the user's \"continue collaborating with the math analyst agent doing the research indepedently\", 11-12 ~21:18). ONE FACTOR vs std-v1-p1-s1: the training games (league + self-games) at T 0.15 instead of the default 0.1; everything else as std-v1-p1-s1 (seed 65, the 8 standard recipes, 1,584 games, rate_every 4, cold T 0.02 rating-only, the same train binaries hybrid6/grow6). Question: is coverage (T 0.1's exploration) the trees' limit? Read at v300 against the r/e/g/h panel @300, vs std-v1-p1-s1 v300. Pre-registered band (6.96): trees within +-25 (so a gain of 25+ says exploration was limiting). Cap 301 (a test arm, not a library model)."
+}

@@ -1,0 +1,73 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 30,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "fponly720-read-p1-v320",
+ "dir": "leagues/arenas/diag/fponly720-read-p1-v320",
+ "plies": [
+  1
+ ],
+ "description": "Cold read fponly720-read-p1-v320: ply 1, version 320, only the contrast's lines, near argmax (T 0.02), 75 round-robins. Tags: x7=fponly-p2-720:^F-P, x4=fponly-p2:^F-P",
+ "entries": [
+  {
+   "version": "fponly-p2-720:F-P#1.loc@320",
+   "name": "x7320.L1@320",
+   "label": "fponly-p2-720 F-P#1.loc version v320"
+  },
+  {
+   "version": "fponly-p2-720:F-P#2.loc@320",
+   "name": "x7320.L2@320",
+   "label": "fponly-p2-720 F-P#2.loc version v320"
+  },
+  {
+   "version": "fponly-p2-720:F-P#3.loc@320",
+   "name": "x7320.L3@320",
+   "label": "fponly-p2-720 F-P#3.loc version v320"
+  },
+  {
+   "version": "fponly-p2-720:F-P#4.loc@320",
+   "name": "x7320.L4@320",
+   "label": "fponly-p2-720 F-P#4.loc version v320"
+  },
+  {
+   "version": "fponly-p2:F-P#1.loc@320",
+   "name": "x4320.L1@320",
+   "label": "fponly-p2 F-P#1.loc version v320"
+  },
+  {
+   "version": "fponly-p2:F-P#2.loc@320",
+   "name": "x4320.L2@320",
+   "label": "fponly-p2 F-P#2.loc version v320"
+  },
+  {
+   "version": "fponly-p2:F-P#3.loc@320",
+   "name": "x4320.L3@320",
+   "label": "fponly-p2 F-P#3.loc version v320"
+  },
+  {
+   "version": "fponly-p2:F-P#4.loc@320",
+   "name": "x4320.L4@320",
+   "label": "fponly-p2 F-P#4.loc version v320"
+  }
+ ]
+}

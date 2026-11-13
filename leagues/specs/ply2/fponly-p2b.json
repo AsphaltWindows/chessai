@@ -1,0 +1,33 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "fponly-p2b",
+ "description": "fponly-p2 replicated at seed 55 (11-12 ~06:40; analyst 6.70 slot 1): the 'strongest ply-2 evaluator on disk' claim (fponly-p2's F-P 43-87 over every other ply-2 F-P against the standing stranger panel) rests on one run, and fields showed a +-50 seed term for trees at ply 1; it is the claim the league regime would act on. Same as fponly-p2 otherwise: F-P x4, ply 2, games_per_cycle 1584, self-games, no ply-1 entries, floor 300, cap 400, hybrid6 training. Prediction (6.70): within 30 of fponly-p2's F-P against the ply-2 panel (y + v + l at v299), i.e. 55-120 over base-probit-p2's F-P; 40+ below = a lucky seed, and the pure-field advantage is 30-60. Read: models/from-scratch/global11-drafts/fponly-p2b-read.sh (panel).",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 4
+  }
+ ],
+ "seed": 55,
+ "train": {
+  "seed": 55
+ },
+ "references": [],
+ "entry_ply": 2,
+ "self_games": true,
+ "ply1_entries": false,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 400,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid16"
+ }
+}

@@ -1,0 +1,137 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "router-p1-stage",
+ "dir": "leagues/arenas/diag/router-p1-stage",
+ "plies": [
+  1,
+  2
+ ],
+ "description": "Stage-1 cold read of router-p1 at versions 150, final, plies 1,2, near argmax (T 0.02), 75 round-robins (theory-2 6.34). Tags: hg=stall-hg, h=stall-h\\+, z=router-split-z=20#, c=router-split-z=1000000000, fp=^F-P",
+ "entries": [
+  {
+   "version": "router-p1:F-P#1.loc@150",
+   "name": "fp150.L1@150",
+   "label": "router-p1 F-P#1.loc version v150"
+  },
+  {
+   "version": "router-p1:F-P#2.loc@150",
+   "name": "fp150.L2@150",
+   "label": "router-p1 F-P#2.loc version v150"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-z=1000000000#1.loc@150",
+   "name": "c150.L1@150",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-z=1000000000#1.loc version v150"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-z=1000000000#2.loc@150",
+   "name": "c150.L2@150",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-z=1000000000#2.loc version v150"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-z=20#1.loc@150",
+   "name": "z150.L1@150",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-z=20#1.loc version v150"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-z=20#2.loc@150",
+   "name": "z150.L2@150",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-z=20#2.loc version v150"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#1.loc@150",
+   "name": "h150.L1@150",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#1.loc version v150"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#2.loc@150",
+   "name": "h150.L2@150",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#2.loc version v150"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-hg+log-router-stats#1.loc@150",
+   "name": "hg150.L1@150",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-rule=stall-hg+log-router-stats#1.loc version v150"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-hg+log-router-stats#2.loc@150",
+   "name": "hg150.L2@150",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-rule=stall-hg+log-router-stats#2.loc version v150"
+  },
+  {
+   "version": "router-p1:F-P#1.loc@299",
+   "name": "fpF.L1@299",
+   "label": "router-p1 F-P#1.loc version v299 (final)"
+  },
+  {
+   "version": "router-p1:F-P#2.loc@299",
+   "name": "fpF.L2@299",
+   "label": "router-p1 F-P#2.loc version v299 (final)"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-z=1000000000#1.loc@299",
+   "name": "cF.L1@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-z=1000000000#1.loc version v299 (final)"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-z=1000000000#2.loc@299",
+   "name": "cF.L2@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-z=1000000000#2.loc version v299 (final)"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-z=20#1.loc@299",
+   "name": "zF.L1@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-z=20#1.loc version v299 (final)"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-z=20#2.loc@299",
+   "name": "zF.L2@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-z=20#2.loc version v299 (final)"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#1.loc@299",
+   "name": "hF.L1@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#1.loc version v299 (final)"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#2.loc@299",
+   "name": "hF.L2@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#2.loc version v299 (final)"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-hg+log-router-stats#1.loc@299",
+   "name": "hgF.L1@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-rule=stall-hg+log-router-stats#1.loc version v299 (final)"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-hg+log-router-stats#2.loc@299",
+   "name": "hgF.L2@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-rule=stall-hg+log-router-stats#2.loc version v299 (final)"
+  }
+ ]
+}

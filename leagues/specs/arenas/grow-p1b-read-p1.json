@@ -1,0 +1,96 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "grow-p1b-read-p1",
+ "dir": "leagues/arenas/diag/grow-p1b-read-p1",
+ "plies": [
+  1
+ ],
+ "description": "Cold read grow-p1b-read at ply 1 only (one arena per ply), versions 150, final, near argmax (T 0.02), 75 round-robins. Tags: a=grow-p1b:grow-mdl=0, g=grow-p1b:^T-P-Ne-grow#, fp=grow-p1b:^F-P",
+ "entries": [
+  {
+   "version": "grow-p1b:T-P-Ne-grow+grow-mdl=0#1.loc@150",
+   "name": "a150.L1@150",
+   "label": "grow-p1b T-P-Ne-grow+grow-mdl=0#1.loc version v150"
+  },
+  {
+   "version": "grow-p1b:T-P-Ne-grow+grow-mdl=0#2.loc@150",
+   "name": "a150.L2@150",
+   "label": "grow-p1b T-P-Ne-grow+grow-mdl=0#2.loc version v150"
+  },
+  {
+   "version": "grow-p1b:T-P-Ne-grow#1.loc@150",
+   "name": "g150.L1@150",
+   "label": "grow-p1b T-P-Ne-grow#1.loc version v150"
+  },
+  {
+   "version": "grow-p1b:T-P-Ne-grow#2.loc@150",
+   "name": "g150.L2@150",
+   "label": "grow-p1b T-P-Ne-grow#2.loc version v150"
+  },
+  {
+   "version": "grow-p1b:F-P#1.loc@150",
+   "name": "fp150.L1@150",
+   "label": "grow-p1b F-P#1.loc version v150"
+  },
+  {
+   "version": "grow-p1b:F-P#2.loc@150",
+   "name": "fp150.L2@150",
+   "label": "grow-p1b F-P#2.loc version v150"
+  },
+  {
+   "version": "grow-p1b:T-P-Ne-grow+grow-mdl=0#1.loc@352",
+   "name": "aF.L1@352",
+   "label": "grow-p1b T-P-Ne-grow+grow-mdl=0#1.loc version v352 (final)"
+  },
+  {
+   "version": "grow-p1b:T-P-Ne-grow+grow-mdl=0#2.loc@352",
+   "name": "aF.L2@352",
+   "label": "grow-p1b T-P-Ne-grow+grow-mdl=0#2.loc version v352 (final)"
+  },
+  {
+   "version": "grow-p1b:T-P-Ne-grow#1.loc@352",
+   "name": "gF.L1@352",
+   "label": "grow-p1b T-P-Ne-grow#1.loc version v352 (final)"
+  },
+  {
+   "version": "grow-p1b:T-P-Ne-grow#2.loc@352",
+   "name": "gF.L2@352",
+   "label": "grow-p1b T-P-Ne-grow#2.loc version v352 (final)"
+  },
+  {
+   "version": "grow-p1b:F-P#1.loc@352",
+   "name": "fpF.L1@352",
+   "label": "grow-p1b F-P#1.loc version v352 (final)"
+  },
+  {
+   "version": "grow-p1b:F-P#2.loc@352",
+   "name": "fpF.L2@352",
+   "label": "grow-p1b F-P#2.loc version v352 (final)"
+  }
+ ]
+}

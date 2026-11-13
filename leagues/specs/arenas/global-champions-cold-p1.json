@@ -1,0 +1,76 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 1,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 25,
+  "min_rounds": 150,
+  "max_rounds": 150
+ },
+ "name": "global-champions-cold-p1",
+ "dir": "leagues/arenas/diag/global-champions-cold-p1",
+ "plies": [
+  1
+ ],
+ "description": "The global league's eight last champions (each line's champion at retirement, or now for the two active lines) re-read cold at ply 1, near argmax (T 0.02), 150 round-robins (11-12 ~04:20, after diversity-p2c showed in-run T 0.1 ratings under-rate cluster trees by ~110): the cold ranking against the in-run standings.",
+ "entries": [
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@538",
+   "name": "gFL.L1@538",
+   "label": "global league F-L.p1 last champion G.19.538 (retired)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@463",
+   "name": "gFP.L1@463",
+   "label": "global league F-P.p1 last champion G.19.463 (retired)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@354",
+   "name": "gTPNc.L1@354",
+   "label": "global league T-P-Nc-merge-fresh.p1 last champion G.22.354 (retired)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@581",
+   "name": "gTLNc.L1@581",
+   "label": "global league T-L-Nc-merge-fresh.p1 last champion G.20.581 (retired)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@4029",
+   "name": "gDP30.L1@4029",
+   "label": "global league D-P-Ne-ctx-z30.p1 last champion G.34.4029 (active)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@754",
+   "name": "gDP20.L1@754",
+   "label": "global league D-P-Ne-ctx-z20.p1 last champion G.24.754 (retired)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@2323",
+   "name": "gDL160.L1@2323",
+   "label": "global league D-L-Ne-ctx-z160.p1 last champion G.30.2323 (active)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@638",
+   "name": "gDL120.L1@638",
+   "label": "global league D-L-Ne-ctx-z120.p1 last champion G.22.638 (retired)"
+  }
+ ]
+}

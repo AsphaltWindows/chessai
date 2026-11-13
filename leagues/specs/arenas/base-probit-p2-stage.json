@@ -1,0 +1,98 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "base-probit-p2-stage",
+ "dir": "leagues/arenas/diag/base-probit-p2-stage",
+ "plies": [
+  1,
+  2,
+  3
+ ],
+ "description": "Stage-1 cold read of base-probit-p2 at versions 300, final, plies 1,2,3, near argmax (T 0.02), 75 round-robins (theory-2 6.34). Tags: fp=^F-P, dag=^D-P, tree=^T-P",
+ "entries": [
+  {
+   "version": "base-probit-p2:F-P#1.loc@300",
+   "name": "fp300.L1@300",
+   "label": "base-probit-p2 F-P#1.loc version v300"
+  },
+  {
+   "version": "base-probit-p2:F-P#2.loc@300",
+   "name": "fp300.L2@300",
+   "label": "base-probit-p2 F-P#2.loc version v300"
+  },
+  {
+   "version": "base-probit-p2:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#1.loc@300",
+   "name": "dag300.L1@300",
+   "label": "base-probit-p2 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#1.loc version v300"
+  },
+  {
+   "version": "base-probit-p2:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#2.loc@300",
+   "name": "dag300.L2@300",
+   "label": "base-probit-p2 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#2.loc version v300"
+  },
+  {
+   "version": "base-probit-p2:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#1.loc@300",
+   "name": "tree300.L1@300",
+   "label": "base-probit-p2 T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#1.loc version v300"
+  },
+  {
+   "version": "base-probit-p2:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#2.loc@300",
+   "name": "tree300.L2@300",
+   "label": "base-probit-p2 T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#2.loc version v300"
+  },
+  {
+   "version": "base-probit-p2:F-P#1.loc@599",
+   "name": "fpF.L1@599",
+   "label": "base-probit-p2 F-P#1.loc version v599 (final)"
+  },
+  {
+   "version": "base-probit-p2:F-P#2.loc@599",
+   "name": "fpF.L2@599",
+   "label": "base-probit-p2 F-P#2.loc version v599 (final)"
+  },
+  {
+   "version": "base-probit-p2:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#1.loc@599",
+   "name": "dagF.L1@599",
+   "label": "base-probit-p2 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#1.loc version v599 (final)"
+  },
+  {
+   "version": "base-probit-p2:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#2.loc@599",
+   "name": "dagF.L2@599",
+   "label": "base-probit-p2 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#2.loc version v599 (final)"
+  },
+  {
+   "version": "base-probit-p2:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#1.loc@599",
+   "name": "treeF.L1@599",
+   "label": "base-probit-p2 T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#1.loc version v599 (final)"
+  },
+  {
+   "version": "base-probit-p2:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#2.loc@599",
+   "name": "treeF.L2@599",
+   "label": "base-probit-p2 T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#2.loc version v599 (final)"
+  }
+ ]
+}

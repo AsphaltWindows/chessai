@@ -1,0 +1,88 @@
+{
+ "name": "flat-ply4-interim-cold",
+ "dir": "leagues/arenas/diag/flat-ply4-interim-cold",
+ "description": "Interim read (11-11 ~02:45) at PLY 4, near argmax (T 0.02): flat-p3 (ply-3 field) and its twin flat-p2 (ply-2 field), final versions, with the best ply-2-trained flat LR and d4mix v426. Question: at ply 3 flat-p3 beat the ply-2-trained LR by 174 and lost 221 at ply 2; does training deeper also win one ply further (the goal), or does it follow the parity of the depth?",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid10",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "plies": [
+  4
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 5,
+  "min_rounds": 10,
+  "max_rounds": 10
+ },
+ "entries": [
+  {
+   "version": "flat-p3:F-L#1.loc@199",
+   "name": "fp3.F-L#1@199",
+   "label": "flat-p3 F-L#1 final version v199 (ply-3 field)"
+  },
+  {
+   "version": "flat-p3:F-L#2.loc@199",
+   "name": "fp3.F-L#2@199",
+   "label": "flat-p3 F-L#2 final version v199 (ply-3 field)"
+  },
+  {
+   "version": "flat-p3:F-L#3.loc@199",
+   "name": "fp3.F-L#3@199",
+   "label": "flat-p3 F-L#3 final version v199 (ply-3 field)"
+  },
+  {
+   "version": "flat-p3:F-L#4.loc@199",
+   "name": "fp3.F-L#4@199",
+   "label": "flat-p3 F-L#4 final version v199 (ply-3 field)"
+  },
+  {
+   "version": "flat-p2:F-L#1.loc@244",
+   "name": "fp2.F-L#1@244",
+   "label": "flat-p2 F-L#1 final version v244 (ply-2 field)"
+  },
+  {
+   "version": "flat-p2:F-L#2.loc@244",
+   "name": "fp2.F-L#2@244",
+   "label": "flat-p2 F-L#2 final version v244 (ply-2 field)"
+  },
+  {
+   "version": "flat-p2:F-L#3.loc@244",
+   "name": "fp2.F-L#3@244",
+   "label": "flat-p2 F-L#3 final version v244 (ply-2 field)"
+  },
+  {
+   "version": "flat-p2:F-L#4.loc@244",
+   "name": "fp2.F-L#4@244",
+   "label": "flat-p2 F-L#4 final version v244 (ply-2 field)"
+  },
+  {
+   "version": "lr-settings-new:F-L+lr-rate=0.0125.loc@136",
+   "name": "lrs.F-L-0.0125@136",
+   "label": "lr-settings-new champion (best ply-2-trained flat LR)"
+  },
+  {
+   "file": "cycles/runs/F-L-d4mix-c/lr426.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "old.F-L-d4mix-c@426",
+   "label": "old champion run: depth-4 self-play, 50/50 search labels; its champion at cycle 75"
+  }
+ ]
+}

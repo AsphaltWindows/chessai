@@ -1,0 +1,83 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid9",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "name": "ply3-cold",
+ "dir": "leagues/arenas/diag/ply3-cold",
+ "plies": [
+  2,
+  3
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 5,
+  "min_rounds": 10,
+  "max_rounds": 10
+ },
+ "description": "theory-2 6.9: the goal's own measurement. The best flat evaluators (ply-2-only fields) and the old deep-search-trained lineages, at ply 2 and PLY 3, near-argmax (T 0.02), own depth-1 calibrations. Reads: does the ply-2 order hold at ply 3, and does d4-trained data carry further? Cost: ply 3 is several times ply 2 per game; start with 10 rounds (about 2,200 games) and extend if the intervals are too wide. Changed by the coordinator (11-11 ~00:50): the old lineages enter as their cycle-75 champions (F-L-d4mix-c v426, F-L-c v4827) instead of v363 and v5518, and the FM champion (FM-c v669) is added (the analyst's item 4: FM against the flat LR, cold).",
+ "entries": [
+  {
+   "version": "lr-settings-new:F-L+lr-rate=0.0125.loc@136",
+   "name": "lrs.F-L-0.0125@136",
+   "label": "lr-settings-new champion"
+  },
+  {
+   "version": "lr-settings-new:F-L+lr-rate=0.0125.loc@193",
+   "name": "lrs.F-L-0.0125@193",
+   "label": "lr-settings-new final"
+  },
+  {
+   "version": "lr-settings-new:F-L+lr-rate=0.05.loc@193",
+   "name": "lrs.F-L-0.05@193",
+   "label": "rate 0.05 final"
+  },
+  {
+   "version": "probit-settings-new:F-P+probit-tau=1e-5.loc@151",
+   "name": "prs.F-P-1e-5@151",
+   "label": "probit-settings-new champion"
+  },
+  {
+   "version": "leaf-sources-new:F-L#1.loc@105",
+   "name": "lsn.F-L#1@105",
+   "label": "leaf-sources-new"
+  },
+  {
+   "file": "cycles/runs/F-L-d4mix-c/lr426.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "old.F-L-d4mix-c@426",
+   "label": "old champion run: depth-4 self-play, 50/50 search labels; its champion at cycle 75 (1838)"
+  },
+  {
+   "file": "cycles/runs/F-L-c/lr4827.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "old.F-L-c@4827",
+   "label": "old champion run flat LR; its champion at cycle 75 (1833)"
+  },
+  {
+   "file": "cycles/runs/FM-c/fm669.model",
+   "kind": "fm",
+   "heldout": "lr",
+   "name": "old.FM-c@669",
+   "label": "old champion run factorization machine (pairwise); its champion, retired by cycle 75 (1656)"
+  }
+ ]
+}

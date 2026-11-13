@@ -1,0 +1,186 @@
+{
+ "name": "prescreen-p12",
+ "dir": "leagues/arenas/diag/prescreen-p12",
+ "description": "Low-ply pre-screen (theory-2 6.23 item 5): archetype champions never rated near argmax against flat LR and flat probit of their own vintage, plies 1 and 2, T 0.02.",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid13",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "plies": [
+  1,
+  2
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 5,
+  "min_rounds": 30,
+  "max_rounds": 30
+ },
+ "entries": [
+  {
+   "file": "cycles/runs/F-L-c/lr4827.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "old.F-L-c@4827",
+   "label": "champion run F-L-c v4827 (champion Elo 1833 at cycle 75): flat LR reference"
+  },
+  {
+   "file": "cycles/runs/F-P-tau0-c/probit4359.model",
+   "kind": "probit",
+   "heldout": "lr",
+   "name": "old.F-P-tau0-c@4359",
+   "label": "champion run F-P-tau0-c v4359 (champion Elo 1684 at cycle 75): flat probit reference"
+  },
+  {
+   "file": "cycles/runs/M-L4-N-c/nbgate338.model",
+   "kind": "nbgate",
+   "heldout": "lr",
+   "name": "old.M-L4-N-c@338",
+   "label": "champion run M-L4-N-c v338 (champion Elo 1846 at cycle 75): NB-gated mixture of 4 LR experts"
+  },
+  {
+   "file": "cycles/runs/M-L8-L-c/moe305.model",
+   "kind": "moe",
+   "heldout": "lr",
+   "name": "old.M-L8-L-c@305",
+   "label": "champion run M-L8-L-c v305 (champion Elo 1821 at cycle 75): LR-gated mixture of 8 LR experts"
+  },
+  {
+   "file": "cycles/runs/M-LP-L-hard-c/hybrid473.model",
+   "kind": "hybrid",
+   "heldout": "lr",
+   "name": "old.M-LP-L-hard-c@473",
+   "label": "champion run M-LP-L-hard-c v473 (champion Elo 1814 at cycle 75): hard LR+probit mixture"
+  },
+  {
+   "file": "cycles/runs/T-L-Nc-c/bdt1349.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "old.T-L-Nc-c@1349",
+   "label": "champion run T-L-Nc-c v1349 (champion Elo 1859 at cycle 75): NB cluster tree"
+  },
+  {
+   "file": "cycles/runs/D-L-Nc-c/bdt2043.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "old.D-L-Nc-c@2043",
+   "label": "champion run D-L-Nc-c v2043 (champion Elo 1853 at cycle 75): NB cluster DAG"
+  },
+  {
+   "file": "cycles/runs/T-L-LLs-merge-c/bdt2767.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "old.T-L-LLs-merge-c@2767",
+   "label": "champion run T-L-LLs-merge-c v2767 (champion Elo 1827 at cycle 75): LR-router split tree (merge)"
+  },
+  {
+   "file": "cycles/runs/T-L-Ne-share3-c/bdt394.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "old.T-L-Ne-share3-c@394",
+   "label": "champion run T-L-Ne-share3-c v394 (champion Elo 1886 at cycle 75): error tree, leaf share 0.3 (read cold at ply 2 before)"
+  },
+  {
+   "file": "cycles/runs/T-L-Ne-pre-c/bdt1435.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "old.T-L-Ne-pre-c@1435",
+   "label": "champion run T-L-Ne-pre-c v1435 (champion Elo 1836 at cycle 75): error tree, pre"
+  },
+  {
+   "file": "cycles/runs/D-L-Ne-skill-c/bdd284.model",
+   "kind": "bdd",
+   "heldout": "lr",
+   "name": "old.D-L-Ne-skill-c@284",
+   "label": "champion run D-L-Ne-skill-c v284 (champion Elo 1812 at cycle 75): error DAG, skill trigger"
+  },
+  {
+   "file": "cycles/runs/T-L-Te-c/bdt200.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "old.T-L-Te-c@200",
+   "label": "champion run T-L-Te-c v200 (champion Elo 1811 at cycle 75): TAN-router error tree"
+  },
+  {
+   "version": "cluster-error:F-L.loc@317",
+   "name": "ce.F-L@317",
+   "label": "cluster-error F-L.loc champion v317"
+  },
+  {
+   "version": "cluster-error:F-P.loc@236",
+   "name": "ce.F-P@236",
+   "label": "cluster-error F-P.loc champion v236"
+  },
+  {
+   "version": "cluster-error:T-L-Lc-merge+split-limit=1+split-threshold=1000000.loc@338",
+   "name": "ce.T-L-Lc@338",
+   "label": "cluster-error T-L-Lc-merge+split-limit=1+split-threshold=1000000.loc champion v338"
+  },
+  {
+   "version": "cluster-error:T-L-Nc-merge+error=log+split-limit=1+split-threshold=1000000.loc@210",
+   "name": "ce.T-L-Nc@210",
+   "label": "cluster-error T-L-Nc-merge+error=log+split-limit=1+split-threshold=1000000.loc champion v210"
+  },
+  {
+   "version": "cluster-error:T-L-Tc-merge+error=log+split-limit=1+split-threshold=1000000.loc@240",
+   "name": "ce.T-L-Tc@240",
+   "label": "cluster-error T-L-Tc-merge+error=log+split-limit=1+split-threshold=1000000.loc champion v240"
+  },
+  {
+   "version": "cluster-error:T-P-Lc-merge+error=log+split-limit=1+split-threshold=1000000.loc@209",
+   "name": "ce.T-P-Lc@209",
+   "label": "cluster-error T-P-Lc-merge+error=log+split-limit=1+split-threshold=1000000.loc champion v209"
+  },
+  {
+   "version": "cluster-error:T-P-Nc-merge+split-limit=1+split-threshold=1000000.loc@385",
+   "name": "ce.T-P-Nc@385",
+   "label": "cluster-error T-P-Nc-merge+split-limit=1+split-threshold=1000000.loc champion v385"
+  },
+  {
+   "version": "cluster-error:T-P-Tc-merge+split-limit=1+split-threshold=1000000.loc@246",
+   "name": "ce.T-P-Tc@246",
+   "label": "cluster-error T-P-Tc-merge+split-limit=1+split-threshold=1000000.loc champion v246"
+  },
+  {
+   "version": "single-split-probit:F-P.loc@942",
+   "name": "ssp.F-P@942",
+   "label": "single-split-probit F-P.loc champion v942"
+  },
+  {
+   "version": "single-split:F-L.loc@150",
+   "name": "ssp.F-L@150",
+   "label": "single-split F-L.loc champion v150"
+  },
+  {
+   "version": "single-split-probit:T-P-Lc-merge+split-limit=1+split-threshold=1000000.loc@669",
+   "name": "ssp.T-P-Lc@669",
+   "label": "single-split-probit T-P-Lc-merge+split-limit=1+split-threshold=1000000.loc champion v669"
+  },
+  {
+   "version": "single-split-probit:T-P-Le+split-limit=1+split-threshold=1000000.loc@806",
+   "name": "ssp.T-P-Le@806",
+   "label": "single-split-probit T-P-Le+split-limit=1+split-threshold=1000000.loc champion v806"
+  },
+  {
+   "version": "single-split-probit:T-P-Te+split-limit=1+split-threshold=1000000.loc@747",
+   "name": "ssp.T-P-Te@747",
+   "label": "single-split-probit T-P-Te+split-limit=1+split-threshold=1000000.loc champion v747"
+  }
+ ]
+}

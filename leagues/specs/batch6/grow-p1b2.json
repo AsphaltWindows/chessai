@@ -1,0 +1,45 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "grow-p1b2",
+ "description": "grow-p1b replicated at seed 57 (11-12 ~06:50; analyst 6.71 (b), cheap insurance on the leaf-bar ruling): F-P x2, T-P-Ne-grow (MDL bar on, grow1) x2, the same with --grow-mdl 0 (A) x2, ply 1, 12 rounds (1,584 games a cycle), self-games, floor 300, cap 400, every line trained by chessai-grow1 as in grow-p1b. Against strangers grow-p1b's A never led grow1 (ply 1 / 2: -15 / -4 at v150, -56 / -52 at v300, -56 / -4 at v350); the ruling (bar ON for leaves) takes effect now. Prediction (6.71): A under grow1 by 20-60 at ply 1 at the final, within 20 at v150, ply 2 within 30 throughout. Rule: A 20+ below at the final confirms the bar; A within 10 at every read = a seed term (the bar stays on as the conservative setting; growth past ~13 leaves stays open). Read: models/from-scratch/global11-drafts/grow-p1b2-read.sh (panel r + e + g + h at v300, v150 / v300 / final, plies 1 and 2).",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne-grow",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne-grow",
+   "set": {
+    "--grow-mdl": "0"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 57,
+ "train": {
+  "seed": 57
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 400,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid16"
+ }
+}

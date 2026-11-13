@@ -24,6 +24,179 @@ SNAPSHOT = 64  # the design's count: 70 active lineages at cycle 64 -> 54 distin
 # Lineages taken beyond the snapshot: the default flat NB and probit leaves, which the planned experiments use
 # (F-N-c retired at cycle 57; F-P-c has been frozen since cycle 37). Their rows are models F-N and F-P.
 EXTRA = ["F-N-c", "F-P-c"]
+# Rows added by hand: models that never ran live (sources -), written after the generated rows and kept on a
+# re-run. Each is a generated row with one change. T-L-Lc-merge and T-L-Tc-merge (2026-11-09, the user's
+# single-split router experiment): T-L-Nc-merge with --router lr, and with --router tan --tan-m 200000 (the live
+# T-L-Te's TAN router). T-L-Fe (2026-11-09): T-L-Le with --router fm, an FM error router (default --fm-* options,
+# step size --lr-rate), on chessai-fmrouter, the only binary with FM routers (models/from-scratch/fmrouter/summary.txt;
+# identical to chessai-hybrid4gfx for every other model). Experiments that use it need that binary for their
+# tournament too ("tournament": {"binary": ...} in the spec), since chessai-hybrid4gfx can't load FM routers.
+# T-P-Le, T-P-Ne, T-P-Te, T-P-Lc-merge, T-P-Nc-merge and T-P-Tc-merge (2026-11-09, the single-split experiment
+# with probit leaves): the matching T-L rows with --leaf probit.
+# D-L-Ne-home (2026-11-10, prepared overnight, not run): D-L-Ne with --subrouter-target home, on chessai-bddhome2
+# (models/from-scratch/bddhome/summary.txt): after a router splits, the new router keeps the old one and its target
+# (which shared child predicts best), and its class i sends the position to sub-router i. chessai-bddhome2 trains
+# every other model as chessai-hybrid4gfx does, and its model files load and play in chessai-hybrid4gfx, so the
+# tournament needs no other binary; only training does. (chessai-bddhome is the first build, identical in results
+# but slower to train with home targets; bddhome2 caches each router's home children.)
+# T-L-Nc-merge-anchor (2026-11-11, theory-2 6.23 item 4, drafted, not run): T-L-Nc-merge with the LR anchor
+# --split-anchor-l2 on chessai-hybrid6an (models/from-scratch/lranchor/summary.txt): a split's new LR leaves keep the
+# parent's weights and are pulled towards them by an L2 penalty per example. The strength scales as 1/threshold; the
+# row's 8e-5 is the swept arm (a third of the split-noise-0.03 match, 2.6e-4 at the row's threshold 5M; 4e-4 at 1M).
+# hybrid6an trains every other model as chessai-hybrid6 does (byte-identical), and its model files are plain LR
+# trees that chessai-hybrid4gfx and hybrid13 load and play, so the tournament needs no other binary.
+# D-L-Ne-ctx (2026-11-11, the user's error-DAG test, drafted, not run): D-L-Ne with --path-context (every node has a
+# cell per upstream sibling set) on chessai-errdag (models/from-scratch/errdag/summary.txt), which also takes
+# --router-split-z (the router-split threshold; inf: the DAG trains and plays exactly as the tree) and, from
+# chessai-errdag2 on, --router-split-limit (a separate router budget: the DAG is the tree plus router splits). Only
+# errdag loads path-context models, so experiments with it need errdag(2) as their tournament binary; it plays every
+# other model exactly as chessai-hybrid13. (11-11 ~10:50: the row's binaries moved from chessai-errdag to errdag2,
+# which trains everything errdag trains byte for byte.)
+# D-P-Ne-ctx (2026-11-11, the probit error DAG, drafted, not run): D-L-Ne-ctx with probit leaves (T-P-Ne's) on
+# chessai-errdag3, whose BDD takes probit leaves and --split-noise; with --path-context each probit node's cells are
+# Gaussian latent weights per (cell, value), mean 0 and variance split_noise^2 at creation (the analyst's 6.25
+# addendum), so path context with probit leaves needs --split-noise above 0 (the row's 0.03). Only errdag3 loads
+# probit path-context models.
+# T-P-Nc-merge-fresh and T-L-Nc-merge-fresh (2026-11-11, two of the user's six for the global league at ply 1):
+# seat 1's fresh-gate cluster trees exactly as the ply-1 experiments ran them (G1/G2 probit, G6 LR): split limit 4,
+# threshold 1M, --revise-on fresh, probit with split noise 0.03; flags in the experiments' order (their lines.csv).
+# Trained on chessai-hybrid6 (byte-identical to hybrid4gfx, ~0.6 of the CPU); self-play binary as the base rows.
+# D-P-Ne-ctx-z30, D-P-Ne-ctx-z20, D-L-Ne-ctx-z160 and D-L-Ne-ctx-z120 (2026-11-11 ~16:20, the user's eight for the
+# global league at ply 1: "a z 30 and a z 20 probit leaves and a z 160 and z 120 lr leaves"): the error DAGs exactly as
+# error-dag-probit-p1 and error-dag-p1 ran them (their lines.csv, flags in their order): leaf limit 4, threshold 1M,
+# router limit 4, path context; probit with split noise 0.03. z 30 and z 160 are those tests' arms; z 20 and z 120 are
+# the user's lower thresholds, more likely to router-split. Trained and played on chessai-errdag4 (byte-identical to
+# errdag2/errdag3 in training and play); chessai-hybrid14 replaces it once verified.
+# T-P-Ne-g (2026-11-11 ~20:36, grow-p1): T-P-Ne without --reset-leaves inf (it only logs leaf-vs-shadow comparisons,
+# and the growth rule refuses it) and with --trial-error log (grow judges its trials in nats). Neither changes a
+# model trained without --split-rule grow. A recipe row, not overrides, so grow lines' names stay under the
+# file-name limit (the 20:34 create failed on a self-games file name). Trained on chessai-grow1.
+# D-P-Ne-ctx-r4 (2026-11-11 ~22:10, router-p1): D-P-Ne-ctx-z20 without --router-split-z, so each arm of the
+# router-split experiment sets its own trigger (--router-split-z, or grow3's --router-split-rule, which refuses a z).
+# Leaf limit 4, threshold 1M, router limit 4, path context, probit with split noise 0.03. Trained on chessai-grow3.
+# T-P-Ne-grow (2026-11-11 ~22:30, grow-p1b): grow-p1's grow line as a recipe (T-P-Ne-g with --split-threshold 1M,
+# --split-limit 1000000, --split-noise 0.03, --split-rule grow; train args in grow-p1's lines.csv order), so its arms'
+# overrides (e.g. --grow-mdl 0) keep line names under the self-games file-name limit. Trained on chessai-grow1 in
+# grow-p1b; from 23:40 on chessai-grow4 (byte-identical to grow1 without its new flags, which grow-p1c's arm B uses:
+# --grow-gate, --grow-priority, --grow-min-gain).
+# T-L-Ne-grow (2026-11-12 ~02:00, grow-l-p1; analyst 6.55): T-P-Ne-grow with LR leaves and without --split-noise (the
+# LR error trees never used it: error-dag-p1's capped T-L-Ne, the comparator). The growth rule's first LR test, and
+# the recipe the next global league would carry if the user takes the analyst's 6.54 six. Trained on chessai-grow4;
+# from 2026-11-12 ~04:15 (grow-l-p1c, analyst 6.62 (a)) on chessai-grow5: grow4 plus --grow-shadow-forget (none:
+# a growth trial's shadow keeps the leaf's AdaGrad sums), byte-identical to grow4 without it
+# (models/from-scratch/fastbin/grow5/summary.txt).
+# T-L-Ne-grow-f10 (2026-11-12 ~04:15, grow-l-p1c; analyst 6.59/6.62): T-L-Ne-grow with --forget-factor 10 (the
+# training arguments of grow-l-p1b's forget-10 arm), a row so that grow-l-p1c's arms (grow-l-p1b's rule, with and
+# without --grow-shadow-forget none) keep their line names under the self-games file-name limit: 106 characters as
+# T-L-Ne-grow overrides, 93 on this row. Self-play arguments as T-L-Ne-grow's. Trained on chessai-grow5.
+# F-L-decay (2026-11-12 ~05:00, lr-decay-p1; analyst 6.64 (b)): F-L trained on chessai-lrdecay1, which adds
+# --lr-sum-memory N (decaying AdaGrad sums, S <- S (1 - 1/N) + g^2 per example of the model's own) and trains
+# byte-identically to grow5 (so F-L as before) without it (models/from-scratch/fastbin/lrdecay1/summary.txt). A row so
+# that an experiment can give F-L the flag as an override, which F-L's own chessai-hybrid4gfx refuses; the arms'
+# line names then show N. Training and self-play arguments as F-L's.
+# F-P-w (2026-11-12 ~08:40, weight-p2; analyst 6.73): F-P trained on chessai-weight1, which adds
+# --weight-by-uncertainty none|score (examples weighted by the model's own uncertainty 4 s(1-s), floor 0.2, normalised
+# by a running mean, cap 3) and trains byte-identically to hybrid6 (so F-P as before) without it
+# (models/from-scratch/fastbin/weight1/summary.txt). A row so that an experiment can give F-P the flag as an override,
+# which F-P's own chessai-hybrid4gfx refuses. Training and self-play arguments as F-P's.
+# D-P-Ne-ctx-grow (2026-11-12 ~19:00, grow-dag-p1; analyst 6.80, the user's "we should encourage" router splits):
+# T-P-Ne-grow as a DAG with path context, grow4's leaf rule with the MDL bar on (--grow-mdl 1 --grow-gate age
+# --grow-priority snapshot, as the spec's T-P-Ne-grow arm sets it) and grow6's encourage rule: a router split on a
+# steady allowance (--router-credit 10M root positions, banked up to the leaves' credit cap 2), the eligible router
+# with the highest G_real - G_null (ties to H, then the index), no bar; a long do-no-harm trial of K = 5 windows of
+# the router's own examples, undone only below -2 block-SE (--router-trial-z 2) of G_real - G_null; --router-chain 1
+# (a copy, or a router that split, splits no more); --log-router-stats for the router split, leaf trial and path-cell
+# logs. Without the allowance (--router-credit 0) it trains as T-P-Ne-grow with that rule, game for game. Trained on
+# chessai-grow6 (byte-identical to grow5 / errdag4 / hybrid6 without its new flags;
+# models/from-scratch/fastbin/grow6/summary.txt). Self-play arguments as D-P-Ne-ctx-r4's (local experiments do not
+# use them).
+# D-L-Ne-ctx-grow (2026-11-12 ~17:10, the training standard v1, models/STANDARD.md; the user's eight: "growing trees
+# and router-splitting dags (but all of those might have either LR or probit leaves)"): D-P-Ne-ctx-grow with LR
+# leaves and without --split-noise (an LR tree takes none; --path-context with LR leaves needs nothing more in grow6:
+# its cells are LR weights), as D-L-Ne-ctx-z120 is D-P-Ne-ctx-z20 with LR leaves. Trained on chessai-grow6. Self-play
+# binary chessai-hybrid19 (plays grow6's DAGs byte-identically at plies 1-4: models/from-scratch/ply4-prep), its
+# self-play arguments D-L-Ne-ctx-z120's (local experiments do not use them).
+# F-P-S7 (2026-11-12 ~22:40, the S7 pairs fork; analyst 6.97, the user ~21:50: "Let's try pairwise features also"):
+# F-P with data-chosen pairwise features, trained on chessai-pairs1 (--pairs on: every conjunction of two feature
+# values is a candidate scored by the latent's standardized shift, z = S / sqrt(n); every 1M examples the 50 with the
+# largest |z| above 5 become weights of the probit (mean 0, sd 0.5 x prior), at most 2,000; a pair active in 3M
+# examples since chosen with |mean| < 0.5 sd is dropped). Without the flag pairs1 trains byte-identically to hybrid6
+# (models/from-scratch/pairs/summary.txt). Its models are probit model version 2, which only chessai-pairs1 plays
+# (older binaries refuse them: "unknown probit model version"), so an experiment with F-P-S7 lines needs the
+# tournament binary chessai-pairs1 (the same games as hybrid20 on every other model). The candidates' statistics
+# are training state (probitN.state beside the model, 5.7 MB; the driver keeps the current version's). Self-play
+# arguments as F-P's (self-play refuses --pairs; local experiments do not use them).
+# F-P-S7v2 (2026-11-12 ~23:20, the S7 pairs fork; analyst 6.100, the coordinator 22:56): F-P-S7 with the corrected
+# statistic, trained on chessai-pairs2: z = the pair's interaction contrast (its mean shift less its two values' and
+# plus the overall mean) over its standard error clustered by game, summed at each training round's end (the
+# training order is the plain probit's); every 1M examples (at the end of the round that reaches it) the 20 with the
+# largest |z| above 5 become weights, at most 500. Without the flag pairs2 trains byte-identically to hybrid6, and it
+# plays everything as hybrid20 (models/from-scratch/pairs/summary.txt); its models are probit version 2 like
+# F-P-S7's (chessai-pairs1 and -pairs2 play them alike), so an experiment with F-P-S7v2 lines needs the tournament
+# binary chessai-pairs2. State: probitN.state (kind probit-pairs2, ~17 MB), the current version's kept.
+# F-P-S7v3 (2026-11-13 ~03:10, the PAIRS3 BUILD fork; analyst 6.111, the coordinator ~02:13): F-P-S7v2 with selection
+# windows (the statistics restart at every checkpoint), the contrast's own SE clustered by game (component terms
+# included: null mean z^2 ~1 in each band of games), selection on the larger of that and the per-example SE (the
+# floor, pairs3f: a side-to-move pair's clustered SE is tiny, so tiny effects passed; null 0 chosen with it, 20 a
+# window without), cap 300, drop 1.0 sd; marginal contrast (--pairs-contrast cells: the 2x2 cells'), trained on
+# chessai-pairs3f (models/from-scratch/pairs3/summary.txt). Without the flag pairs3f trains byte-identically to
+# hybrid6 and plays everything as hybrid21; its models are probit version 2 like F-P-S7v2's (pairs1/2/3/3f load
+# them), so an experiment with F-P-S7v3 lines needs the tournament binary chessai-pairs3f. State: probitN.state (kind
+# probit-pairs3, ~66 MB: the contrast and SE, the pairs' own examples, the window's sums), the current version's kept.
+# F-P-lab and T-P-Ne-cap (2026-11-13 ~03:05, the tree-labels fork; analyst 6.113, labels-tree-p2): F-P-lab is F-P with
+# search labels (--label-depth 2 --label-result 0.5: each position labelled half by a depth-2 search by the model as
+# it starts the round, calibrated on the round's results, half by the game's result) on chessai-hybrid6, exactly
+# levers-p2's and labels-p1's labelled F-P line, as a row so that another line's --label-model can name it ("F-P-lab";
+# a "set" value can't hold "="). T-P-Ne-cap is the training standard's capped T-P-Ne (split limit 4, threshold 1M,
+# split noise 0.03; the standard sets them as overrides on T-P-Ne) on chessai-treelab (grow7 + --label-depth for bdt
+# and bdd; byte-identical to hybrid6 on this tree without the flags), short enough for label overrides in its name.
+# T-L-Ne-cap, T-L-Ne-grow-f10-std, T-P-Ne-grow-std, D-L-Ne-ctx-grow-std, D-P-Ne-ctx-grow-std (2026-11-13 ~14:10, the
+# distill fork; the user's go 11-13 ~12:55, distill-p2-s1/s2): the training standard v1's tree and DAG lines with
+# their overrides baked in, token for token std-v1-p2-x3's (= std-v1-p1-s1's) train arguments (T-L-Ne capped: split
+# limit 4, threshold 1M, forget 10; the grow rows: grow-mdl, gate age, priority snapshot; the DAGs: router-chain 2,
+# router-trial-z -2, the LR DAG grow-mdl 0 and forget 10), on chessai-treelab (without --label-* byte-identical to
+# grow7 and hybrid6 on these six: tree-labels/id_p1_tl.txt), so that --label-* overrides fit in a line name
+# (x3's names plus them run to 128 characters; self-games join two names). With T-P-Ne-cap the six standard trees.
+HAND = [
+    "T-L-Lc-merge | T-L-Lc-merge | T-L-Lc | bdt | 21 | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx | --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router lr --route cluster --revise 0 --reset-leaves inf --use-probs | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router lr --route cluster --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "T-L-Tc-merge | T-L-Tc-merge | T-L-Tc | bdt | 21 | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx | --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router tan --tan-m 200000 --route cluster --revise 0 --reset-leaves inf --use-probs | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router tan --tan-m 200000 --route cluster --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "T-L-Fe | T-L-Fe | T-L-Fe | bdt | 21 | models/from-scratch/bin/chessai-fmrouter | models/from-scratch/bin/chessai-fmrouter | --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router fm --route error --error log --reset-leaves inf --use-probs | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router fm --route error --error log --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "T-P-Le | T-P-Le | T-P-Le | bdt | 21 | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx | --leaf probit --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router lr --route error --error log --reset-leaves inf --use-probs | --model bdt --leaf probit --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router lr --route error --error log --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "T-P-Ne | T-P-Ne | T-P-Ne | bdt | 21 | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx | --leaf probit --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --reset-leaves inf --use-probs | --model bdt --leaf probit --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "T-P-Te | T-P-Te | T-P-Te | bdt | 21 | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx | --leaf probit --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router tan --tan-m 200000 --route error --error log --reset-leaves inf --use-probs | --model bdt --leaf probit --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router tan --tan-m 200000 --route error --error log --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "T-P-Lc-merge | T-P-Lc-merge | T-P-Lc | bdt | 21 | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx | --leaf probit --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router lr --route cluster --revise 0 --reset-leaves inf --use-probs | --model bdt --leaf probit --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router lr --route cluster --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "T-P-Nc-merge | T-P-Nc-merge | T-P-Nc | bdt | 21 | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx | --leaf probit --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route cluster --revise 0 --reset-leaves inf --use-probs | --model bdt --leaf probit --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route cluster --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "T-P-Tc-merge | T-P-Tc-merge | T-P-Tc | bdt | 21 | models/from-scratch/bin/chessai-hybrid4gfx | models/from-scratch/bin/chessai-hybrid4gfx | --leaf probit --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router tan --tan-m 200000 --route cluster --revise 0 --reset-leaves inf --use-probs | --model bdt --leaf probit --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router tan --tan-m 200000 --route cluster --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "D-L-Ne-home | D-L-Ne-home | D-L-Ne | bdd | 21 | models/from-scratch/bin/chessai-bddhome2 | models/from-scratch/bin/chessai-bddhome2 | --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --subrouter-target home --use-probs | --model bdd --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --subrouter-target home --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "T-L-Nc-merge-anchor | T-L-Nc-merge-anchor | T-L-Nc | bdt | 21 | models/from-scratch/bin/chessai-hybrid6an | models/from-scratch/bin/chessai-hybrid6an | --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route cluster --revise 0 --reset-leaves inf --split-anchor-l2 0.00008 --use-probs | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route cluster --revise 0 --reset-leaves inf --split-anchor-l2 0.00008 --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "D-L-Ne-ctx | D-L-Ne-ctx | D-L-Ne | bdd | 21 | models/from-scratch/bin/chessai-errdag2 | models/from-scratch/bin/chessai-errdag2 | --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --path-context --use-probs | --model bdd --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --path-context --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "D-P-Ne-ctx | D-P-Ne-ctx | D-P-Ne | bdd | 21 | models/from-scratch/bin/chessai-errdag3 | models/from-scratch/bin/chessai-errdag3 | --leaf probit --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --split-noise 0.03 --path-context --use-probs | --model bdd --leaf probit --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --split-noise 0.03 --path-context --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "T-P-Nc-merge-fresh | T-P-Nc-merge-fresh | T-P-Nc | bdt | 21 | models/from-scratch/bin/chessai-hybrid6 | models/from-scratch/bin/chessai-hybrid4gfx | --leaf probit --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route cluster --revise 0 --reset-leaves inf --use-probs --split-noise 0.03 --revise-on fresh | --model bdt --leaf probit --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route cluster --revise 0 --reset-leaves inf --use-probs --split-noise 0.03 --revise-on fresh --seed 21 --vs-previous --no-games | - | lr",
+    "T-L-Nc-merge-fresh | T-L-Nc-merge-fresh | T-L-Nc | bdt | 21 | models/from-scratch/bin/chessai-hybrid6 | models/from-scratch/bin/chessai-hybrid4gfx | --leaf lr --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route cluster --revise 0 --reset-leaves inf --use-probs --revise-on fresh | --model bdt --leaf lr --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route cluster --revise 0 --reset-leaves inf --use-probs --revise-on fresh --seed 21 --vs-previous --no-games | - | lr",
+    "D-P-Ne-ctx-z30 | D-P-Ne-ctx-z30 | D-P-Ne | bdd | 21 | models/from-scratch/bin/chessai-errdag4 | models/from-scratch/bin/chessai-errdag4 | --leaf probit --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route error --error log --split-noise 0.03 --path-context --use-probs --router-split-z 30 --router-split-limit 4 | --model bdd --leaf probit --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route error --error log --split-noise 0.03 --path-context --use-probs --router-split-z 30 --router-split-limit 4 --seed 21 --vs-previous --no-games | - | lr",
+    "D-P-Ne-ctx-z20 | D-P-Ne-ctx-z20 | D-P-Ne | bdd | 21 | models/from-scratch/bin/chessai-errdag4 | models/from-scratch/bin/chessai-errdag4 | --leaf probit --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route error --error log --split-noise 0.03 --path-context --use-probs --router-split-z 20 --router-split-limit 4 | --model bdd --leaf probit --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route error --error log --split-noise 0.03 --path-context --use-probs --router-split-z 20 --router-split-limit 4 --seed 21 --vs-previous --no-games | - | lr",
+    "D-L-Ne-ctx-z160 | D-L-Ne-ctx-z160 | D-L-Ne | bdd | 21 | models/from-scratch/bin/chessai-errdag4 | models/from-scratch/bin/chessai-errdag4 | --leaf lr --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route error --error log --path-context --use-probs --router-split-z 160 --router-split-limit 4 | --model bdd --leaf lr --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route error --error log --path-context --use-probs --router-split-z 160 --router-split-limit 4 --seed 21 --vs-previous --no-games | - | lr",
+    "D-L-Ne-ctx-z120 | D-L-Ne-ctx-z120 | D-L-Ne | bdd | 21 | models/from-scratch/bin/chessai-errdag4 | models/from-scratch/bin/chessai-errdag4 | --leaf lr --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route error --error log --path-context --use-probs --router-split-z 120 --router-split-limit 4 | --model bdd --leaf lr --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route error --error log --path-context --use-probs --router-split-z 120 --router-split-limit 4 --seed 21 --vs-previous --no-games | - | lr",
+    "T-P-Ne-g | T-P-Ne-g | T-P-Ne | bdt | 21 | models/from-scratch/bin/chessai-grow1 | models/from-scratch/bin/chessai-hybrid4gfx | --leaf probit --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --use-probs --trial-error log | --model bdt --leaf probit --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "T-P-Ne-grow | T-P-Ne-grow | T-P-Ne | bdt | 21 | models/from-scratch/bin/chessai-grow4 | models/from-scratch/bin/chessai-hybrid4gfx | --leaf probit --branch-factor 3 --split-threshold 1000000 --split-limit 1000000 --forget-factor 1 --router cnbp --route error --error log --use-probs --trial-error log --split-noise 0.03 --split-rule grow | --model bdt --leaf probit --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "T-L-Ne-grow | T-L-Ne-grow | T-L-Ne | bdt | 21 | models/from-scratch/bin/chessai-grow5 | models/from-scratch/bin/chessai-hybrid4gfx | --leaf lr --branch-factor 3 --split-threshold 1000000 --split-limit 1000000 --forget-factor 1 --router cnbp --route error --error log --use-probs --trial-error log --split-rule grow | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "T-L-Ne-grow-f10 | T-L-Ne-grow-f10 | T-L-Ne | bdt | 21 | models/from-scratch/bin/chessai-grow5 | models/from-scratch/bin/chessai-hybrid4gfx | --leaf lr --branch-factor 3 --split-threshold 1000000 --split-limit 1000000 --forget-factor 10 --router cnbp --route error --error log --use-probs --trial-error log --split-rule grow | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "D-P-Ne-ctx-r4 | D-P-Ne-ctx-r4 | D-P-Ne | bdd | 21 | models/from-scratch/bin/chessai-grow3 | models/from-scratch/bin/chessai-errdag4 | --leaf probit --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route error --error log --split-noise 0.03 --path-context --use-probs --router-split-limit 4 | --model bdd --leaf probit --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route error --error log --split-noise 0.03 --path-context --use-probs --router-split-z 20 --router-split-limit 4 --seed 21 --vs-previous --no-games | - | lr",
+    "F-L-decay | F-L-decay | F-L | lr | 21 | models/from-scratch/bin/chessai-lrdecay1 | models/from-scratch/bin/chessai-hybrid4gfx | --use-probs | --model lr --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "F-P-w | F-P-w | F-P | probit | 21 | models/from-scratch/bin/chessai-weight1 | models/from-scratch/bin/chessai-hybrid4gfx | --use-probs | --model probit --use-probs --seed 21 --vs-previous --no-games | F-P-c | lr",
+    "D-P-Ne-ctx-grow | D-P-Ne-ctx-grow | D-P-Ne | bdd | 21 | models/from-scratch/bin/chessai-grow6 | models/from-scratch/bin/chessai-errdag4 | --leaf probit --branch-factor 3 --split-threshold 1000000 --split-limit 1000000 --forget-factor 1 --router cnbp --route error --error log --use-probs --trial-error log --split-noise 0.03 --split-rule grow --path-context --grow-mdl 1 --grow-gate age --grow-priority snapshot --router-split-rule encourage --router-credit 10000000 --router-trial-windows 5 --router-trial-z 2 --router-chain 1 --log-router-stats | --model bdd --leaf probit --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route error --error log --split-noise 0.03 --path-context --use-probs --router-split-z 20 --router-split-limit 4 --seed 21 --vs-previous --no-games | - | lr",
+    "D-L-Ne-ctx-grow | D-L-Ne-ctx-grow | D-L-Ne | bdd | 21 | models/from-scratch/bin/chessai-grow6 | models/from-scratch/bin/chessai-hybrid19 | --leaf lr --branch-factor 3 --split-threshold 1000000 --split-limit 1000000 --forget-factor 1 --router cnbp --route error --error log --use-probs --trial-error log --split-rule grow --path-context --grow-mdl 1 --grow-gate age --grow-priority snapshot --router-split-rule encourage --router-credit 10000000 --router-trial-windows 5 --router-trial-z 2 --router-chain 1 --log-router-stats | --model bdd --leaf lr --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route error --error log --path-context --use-probs --router-split-z 120 --router-split-limit 4 --seed 21 --vs-previous --no-games | - | lr",
+    "F-P-S7 | F-P-S7 | F-P | probit | 21 | models/from-scratch/bin/chessai-pairs1 | models/from-scratch/bin/chessai-hybrid4gfx | --use-probs --pairs on | --model probit --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "F-P-S7v2 | F-P-S7v2 | F-P | probit | 21 | models/from-scratch/bin/chessai-pairs2 | models/from-scratch/bin/chessai-hybrid4gfx | --use-probs --pairs on | --model probit --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "F-P-S7v3 | F-P-S7v3 | F-P | probit | 21 | models/from-scratch/bin/chessai-pairs3f | models/from-scratch/bin/chessai-hybrid4gfx | --use-probs --pairs on | --model probit --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "F-P-lab | F-P-lab | F-P | probit | 21 | models/from-scratch/bin/chessai-hybrid6 | models/from-scratch/bin/chessai-hybrid4gfx | --use-probs --label-depth 2 --label-result 0.5 | --model probit --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "T-P-Ne-cap | T-P-Ne-cap | T-P-Ne | bdt | 21 | models/from-scratch/bin/chessai-treelab | models/from-scratch/bin/chessai-hybrid4gfx | --leaf probit --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route error --error log --reset-leaves inf --use-probs --split-noise 0.03 | --model bdt --leaf probit --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route error --error log --reset-leaves inf --use-probs --split-noise 0.03 --seed 21 --vs-previous --no-games | - | lr",
+    "T-L-Ne-cap | T-L-Ne-cap | T-L-Ne | bdt | 21 | models/from-scratch/bin/chessai-treelab | models/from-scratch/bin/chessai-hybrid4gfx | --leaf lr --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 10 --router cnbp --route error --error log --reset-leaves inf --use-probs | --model bdt --leaf lr --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 10 --router cnbp --route error --error log --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "T-L-Ne-grow-f10-std | T-L-Ne-grow-f10-std | T-L-Ne | bdt | 21 | models/from-scratch/bin/chessai-treelab | models/from-scratch/bin/chessai-hybrid4gfx | --leaf lr --branch-factor 3 --split-threshold 1000000 --split-limit 1000000 --forget-factor 10 --router cnbp --route error --error log --use-probs --trial-error log --split-rule grow --grow-mdl 0 --grow-gate age --grow-priority snapshot | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "T-P-Ne-grow-std | T-P-Ne-grow-std | T-P-Ne | bdt | 21 | models/from-scratch/bin/chessai-treelab | models/from-scratch/bin/chessai-hybrid4gfx | --leaf probit --branch-factor 3 --split-threshold 1000000 --split-limit 1000000 --forget-factor 1 --router cnbp --route error --error log --use-probs --trial-error log --split-noise 0.03 --split-rule grow --grow-mdl 1 --grow-gate age --grow-priority snapshot | --model bdt --leaf probit --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games | - | lr",
+    "D-L-Ne-ctx-grow-std | D-L-Ne-ctx-grow-std | D-L-Ne | bdd | 21 | models/from-scratch/bin/chessai-treelab | models/from-scratch/bin/chessai-hybrid19 | --leaf lr --branch-factor 3 --split-threshold 1000000 --split-limit 1000000 --forget-factor 10 --router cnbp --route error --error log --use-probs --trial-error log --split-rule grow --path-context --grow-mdl 0 --grow-gate age --grow-priority snapshot --router-split-rule encourage --router-credit 10000000 --router-trial-windows 5 --router-trial-z=-2 --router-chain 2 --log-router-stats | --model bdd --leaf lr --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route error --error log --path-context --use-probs --router-split-z 120 --router-split-limit 4 --seed 21 --vs-previous --no-games | - | lr",
+    "D-P-Ne-ctx-grow-std | D-P-Ne-ctx-grow-std | D-P-Ne | bdd | 21 | models/from-scratch/bin/chessai-treelab | models/from-scratch/bin/chessai-errdag4 | --leaf probit --branch-factor 3 --split-threshold 1000000 --split-limit 1000000 --forget-factor 1 --router cnbp --route error --error log --use-probs --trial-error log --split-noise 0.03 --split-rule grow --path-context --grow-mdl 1 --grow-gate age --grow-priority snapshot --router-split-rule encourage --router-credit 10000000 --router-trial-windows 5 --router-trial-z=-2 --router-chain 2 --log-router-stats | --model bdd --leaf probit --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp --route error --error log --split-noise 0.03 --path-context --use-probs --router-split-z 20 --router-split-limit 4 --seed 21 --vs-previous --no-games | - | lr",
+]
 # flags of self-play only (the live driver's SELFPLAY_ONLY): dropped from the training recipe
 SELFPLAY_ONLY = {"--model", "--seed", "--rounds", "--games", "--policy", "--temperature", "--threads", "--vs-previous",
                  "--no-games", "--depth", "--round-forget", "--age-forget", "--resume", "--keep-states", "--init"}
@@ -232,6 +405,13 @@ def main():
                                  os.path.relpath(os.path.join(ROOT, m["selfplay_binary"]), ROOT),
                                  shlex.join(m["train_args"]) or "-", shlex.join(m["selfplay_args"]),
                                  " ".join(m["sources"]), m["heldout"]]))
+    if HAND:
+        hand_models = [h.split(" | ")[0] for h in HAND]
+        clash = sorted(set(hand_models) & {m["model"] for m in models.values()})
+        if clash or len(set(hand_models)) < len(hand_models):
+            sys.exit(f"hand-added models clash: {clash or hand_models}")
+        lines.append("# Added by hand (make_recipes.py's HAND): models that never ran live.")
+        lines += HAND
     text = "\n".join(lines) + "\n"
     print(f"{n_snapshot} active lineages at cycle {SNAPSHOT} and {len(active) - n_snapshot} extra -> {len(recipes)} "
           f"recipes, {len(models)} models")

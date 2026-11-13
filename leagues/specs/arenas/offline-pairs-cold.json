@@ -1,0 +1,85 @@
+{
+ "name": "offline-pairs-cold",
+ "dir": "leagues/arenas/diag/offline-pairs-cold",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "plies": [
+  1,
+  2
+ ],
+ "description": "Analyst 6.42's single test (11-11 ~20:50): the offline discriminator's pairs (models/from-scratch/offline-ply: F-P and T-P-Ne trained one pass on 21.6M positions of pool P1 (ply-1 field) or P2 (ply-2 field), seeds 7101 and 7102) read cold at T 0.02 at plies 1-2, 75 round-robins. The P1 pair at ply 1 calibrates the method (predicted 60-110; if not, one-pass offline training underperforms the league and the test is void). P2 pair at ply 2: 20-60 = tracking lag (b), within 20 = what play weights (a). Tags p1fp, p1tne, p2fp, p2tne.",
+ "entries": [
+  {
+   "file": "models/from-scratch/offline-ply/models/P1/fp/probit108.model",
+   "kind": "probit",
+   "name": "p1fp.S1@108",
+   "label": "offline P1 F-P seed 1, 21.6M positions"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/models/P1/tne/bdt108.model",
+   "kind": "bdt",
+   "name": "p1tne.S1@108",
+   "label": "offline P1 T-P-Ne seed 1, 21.6M positions"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/models/P1-s7102/fp/probit108.model",
+   "kind": "probit",
+   "name": "p1fp.S2@108",
+   "label": "offline P1 F-P seed 2, 21.6M positions"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/models/P1-s7102/tne/bdt108.model",
+   "kind": "bdt",
+   "name": "p1tne.S2@108",
+   "label": "offline P1 T-P-Ne seed 2, 21.6M positions"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/models/P2/fp/probit108.model",
+   "kind": "probit",
+   "name": "p2fp.S1@108",
+   "label": "offline P2 F-P seed 1, 21.6M positions"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/models/P2/tne/bdt108.model",
+   "kind": "bdt",
+   "name": "p2tne.S1@108",
+   "label": "offline P2 T-P-Ne seed 1, 21.6M positions"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/models/P2-s7102/fp/probit108.model",
+   "kind": "probit",
+   "name": "p2fp.S2@108",
+   "label": "offline P2 F-P seed 2, 21.6M positions"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/models/P2-s7102/tne/bdt108.model",
+   "kind": "bdt",
+   "name": "p2tne.S2@108",
+   "label": "offline P2 T-P-Ne seed 2, 21.6M positions"
+  }
+ ]
+}

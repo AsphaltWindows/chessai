@@ -1,0 +1,53 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "probit-f10-p1",
+ "description": "The capped PROBIT error tree's split forget as the only factor (11-12 ~06:40; analyst 6.70 slot 2: the six should not carry an untested forget on probit while the LR trees carry 10). F-P x2; T-P-Ne capped (limit 4, 1M, noise 0.03) at --forget-factor 1 x2 and at 10 x2. Seed 56, ply 1, games_per_cycle 1584, self-games, plateau scaled min 300, cap 400, hybrid16 games, hybrid6 training. Prediction (6.70): forget 10 within 15 of forget 1 either way (ADF keeps the probit leaves' steps alive, so only the NB routers' counts change); 20+ below keeps forget 1. Read: panel (standing ply-1 panel r + e + g + h at v300), v150 and the final, plies 1 and 2 (models/from-scratch/global11-drafts/probit-f10-read.sh).",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03",
+    "--forget-factor": "10"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 56,
+ "train": {
+  "seed": 56
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 400,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid16"
+ }
+}

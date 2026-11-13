@@ -1,0 +1,99 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "models": [
+  "F-L",
+  {
+   "model": "T-L-Le",
+   "set": {
+    "--split-limit": "1",
+    "--split-threshold": "1000000"
+   },
+   "to": "train"
+  },
+  {
+   "model": "T-L-Le",
+   "set": {
+    "--route-before-train": true,
+    "--split-limit": "1",
+    "--split-threshold": "1000000"
+   },
+   "to": "train"
+  },
+  {
+   "model": "T-L-Le",
+   "set": {
+    "--route-before-train": true,
+    "--error-target": "gap",
+    "--split-limit": "1",
+    "--split-threshold": "1000000"
+   },
+   "to": "train"
+  },
+  {
+   "model": "T-L-Le",
+   "set": {
+    "--route-before-train": true,
+    "--error-target": "gap",
+    "--split-bootstrap": "1000000",
+    "--split-limit": "1",
+    "--split-threshold": "1000000"
+   },
+   "to": "train"
+  }
+ ],
+ "options": [
+  "local"
+ ],
+ "seed": 4,
+ "train": {
+  "seed": 4,
+  "qualify": "a model at ply 2"
+ },
+ "name": "error-targets-new",
+ "references": [],
+ "ply1_entries": false,
+ "plateau": {
+  "cycles": 50,
+  "min_cycles": 100
+ },
+ "cycles": 1000,
+ "rounds_per_cycle": 27,
+ "min_rounds": 27,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid9"
+ },
+ "prices_version": "P2",
+ "batch4": {
+  "original": "error-targets",
+  "note": "Batch 4: error-targets rerun without random players or ply-1 entries until the champions plateau. Rounds: 2426 games with a model at ply 2 per cycle in the original over 90 per round (5 lines, two ply-2 entries each).",
+  "binaries": {
+   "F-L.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "T-L-Le+split-limit=1+split-threshold=1000000.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "T-L-Le+route-before-train+split-limit=1+split-threshold=1000000.loc": {
+    "train": "chessai-target",
+    "selfplay": null
+   },
+   "T-L-Le+route-before-train+error-target=gap+split-limit=1+split-threshold=1000000.loc": {
+    "train": "chessai-target",
+    "selfplay": null
+   },
+   "T-L-Le+route-before-train+error-target=gap+split-bootstrap=1000000+split-limit=1+split-threshold=1000000.loc": {
+    "train": "chessai-target",
+    "selfplay": null
+   }
+  },
+  "rounds_from": {
+   "original": "error-targets",
+   "ply2_games_per_cycle": 2426.4,
+   "lines": 5,
+   "games_per_round": 90
+  }
+ }
+}

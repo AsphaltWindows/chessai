@@ -1,0 +1,53 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "grow-l-p1c",
+ "description": "The LR growing tree's trial shadow, one factor at ply 1 (analyst 6.62 after grow-l-p1b: --forget-factor 10 doubled the LR splits' gains, 0.0021 vs 0.0009 nats, and halved the negative undos, but kept only 6-7 of 12-15 trials). Mechanism (6.62 (a), checked in grow4-src: delegation.rs split_leaf forgets the growth trial's shadow by forget_factor, as it forgets the split's children): at forget 10 a trial pits three boosted children (AdaGrad sums /10, each on a third of the leaf's stream) against a boosted shadow, whereas the leaf without a trial stays unboosted; under drift a boosted shadow with 3x a child's updates tracks best, so the trial is biased against splits (and an undone trial, as built, leaves the leaf boosted: the forgotten shadow, carried through the trial). chessai-grow5's --grow-shadow-forget none starts the shadow as the leaf itself (the children still forget); an undone trial then leaves the leaf as it would have continued (its own sums plus the trial's). Lines: F-L x2; T-L-Ne-grow-f10 (T-L-Ne-grow with --forget-factor 10, a recipe row so the names stay under the self-games file-name limit; the same training arguments as grow-l-p1b's forget-10 arm) on grow-l-p1b's rule (--grow-mdl 0 --grow-gate age --grow-priority snapshot; W 1M, C 2, z 2, D 5M) x2: forget 10 as built; the same with --grow-shadow-forget none x2. Every line trains on chessai-grow5 (byte-identical to chessai-grow4 without the flag); games hybrid16; games_per_cycle 1584; seed 52; floor 300, cap 400. Offline smoke (models/from-scratch/fastbin/grow5/summary.txt; pool P1, W 200k): the none mode kept 16 of 18 trials (as built 8 of 20), mean kept gain 0.0072 nats (0.0022); paired trials (the same leaf, step and children in both modes) put 0.004 nats at W 1M (0.004-0.009 at W 200k) of a none-mode gain on the boost (forget 10, which the children get and the shadow no longer does) rather than on the split, so its gains may run above the band below. Read: cold, T 0.02, one arena per ply (1, 2), v150 and the final; head to head shadow-kept vs as built, each vs F-L; growth log (kept, undone, gains). Predictions (6.62): the shadow-kept arm keeps 9-12 of 12-15 trials (2-5 undone) with gains 0.002-0.004 nats, and plays within 15 Elo of forget 10 as built at plies 1 and 2. Plan: if it holds, the next league's LR growing tree uses forget 10 with the unforgotten shadow.",
+ "models": [
+  {
+   "model": "F-L",
+   "replicates": 2
+  },
+  {
+   "model": "T-L-Ne-grow-f10",
+   "set": {
+    "--grow-mdl": "0",
+    "--grow-gate": "age",
+    "--grow-priority": "snapshot"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-L-Ne-grow-f10",
+   "set": {
+    "--grow-mdl": "0",
+    "--grow-gate": "age",
+    "--grow-priority": "snapshot",
+    "--grow-shadow-forget": "none"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 52,
+ "train": {
+  "seed": 52
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 400,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid16"
+ }
+}

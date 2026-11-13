@@ -1,0 +1,105 @@
+{
+ "name": "diag-dip",
+ "dir": "leagues/arenas/diag/dip",
+ "description": "Diagnostic (a) of theory-2 section 6.2 (2026-11-11): is the post-split dip a ply-2 play effect? residual-leaves' copy tree (T-L-Nc limit 4, no merges) and its F-L at the same versions, during the dip (v60-150, when the tree trailed F-L by 32-47 at ply 2) and late (v300-399, level), each entry at ply 1 AND ply 2, own calibration. Games are saved for the seam statistic (models/from-scratch/optimism/seams.py): remove the --save-games pair from flags if the arena's tournament refuses it. References: the four standard ones (the draft had random-3 only, but arena.py always passes --anchor random and the binary exits on a missing anchor; changed 11-11 00:25).",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid9",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--save-games",
+  "/home/iv/dev/chessai/leagues/arenas/diag/dip/pool"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "plies": [
+  1,
+  2
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 5,
+  "min_rounds": 15,
+  "max_rounds": 15
+ },
+ "entries": [
+  {
+   "version": "residual-leaves:T-L-Nc+split-limit=4+split-threshold=1000000.loc@60",
+   "name": "tree@60",
+   "label": "copy tree v60 (dip)"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+split-limit=4+split-threshold=1000000.loc@90",
+   "name": "tree@90",
+   "label": "copy tree v90 (dip)"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+split-limit=4+split-threshold=1000000.loc@120",
+   "name": "tree@120",
+   "label": "copy tree v120 (dip)"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+split-limit=4+split-threshold=1000000.loc@150",
+   "name": "tree@150",
+   "label": "copy tree v150 (dip end)"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+split-limit=4+split-threshold=1000000.loc@300",
+   "name": "tree@300",
+   "label": "copy tree v300 (late)"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+split-limit=4+split-threshold=1000000.loc@350",
+   "name": "tree@350",
+   "label": "copy tree v350 (late)"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+split-limit=4+split-threshold=1000000.loc@399",
+   "name": "tree@399",
+   "label": "copy tree v399 (late)"
+  },
+  {
+   "version": "residual-leaves:F-L.loc@60",
+   "name": "flat@60",
+   "label": "F-L v60"
+  },
+  {
+   "version": "residual-leaves:F-L.loc@90",
+   "name": "flat@90",
+   "label": "F-L v90"
+  },
+  {
+   "version": "residual-leaves:F-L.loc@120",
+   "name": "flat@120",
+   "label": "F-L v120"
+  },
+  {
+   "version": "residual-leaves:F-L.loc@150",
+   "name": "flat@150",
+   "label": "F-L v150"
+  },
+  {
+   "version": "residual-leaves:F-L.loc@300",
+   "name": "flat@300",
+   "label": "F-L v300"
+  },
+  {
+   "version": "residual-leaves:F-L.loc@350",
+   "name": "flat@350",
+   "label": "F-L v350"
+  },
+  {
+   "version": "residual-leaves:F-L.loc@399",
+   "name": "flat@399",
+   "label": "F-L v399"
+  }
+ ]
+}

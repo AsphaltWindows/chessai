@@ -1,0 +1,33 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 200
+ },
+ "cycles": 600,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "prices_version": "P2",
+ "name": "train-t01-p1",
+ "seed": 27,
+ "train": {
+  "seed": 27
+ },
+ "models": [
+  {
+   "model": "F-L",
+   "replicates": 2
+  }
+ ],
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid13"
+ },
+ "description": "Training-game temperature, arm B (theory-2 6.23 item 1): train-t002-p1 exactly, but its own games at the default T 0.1. Launched 11-11 ~08:50 by the coordinator, batch 5 (low-ply architecture screening after the user's 11-11 pushback; theory-2 6.23)."
+}

@@ -1,0 +1,354 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": "field"
+ },
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 30,
+  "min_rounds": 30,
+  "max_rounds": 30
+ },
+ "name": "cvf-p1",
+ "dir": "leagues/arenas/diag/cvf-p1",
+ "plies": [
+  1
+ ],
+ "description": "Cold read cvf-p1: ply 1, version 0, only the contrast's lines, near argmax (T 0.02), 30 round-robins; Elo 0 = the field's mean, no random player. Tags: f01x=train-t002-p1:^F\\-L\\#2\\.loc$@210, c01x=train-t002-p1:^F\\-L\\#2\\.loc$@103, f02x=grow-l-p1b:^F\\-L\\#2\\.loc$@347, c02x=grow-l-p1b:^F\\-L\\#2\\.loc$@318, f03x=capped-l-f10-p1:^F\\-L\\#1\\.loc$@319, c03x=capped-l-f10-p1:^F\\-L\\#1\\.loc$@193, f04x=small-field-x4-p1:^F\\-L\\#2\\.loc$@189, c04x=small-field-x4-p1:^F\\-L\\#2\\.loc$@115, f05x=fponly-p1-coldrate:^F\\-P\\#2\\.loc$@299, c05x=fponly-p1-coldrate:^F\\-P\\#2\\.loc$@257, f06x=probit-f10-p1:^F\\-P\\#2\\.loc$@337, c06x=probit-f10-p1:^F\\-P\\#2\\.loc$@290, f07x=router-kind-p1:^F\\-P\\#2\\.loc$@299, c07x=router-kind-p1:^F\\-P\\#2\\.loc$@244, f08x=filtered-p1:^F\\-P\\.loc$@352, c08x=filtered-p1:^F\\-P\\.loc$@173, f09x=filtered-p1-twin:^T\\-L\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\+forget\\-factor=10\\.loc$@379, c09x=filtered-p1-twin:^T\\-L\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\+forget\\-factor=10\\.loc$@290, f10x=lr-trees-p1:^T\\-L\\-Nc\\-merge\\+split\\-limit=4\\+split\\-threshold=1000000\\+revise\\-on=fresh\\#2\\.loc$@301, c10x=lr-trees-p1:^T\\-L\\-Nc\\-merge\\+split\\-limit=4\\+split\\-threshold=1000000\\+revise\\-on=fresh\\#2\\.loc$@204, f11x=dag-lr-p1:^T\\-L\\-Nc\\-merge\\+split\\-limit=4\\+split\\-threshold=1000000\\+revise\\-on=fresh\\#1\\.loc$@425, c11x=dag-lr-p1:^T\\-L\\-Nc\\-merge\\+split\\-limit=4\\+split\\-threshold=1000000\\+revise\\-on=fresh\\#1\\.loc$@339, f12x=error-dag-p1:^T\\-L\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\#1\\.loc$@361, c12x=error-dag-p1:^T\\-L\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\#1\\.loc$@336, f13x=probit-f10-p1:^T\\-P\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\+split\\-noise=0\\.03\\#1\\.loc$@337, c13x=probit-f10-p1:^T\\-P\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\+split\\-noise=0\\.03\\#1\\.loc$@237, f14x=probit-widen-p1b:^T\\-P\\-Nc\\-merge\\+split\\-limit=4\\+split\\-threshold=1000000\\+split\\-noise=0\\.1\\+revise\\-on=fresh\\#2\\.loc$@199, c14x=probit-widen-p1b:^T\\-P\\-Nc\\-merge\\+split\\-limit=4\\+split\\-threshold=1000000\\+split\\-noise=0\\.1\\+revise\\-on=fresh\\#2\\.loc$@112, f15x=probit-widen-p1c:^T\\-P\\-Nc\\-merge\\+split\\-limit=4\\+split\\-threshold=1000000\\+revise\\-on=fresh\\#2\\.loc$@250, c15x=probit-widen-p1c:^T\\-P\\-Nc\\-merge\\+split\\-limit=4\\+split\\-threshold=1000000\\+revise\\-on=fresh\\#2\\.loc$@198, f16x=filtered-p1-twin:^T\\-P\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\+split\\-noise=0\\.03\\.loc$@379, c16x=filtered-p1-twin:^T\\-P\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\+split\\-noise=0\\.03\\.loc$@314, f17x=grow-dag-p1:^T\\-P\\-Ne\\-grow\\+grow\\-mdl=1\\+grow\\-gate=age\\+grow\\-priority=snapshot\\#2\\.loc$@599, c17x=grow-dag-p1:^T\\-P\\-Ne\\-grow\\+grow\\-mdl=1\\+grow\\-gate=age\\+grow\\-priority=snapshot\\#2\\.loc$@370, f18x=grow-p1c:^T\\-P\\-Ne\\-grow\\+grow\\-mdl=0\\#1\\.loc$@354, c18x=grow-p1c:^T\\-P\\-Ne\\-grow\\+grow\\-mdl=0\\#1\\.loc$@299, f19x=grow-p1b2:^T\\-P\\-Ne\\-grow\\#1\\.loc$@349, c19x=grow-p1b2:^T\\-P\\-Ne\\-grow\\#1\\.loc$@320, f20x=filtered-p1:^T\\-P\\-Ne\\-grow\\+grow\\-mdl=1\\+grow\\-gate=age\\+grow\\-priority=snapshot\\.loc$@352, c20x=filtered-p1:^T\\-P\\-Ne\\-grow\\+grow\\-mdl=1\\+grow\\-gate=age\\+grow\\-priority=snapshot\\.loc$@286, f21x=grow-dag-p1:^D\\-P\\-Ne\\-ctx\\-grow\\+router\\-chain=2\\+router\\-credit=5000000\\#2\\.loc$@599, c21x=grow-dag-p1:^D\\-P\\-Ne\\-ctx\\-grow\\+router\\-chain=2\\+router\\-credit=5000000\\#2\\.loc$@272, f22x=router-p1:^D\\-P\\-Ne\\-ctx\\-r4\\+router\\-split\\-z=20\\#2\\.loc$@299, c22x=router-p1:^D\\-P\\-Ne\\-ctx\\-r4\\+router\\-split\\-z=20\\#2\\.loc$@179, f23x=dag-lr-p1:^D\\-L\\-Nc\\+dag\\-leaves=5\\+split\\-threshold=1000000\\#2\\.loc$@425, c23x=dag-lr-p1:^D\\-L\\-Nc\\+dag\\-leaves=5\\+split\\-threshold=1000000\\#2\\.loc$@386, f24x=error-dag-p1:^D\\-L\\-Ne\\-ctx\\+split\\-limit=4\\+split\\-threshold=1000000\\+router\\-split\\-z=0\\+router\\-split\\-limit=4\\#1\\.loc$@361, c24x=error-dag-p1:^D\\-L\\-Ne\\-ctx\\+split\\-limit=4\\+split\\-threshold=1000000\\+router\\-split\\-z=0\\+router\\-split\\-limit=4\\#1\\.loc$@317, rfp=error-routing-p1:^F-P@300, efp=error-dag-probit-p1:^F-P@300, gfp=grow-p1:^F-P@300, hfp=grow-p1b:^F-P@300, rtr=error-routing-p1:^T-P-Ne\\+@300, etr=error-dag-probit-p1:^T-P-Ne\\+@300, gtr=grow-p1:^T-P-Ne\\+@300, htr=grow-p1b:^T-P-Ne-grow#@300",
+ "entries": [
+  {
+   "version": "train-t002-p1:F-L#2.loc@210",
+   "name": "f01x210.L2@210",
+   "label": "train-t002-p1 F-L#2.loc version v210"
+  },
+  {
+   "version": "train-t002-p1:F-L#2.loc@103",
+   "name": "c01x103.L2@103",
+   "label": "train-t002-p1 F-L#2.loc version v103"
+  },
+  {
+   "version": "grow-l-p1b:F-L#2.loc@347",
+   "name": "f02x347.L2@347",
+   "label": "grow-l-p1b F-L#2.loc version v347"
+  },
+  {
+   "version": "grow-l-p1b:F-L#2.loc@318",
+   "name": "c02x318.L2@318",
+   "label": "grow-l-p1b F-L#2.loc version v318"
+  },
+  {
+   "version": "capped-l-f10-p1:F-L#1.loc@319",
+   "name": "f03x319.L1@319",
+   "label": "capped-l-f10-p1 F-L#1.loc version v319"
+  },
+  {
+   "version": "capped-l-f10-p1:F-L#1.loc@193",
+   "name": "c03x193.L1@193",
+   "label": "capped-l-f10-p1 F-L#1.loc version v193"
+  },
+  {
+   "version": "small-field-x4-p1:F-L#2.loc@189",
+   "name": "f04x189.L2@189",
+   "label": "small-field-x4-p1 F-L#2.loc version v189"
+  },
+  {
+   "version": "small-field-x4-p1:F-L#2.loc@115",
+   "name": "c04x115.L2@115",
+   "label": "small-field-x4-p1 F-L#2.loc version v115"
+  },
+  {
+   "version": "fponly-p1-coldrate:F-P#2.loc@299",
+   "name": "f05x299.L2@299",
+   "label": "fponly-p1-coldrate F-P#2.loc version v299"
+  },
+  {
+   "version": "fponly-p1-coldrate:F-P#2.loc@257",
+   "name": "c05x257.L2@257",
+   "label": "fponly-p1-coldrate F-P#2.loc version v257"
+  },
+  {
+   "version": "probit-f10-p1:F-P#2.loc@337",
+   "name": "f06x337.L2@337",
+   "label": "probit-f10-p1 F-P#2.loc version v337"
+  },
+  {
+   "version": "probit-f10-p1:F-P#2.loc@290",
+   "name": "c06x290.L2@290",
+   "label": "probit-f10-p1 F-P#2.loc version v290"
+  },
+  {
+   "version": "router-kind-p1:F-P#2.loc@299",
+   "name": "f07x299.L2@299",
+   "label": "router-kind-p1 F-P#2.loc version v299"
+  },
+  {
+   "version": "router-kind-p1:F-P#2.loc@244",
+   "name": "c07x244.L2@244",
+   "label": "router-kind-p1 F-P#2.loc version v244"
+  },
+  {
+   "version": "filtered-p1:F-P.loc@352",
+   "name": "f08x352.L1@352",
+   "label": "filtered-p1 F-P.loc version v352"
+  },
+  {
+   "version": "filtered-p1:F-P.loc@173",
+   "name": "c08x173.L1@173",
+   "label": "filtered-p1 F-P.loc version v173"
+  },
+  {
+   "version": "filtered-p1-twin:T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc@379",
+   "name": "f09x379.L1@379",
+   "label": "filtered-p1-twin T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc version v379"
+  },
+  {
+   "version": "filtered-p1-twin:T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc@290",
+   "name": "c09x290.L1@290",
+   "label": "filtered-p1-twin T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc version v290"
+  },
+  {
+   "version": "lr-trees-p1:T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#2.loc@301",
+   "name": "f10x301.L2@301",
+   "label": "lr-trees-p1 T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#2.loc version v301"
+  },
+  {
+   "version": "lr-trees-p1:T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#2.loc@204",
+   "name": "c10x204.L2@204",
+   "label": "lr-trees-p1 T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#2.loc version v204"
+  },
+  {
+   "version": "dag-lr-p1:T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#1.loc@425",
+   "name": "f11x425.L1@425",
+   "label": "dag-lr-p1 T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#1.loc version v425"
+  },
+  {
+   "version": "dag-lr-p1:T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#1.loc@339",
+   "name": "c11x339.L1@339",
+   "label": "dag-lr-p1 T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#1.loc version v339"
+  },
+  {
+   "version": "error-dag-p1:T-L-Ne+split-limit=4+split-threshold=1000000#1.loc@361",
+   "name": "f12x361.L1@361",
+   "label": "error-dag-p1 T-L-Ne+split-limit=4+split-threshold=1000000#1.loc version v361"
+  },
+  {
+   "version": "error-dag-p1:T-L-Ne+split-limit=4+split-threshold=1000000#1.loc@336",
+   "name": "c12x336.L1@336",
+   "label": "error-dag-p1 T-L-Ne+split-limit=4+split-threshold=1000000#1.loc version v336"
+  },
+  {
+   "version": "probit-f10-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@337",
+   "name": "f13x337.L1@337",
+   "label": "probit-f10-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v337"
+  },
+  {
+   "version": "probit-f10-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@237",
+   "name": "c13x237.L1@237",
+   "label": "probit-f10-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v237"
+  },
+  {
+   "version": "probit-widen-p1b:T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.1+revise-on=fresh#2.loc@199",
+   "name": "f14x199.L2@199",
+   "label": "probit-widen-p1b T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.1+revise-on=fresh#2.loc version v199"
+  },
+  {
+   "version": "probit-widen-p1b:T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.1+revise-on=fresh#2.loc@112",
+   "name": "c14x112.L2@112",
+   "label": "probit-widen-p1b T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.1+revise-on=fresh#2.loc version v112"
+  },
+  {
+   "version": "probit-widen-p1c:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#2.loc@250",
+   "name": "f15x250.L2@250",
+   "label": "probit-widen-p1c T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#2.loc version v250"
+  },
+  {
+   "version": "probit-widen-p1c:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#2.loc@198",
+   "name": "c15x198.L2@198",
+   "label": "probit-widen-p1c T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#2.loc version v198"
+  },
+  {
+   "version": "filtered-p1-twin:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc@379",
+   "name": "f16x379.L1@379",
+   "label": "filtered-p1-twin T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc version v379"
+  },
+  {
+   "version": "filtered-p1-twin:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc@314",
+   "name": "c16x314.L1@314",
+   "label": "filtered-p1-twin T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03.loc version v314"
+  },
+  {
+   "version": "grow-dag-p1:T-P-Ne-grow+grow-mdl=1+grow-gate=age+grow-priority=snapshot#2.loc@599",
+   "name": "f17x599.L2@599",
+   "label": "grow-dag-p1 T-P-Ne-grow+grow-mdl=1+grow-gate=age+grow-priority=snapshot#2.loc version v599"
+  },
+  {
+   "version": "grow-dag-p1:T-P-Ne-grow+grow-mdl=1+grow-gate=age+grow-priority=snapshot#2.loc@370",
+   "name": "c17x370.L2@370",
+   "label": "grow-dag-p1 T-P-Ne-grow+grow-mdl=1+grow-gate=age+grow-priority=snapshot#2.loc version v370"
+  },
+  {
+   "version": "grow-p1c:T-P-Ne-grow+grow-mdl=0#1.loc@354",
+   "name": "f18x354.L1@354",
+   "label": "grow-p1c T-P-Ne-grow+grow-mdl=0#1.loc version v354"
+  },
+  {
+   "version": "grow-p1c:T-P-Ne-grow+grow-mdl=0#1.loc@299",
+   "name": "c18x299.L1@299",
+   "label": "grow-p1c T-P-Ne-grow+grow-mdl=0#1.loc version v299"
+  },
+  {
+   "version": "grow-p1b2:T-P-Ne-grow#1.loc@349",
+   "name": "f19x349.L1@349",
+   "label": "grow-p1b2 T-P-Ne-grow#1.loc version v349"
+  },
+  {
+   "version": "grow-p1b2:T-P-Ne-grow#1.loc@320",
+   "name": "c19x320.L1@320",
+   "label": "grow-p1b2 T-P-Ne-grow#1.loc version v320"
+  },
+  {
+   "version": "filtered-p1:T-P-Ne-grow+grow-mdl=1+grow-gate=age+grow-priority=snapshot.loc@352",
+   "name": "f20x352.L1@352",
+   "label": "filtered-p1 T-P-Ne-grow+grow-mdl=1+grow-gate=age+grow-priority=snapshot.loc version v352"
+  },
+  {
+   "version": "filtered-p1:T-P-Ne-grow+grow-mdl=1+grow-gate=age+grow-priority=snapshot.loc@286",
+   "name": "c20x286.L1@286",
+   "label": "filtered-p1 T-P-Ne-grow+grow-mdl=1+grow-gate=age+grow-priority=snapshot.loc version v286"
+  },
+  {
+   "version": "grow-dag-p1:D-P-Ne-ctx-grow+router-chain=2+router-credit=5000000#2.loc@599",
+   "name": "f21x599.L2@599",
+   "label": "grow-dag-p1 D-P-Ne-ctx-grow+router-chain=2+router-credit=5000000#2.loc version v599"
+  },
+  {
+   "version": "grow-dag-p1:D-P-Ne-ctx-grow+router-chain=2+router-credit=5000000#2.loc@272",
+   "name": "c21x272.L2@272",
+   "label": "grow-dag-p1 D-P-Ne-ctx-grow+router-chain=2+router-credit=5000000#2.loc version v272"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-z=20#2.loc@299",
+   "name": "f22x299.L2@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-z=20#2.loc version v299"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-z=20#2.loc@179",
+   "name": "c22x179.L2@179",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-z=20#2.loc version v179"
+  },
+  {
+   "version": "dag-lr-p1:D-L-Nc+dag-leaves=5+split-threshold=1000000#2.loc@425",
+   "name": "f23x425.L2@425",
+   "label": "dag-lr-p1 D-L-Nc+dag-leaves=5+split-threshold=1000000#2.loc version v425"
+  },
+  {
+   "version": "dag-lr-p1:D-L-Nc+dag-leaves=5+split-threshold=1000000#2.loc@386",
+   "name": "c23x386.L2@386",
+   "label": "dag-lr-p1 D-L-Nc+dag-leaves=5+split-threshold=1000000#2.loc version v386"
+  },
+  {
+   "version": "error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#1.loc@361",
+   "name": "f24x361.L1@361",
+   "label": "error-dag-p1 D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#1.loc version v361"
+  },
+  {
+   "version": "error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#1.loc@317",
+   "name": "c24x317.L1@317",
+   "label": "error-dag-p1 D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#1.loc version v317"
+  },
+  {
+   "version": "error-routing-p1:F-P#1.loc@300",
+   "name": "rfp300.L1@300",
+   "label": "error-routing-p1 F-P#1.loc version v300"
+  },
+  {
+   "version": "error-routing-p1:F-P#2.loc@300",
+   "name": "rfp300.L2@300",
+   "label": "error-routing-p1 F-P#2.loc version v300"
+  },
+  {
+   "version": "error-dag-probit-p1:F-P#1.loc@300",
+   "name": "efp300.L1@300",
+   "label": "error-dag-probit-p1 F-P#1.loc version v300"
+  },
+  {
+   "version": "error-dag-probit-p1:F-P#2.loc@300",
+   "name": "efp300.L2@300",
+   "label": "error-dag-probit-p1 F-P#2.loc version v300"
+  },
+  {
+   "version": "grow-p1:F-P#1.loc@300",
+   "name": "gfp300.L1@300",
+   "label": "grow-p1 F-P#1.loc version v300"
+  },
+  {
+   "version": "grow-p1:F-P#2.loc@300",
+   "name": "gfp300.L2@300",
+   "label": "grow-p1 F-P#2.loc version v300"
+  },
+  {
+   "version": "grow-p1b:F-P#1.loc@300",
+   "name": "hfp300.L1@300",
+   "label": "grow-p1b F-P#1.loc version v300"
+  },
+  {
+   "version": "grow-p1b:F-P#2.loc@300",
+   "name": "hfp300.L2@300",
+   "label": "grow-p1b F-P#2.loc version v300"
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@300",
+   "name": "rtr300.L1@300",
+   "label": "error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v300"
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@300",
+   "name": "rtr300.L2@300",
+   "label": "error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v300"
+  },
+  {
+   "version": "error-dag-probit-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@300",
+   "name": "etr300.L1@300",
+   "label": "error-dag-probit-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v300"
+  },
+  {
+   "version": "error-dag-probit-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@300",
+   "name": "etr300.L2@300",
+   "label": "error-dag-probit-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v300"
+  },
+  {
+   "version": "grow-p1:T-P-Ne+split-threshold=1000000+split-noise=0.03+split-limit=4#1.loc@300",
+   "name": "gtr300.L1@300",
+   "label": "grow-p1 T-P-Ne+split-threshold=1000000+split-noise=0.03+split-limit=4#1.loc version v300"
+  },
+  {
+   "version": "grow-p1:T-P-Ne+split-threshold=1000000+split-noise=0.03+split-limit=4#2.loc@300",
+   "name": "gtr300.L2@300",
+   "label": "grow-p1 T-P-Ne+split-threshold=1000000+split-noise=0.03+split-limit=4#2.loc version v300"
+  },
+  {
+   "version": "grow-p1b:T-P-Ne-grow#1.loc@300",
+   "name": "htr300.L1@300",
+   "label": "grow-p1b T-P-Ne-grow#1.loc version v300"
+  },
+  {
+   "version": "grow-p1b:T-P-Ne-grow#2.loc@300",
+   "name": "htr300.L2@300",
+   "label": "grow-p1b T-P-Ne-grow#2.loc version v300"
+  }
+ ]
+}

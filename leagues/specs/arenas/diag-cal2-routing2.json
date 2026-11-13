@@ -1,0 +1,116 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid8",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid8",
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "plies": [
+  2
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 10,
+  "min_rounds": 40,
+  "max_rounds": 40
+ },
+ "name": "diag-cal2-routing2",
+ "dir": "leagues/arenas/diag/cal2-routing2",
+ "calibration": {
+  "games": 600,
+  "depth": 2,
+  "seed": 5,
+  "policy": "log-odds-softmax",
+  "temperature": 0.1,
+  "heldout": {
+   "lr": "/home/iv/dev/chessai/games/heldout-lr-d2-s555/round0",
+   "cnbp": "/home/iv/dev/chessai/games/heldout-cnbp-d2-s555/round0"
+  }
+ },
+ "description": "Diagnostic (a), second set, 11-10 ~19:20: the same champions as diag-cal1-routing2 at ply 2, calibrated on 600 own games at depth 2.",
+ "entries": [
+  {
+   "file": "leagues/experiments/error-targets/runs/F-L.loc/lr165.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "et.F-L",
+   "label": "error-targets champion v165, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/error-targets/runs/T-L-Le+split-limit=1+split-threshold=1000000.loc/bdt208.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "et.T-L-Le-L1",
+   "label": "error-targets champion v208, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/error-targets/runs/T-L-Le+route-before-train+split-limit=1+split-threshold=1000000.loc/bdt232.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "et.T-L-Le-rbt-L1",
+   "label": "error-targets champion v232, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/error-targets/runs/T-L-Le+route-before-train+error-target=gap+split-limit=1+split-threshold=1000000.loc/bdt175.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "et.T-L-Le-rbt+error-target=gap-L1",
+   "label": "error-targets champion v175, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/error-targets/runs/T-L-Le+route-before-train+error-target=gap+split-bootstrap=1000000+split-limit=1+split-threshold=1000000.loc/bdt362.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "et.T-L-Le-rbt+error-target=gap-boot-L1",
+   "label": "error-targets champion v362, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/residual-leaves/runs/F-L.loc/lr307.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "rl.F-L",
+   "label": "residual-leaves champion v307, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/residual-leaves/runs/T-L-Nc+split-limit=4+split-threshold=1000000.loc/bdt380.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "rl.T-L-Nc-L4",
+   "label": "residual-leaves champion v380, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/residual-leaves/runs/T-L-Nc+leaf-residual+residual-inherit-sums+split-limit=4+split-threshold=1000000.loc/bdt348.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "rl.T-L-Nc-resid-L4",
+   "label": "residual-leaves champion v348, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/trigger-gradient/runs/F-L.loc/lr234.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "tg.F-L",
+   "label": "trigger-gradient champion v234, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/trigger-gradient/runs/T-L-Nc+split-limit=8+split-threshold=1000000.loc/bdt271.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "tg.T-L-Nc-L8",
+   "label": "trigger-gradient champion v271, own cal at depth 2"
+  },
+  {
+   "file": "leagues/experiments/trigger-gradient/runs/T-L-Nc+split-gradient=9.5+split-limit=8+split-threshold=1000000.loc/bdt295.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "tg.T-L-Nc-T4-L8",
+   "label": "trigger-gradient champion v295, own cal at depth 2"
+  }
+ ]
+}

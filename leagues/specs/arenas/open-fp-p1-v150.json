@@ -1,0 +1,134 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": "field"
+ },
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 30,
+  "min_rounds": 30,
+  "max_rounds": 30
+ },
+ "name": "open-fp-p1-v150",
+ "dir": "leagues/arenas/diag/open-fp-p1-v150",
+ "plies": [
+  1
+ ],
+ "description": "Cold read open-fp-p1-v150: ply 1, version 150, only the contrast's lines, near argmax (T 0.02), 30 round-robins; Elo 0 = the field's mean, no random player. Tags: a=fponly-p1-open:^F-P#[0-9]+\\.loc$@150, b=fponly-p1-coldrate:^F-P#[0-9]+\\.loc$@150, c=fponly-p1-t002:^F-P#[0-9]+\\.loc$@150, rfp=error-routing-p1:^F-P@300, efp=error-dag-probit-p1:^F-P@300, gfp=grow-p1:^F-P@300, hfp=grow-p1b:^F-P@300",
+ "entries": [
+  {
+   "version": "fponly-p1-open:F-P#1.loc@150",
+   "name": "a150.L1@150",
+   "label": "fponly-p1-open F-P#1.loc version v150"
+  },
+  {
+   "version": "fponly-p1-open:F-P#2.loc@150",
+   "name": "a150.L2@150",
+   "label": "fponly-p1-open F-P#2.loc version v150"
+  },
+  {
+   "version": "fponly-p1-open:F-P#3.loc@150",
+   "name": "a150.L3@150",
+   "label": "fponly-p1-open F-P#3.loc version v150"
+  },
+  {
+   "version": "fponly-p1-open:F-P#4.loc@150",
+   "name": "a150.L4@150",
+   "label": "fponly-p1-open F-P#4.loc version v150"
+  },
+  {
+   "version": "fponly-p1-coldrate:F-P#1.loc@150",
+   "name": "b150.L1@150",
+   "label": "fponly-p1-coldrate F-P#1.loc version v150"
+  },
+  {
+   "version": "fponly-p1-coldrate:F-P#2.loc@150",
+   "name": "b150.L2@150",
+   "label": "fponly-p1-coldrate F-P#2.loc version v150"
+  },
+  {
+   "version": "fponly-p1-coldrate:F-P#3.loc@150",
+   "name": "b150.L3@150",
+   "label": "fponly-p1-coldrate F-P#3.loc version v150"
+  },
+  {
+   "version": "fponly-p1-coldrate:F-P#4.loc@150",
+   "name": "b150.L4@150",
+   "label": "fponly-p1-coldrate F-P#4.loc version v150"
+  },
+  {
+   "version": "fponly-p1-t002:F-P#1.loc@150",
+   "name": "c150.L1@150",
+   "label": "fponly-p1-t002 F-P#1.loc version v150"
+  },
+  {
+   "version": "fponly-p1-t002:F-P#2.loc@150",
+   "name": "c150.L2@150",
+   "label": "fponly-p1-t002 F-P#2.loc version v150"
+  },
+  {
+   "version": "fponly-p1-t002:F-P#3.loc@150",
+   "name": "c150.L3@150",
+   "label": "fponly-p1-t002 F-P#3.loc version v150"
+  },
+  {
+   "version": "fponly-p1-t002:F-P#4.loc@150",
+   "name": "c150.L4@150",
+   "label": "fponly-p1-t002 F-P#4.loc version v150"
+  },
+  {
+   "version": "error-routing-p1:F-P#1.loc@300",
+   "name": "rfp300.L1@300",
+   "label": "error-routing-p1 F-P#1.loc version v300"
+  },
+  {
+   "version": "error-routing-p1:F-P#2.loc@300",
+   "name": "rfp300.L2@300",
+   "label": "error-routing-p1 F-P#2.loc version v300"
+  },
+  {
+   "version": "error-dag-probit-p1:F-P#1.loc@300",
+   "name": "efp300.L1@300",
+   "label": "error-dag-probit-p1 F-P#1.loc version v300"
+  },
+  {
+   "version": "error-dag-probit-p1:F-P#2.loc@300",
+   "name": "efp300.L2@300",
+   "label": "error-dag-probit-p1 F-P#2.loc version v300"
+  },
+  {
+   "version": "grow-p1:F-P#1.loc@300",
+   "name": "gfp300.L1@300",
+   "label": "grow-p1 F-P#1.loc version v300"
+  },
+  {
+   "version": "grow-p1:F-P#2.loc@300",
+   "name": "gfp300.L2@300",
+   "label": "grow-p1 F-P#2.loc version v300"
+  },
+  {
+   "version": "grow-p1b:F-P#1.loc@300",
+   "name": "hfp300.L1@300",
+   "label": "grow-p1b F-P#1.loc version v300"
+  },
+  {
+   "version": "grow-p1b:F-P#2.loc@300",
+   "name": "hfp300.L2@300",
+   "label": "grow-p1b F-P#2.loc version v300"
+  }
+ ]
+}

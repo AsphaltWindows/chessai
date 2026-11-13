@@ -1,0 +1,133 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 30,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "panel-fponly-p2-v299",
+ "dir": "leagues/arenas/diag/panel-fponly-p2-v299",
+ "plies": [
+  2
+ ],
+ "description": "Cold read panel-fponly-p2-v299: ply 2, version 299, only the contrast's lines, near argmax (T 0.02), 75 round-robins. Tags: x4=fponly-p2:^F-P, bfp=base-probit-p2:^F-P, lfp=probit-late-p2:^F-P, cfp=diversity-p2c:^F-P, dfp=diversity-p2d:^F-P, yfp=replay-p2:^F-P, ytr=replay-p2:^T-P-Ne\\+, vfp=diversity-p2:^F-P, vtr=diversity-p2:^T-P-Ne\\+",
+ "entries": [
+  {
+   "version": "fponly-p2:F-P#1.loc@299",
+   "name": "x4299.L1@299",
+   "label": "fponly-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "fponly-p2:F-P#2.loc@299",
+   "name": "x4299.L2@299",
+   "label": "fponly-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "fponly-p2:F-P#3.loc@299",
+   "name": "x4299.L3@299",
+   "label": "fponly-p2 F-P#3.loc version v299"
+  },
+  {
+   "version": "fponly-p2:F-P#4.loc@299",
+   "name": "x4299.L4@299",
+   "label": "fponly-p2 F-P#4.loc version v299"
+  },
+  {
+   "version": "base-probit-p2:F-P#1.loc@299",
+   "name": "bfp299.L1@299",
+   "label": "base-probit-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "base-probit-p2:F-P#2.loc@299",
+   "name": "bfp299.L2@299",
+   "label": "base-probit-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@299",
+   "name": "lfp299.L1@299",
+   "label": "probit-late-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@299",
+   "name": "lfp299.L2@299",
+   "label": "probit-late-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "diversity-p2c:F-P#1.loc@299",
+   "name": "cfp299.L1@299",
+   "label": "diversity-p2c F-P#1.loc version v299"
+  },
+  {
+   "version": "diversity-p2c:F-P#2.loc@299",
+   "name": "cfp299.L2@299",
+   "label": "diversity-p2c F-P#2.loc version v299"
+  },
+  {
+   "version": "diversity-p2d:F-P#1.loc@299",
+   "name": "dfp299.L1@299",
+   "label": "diversity-p2d F-P#1.loc version v299"
+  },
+  {
+   "version": "diversity-p2d:F-P#2.loc@299",
+   "name": "dfp299.L2@299",
+   "label": "diversity-p2d F-P#2.loc version v299"
+  },
+  {
+   "version": "replay-p2:F-P#1.loc@299",
+   "name": "yfp299.L1@299",
+   "label": "replay-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "replay-p2:F-P#2.loc@299",
+   "name": "yfp299.L2@299",
+   "label": "replay-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299",
+   "name": "ytr299.L1@299",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v299"
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@299",
+   "name": "ytr299.L2@299",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v299"
+  },
+  {
+   "version": "diversity-p2:F-P#1.loc@299",
+   "name": "vfp299.L1@299",
+   "label": "diversity-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "diversity-p2:F-P#2.loc@299",
+   "name": "vfp299.L2@299",
+   "label": "diversity-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "diversity-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299",
+   "name": "vtr299.L1@299",
+   "label": "diversity-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v299"
+  },
+  {
+   "version": "diversity-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@299",
+   "name": "vtr299.L2@299",
+   "label": "diversity-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v299"
+  }
+ ]
+}

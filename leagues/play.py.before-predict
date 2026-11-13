@@ -1,0 +1,829 @@
+#!/usr/bin/env python3
+"""The dashboard's play page (/play/; DASHBOARD.md, Play): its back end. The user, 2026-11-12 ~17:05: "I'd like another
+option in the menu that leads to a chess board where I can play against a game against a chosen model in the library
+at a chosen ply." dashboard.py serves the page and calls this module; it can also be run for checks:
+
+    python3 leagues/play.py resolve ID[@V]                 the player spec of a library row (makes its own games if needed)
+    python3 leagues/play.py move ID[@V] PLY [UCI ...]       the model's move after those moves (argmax), with every value
+    python3 leagues/play.py legal [UCI ...]                 the engine's legal moves after those moves
+    python3 leagues/play.py deep ID[@V] MAXPLY SECONDS [UCI ...]  deep mode's move (SECONDS 0: no limit), each iteration
+
+What the page plays is what an arena plays (arena.py):
+- the model: the library snapshot's file (leagues/library/models/...), else the experiment's;
+- its calibration: fitted on the model's own calibration games, as in every arena and experiment. They come from the
+  arenas' shared cache (leagues/arenas/.owncal-cache, keyed by arena.own_cache_key) when it holds them; otherwise
+  they are made here exactly as arena.make_own makes them (the experiment's binary and settings, 600 games at depth 1,
+  nice 19, one thread), so they are the games any arena would make;
+- the player: cal:<own games>:<kind>:<model> at the chosen ply, in models/from-scratch/bin/chessai-play2 (chessai-play1's
+  `play-serve`, whose op=move is the move a tournament player chooses, selfplay::choose_in, byte for byte), the log-odds
+  argmax by default, or the arenas' log-odds softmax at T 0.02 (seeded).
+
+Deep mode (2026-11-12 ~18:20; the user: "i'd like to be able to set it to a very high ply", then "let's say up to 10"):
+play2's op=deep, iterative deepening of the same search up to a max ply (1-10) within a think time (5 s to 5 min, or no
+limit), with a transposition table (96 MiB, fixed) and, if asked, pondering ("think on my time": after its move the
+engine searches the position after the reply it predicts; a hit goes on from there). Each completed iteration chooses as
+the tournament player of its depth would; the move played is the deepest completed one's. It runs as a job (deep_start,
+deep_poll, deep_stop); the page polls it, and a job nobody polls for DEEP_ORPHAN_S is stopped.
+
+Writes only under leagues/play-games/: finished games as PGN, and owncal/<key>/, the own games it had to make (or copy
+from the shared cache). Everything else is read. One engine process (nice 19, one thread) answers one request at a
+time.
+"""
+import collections
+import csv
+import datetime
+import json
+import os
+import queue
+import re
+import subprocess
+import sys
+import threading
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.dont_write_bytecode = True  # as the dashboard: no __pycache__ in leagues/
+sys.path.insert(0, HERE)
+import arena as AR  # noqa: E402  (helpers only: nothing runs on import)
+import leagues as LG  # noqa: E402
+
+REPO = LG.REPO
+BIN = os.path.join(LG.BIN, "chessai-play2")  # 11-12 ~18:50: play1 plus deep mode (op=move unchanged, byte for byte)
+OUT = os.path.join(HERE, "play-games")
+OWN = os.path.join(OUT, "owncal")  # named owncal: the engine keeps its calibration fits beside them (calcache)
+LIB = os.path.join(HERE, "library")
+STATIC = os.path.join(HERE, "play-static")
+STATIC_FILES = {  # name: content type; nothing else is served
+    "chessground.min.js": "text/javascript; charset=utf-8",
+    "chess.js": "text/javascript; charset=utf-8",
+    "play.js": "text/javascript; charset=utf-8",
+    "play.css": "text/css; charset=utf-8",
+    "chessground.base.css": "text/css; charset=utf-8",
+    "chessground.brown.css": "text/css; charset=utf-8",
+    "chessground.cburnett.css": "text/css; charset=utf-8",
+    "README.md": "text/plain; charset=utf-8",
+}
+UCI_RE = re.compile(r"^[a-h][1-8][a-h][1-8][qrbn]?$")
+PLIES = (1, 2, 3, 4, 5, 6, 7, 8)  # 11-12 ~18:10 (the user: "select a ply above what we've trained on"): 5-6 answer
+# in under 0.5 s, 7 in up to ~4 s, 8 in up to ~17 s for a grow6 DAG (timed on 3 library models; deeper middlegames
+# can take longer)
+MAX_PLIES = 12000  # moves of a game the page sends: past any legal game (the fifty-move rule ends one first)
+TIMEOUT_S = 300  # one engine request (a move at ply 4 takes well under a second; loading a model a few)
+OWN_TIMEOUT_S = 3600
+DEEP_MAX_PLY = 10  # deep mode's deepest iteration (the engine's limit too, deep::MAX_DEPTH)
+DEEP_THINK = (5, 10, 30, 60, 120, 300, 0)  # the think times the page offers, s (0: no limit)
+DEEP_MARGIN_S = 120  # a deep request's timeout past its think time (the deadline is checked every 1,024 nodes)
+DEEP_NOLIMIT_S = 24 * 3600  # ... and with no limit (the page's Move now, or the orphan stop, ends it first)
+DEEP_ORPHAN_S = 30  # a running deep search that nobody polled for this long is stopped (a closed page)
+
+
+def log(msg):
+    print(f"{datetime.datetime.now():%Y-%m-%d %H:%M:%S} play: {msg}", flush=True)
+
+
+# ---------------------------------------------------------------- library rows and their players
+
+def lib_rows():
+    """index.csv's rows (the dashboard adds the holdouts' extra versions; see dashboard.library)."""
+    with open(os.path.join(LIB, "index.csv")) as f:
+        return list(csv.DictReader(f))
+
+
+def default_ply(train_ply):
+    """The ply a model plays at unless chosen: its training ply (1-4), 2 for the old system's mixed plies 1-2, a
+    self-play line's depth, else 1."""
+    tp = str(train_ply or "").strip()
+    if tp.isdigit():
+        return min(max(int(tp), 1), 4)
+    if tp.startswith("mixed"):
+        return 2
+    m = re.search(r"depth (\d+)", tp)
+    return min(max(int(m.group(1)), 1), 4) if m else 1
+
+
+def model_path(row):
+    """(experiment base, model file) of a row's version: the library snapshot if it has the file, else the
+    experiment's (or the global league's) run directory."""
+    exp, line, v, kind = row["experiment"], row["line"], str(int(row["version"])), row["kind"]
+    if row.get("_base"):  # an experiment-like directory given directly (checks: e.g. leagues/starts/<exp>@<v>)
+        return row["_base"], os.path.join(row["_base"], "runs", line, f"{kind}{v}.model")
+    snap = os.path.join(LIB, "models", exp)
+    f = os.path.join(snap, "runs", line, f"{kind}{v}.model")
+    if os.path.exists(f) and os.path.exists(os.path.join(snap, "config.json")):
+        return snap, f
+    base = os.path.join(HERE, "global") if exp == "global" else os.path.join(HERE, "experiments", exp)
+    return base, os.path.join(base, "runs", line, f"{kind}{v}.model")
+
+
+_own_locks = collections.defaultdict(threading.Lock)
+_own_locks_lock = threading.Lock()
+
+
+def own_complete(d):
+    return os.path.isdir(d) and all(os.path.exists(os.path.join(d, f)) for f in LG.GAME_FILES)
+
+
+def entry_of(row):
+    """arena.py's entry for a row's version: kind, model file, held-out set, calibration settings and the binary
+    that makes the own games (the experiment's tournament binary)."""
+    base, path = model_path(row)
+    if not os.path.exists(path):
+        raise ValueError(f"no model file for {row['id']} v{row['version']}: {path} (the library has no snapshot of "
+                         "it and the experiment no longer has the file)")
+    v = int(row["version"])
+    name = re.sub(r"[^A-Za-z0-9_.+=#@-]", "_", f"{row['id']}{v}")
+    try:
+        e = AR.resolve_entry({"plies": [1]}, {"version": f"{base}:{row['line']}@{v}", "name": name}, OUT)
+    except SystemExit as x:  # resolve_entry exits on a bad entry
+        raise ValueError(f"{row['id']} v{v}: {x}") from None
+    e["model"] = e["source_model"]  # the file itself (the arena copies it; the md5, so the cache key, is the same)
+    return e
+
+
+def resolve(row, progress=None):
+    """The player of a row's version, as an arena plays it: {spec, kind, model, own, key, own_source, own_cpu_s,
+    owncal_binary, calibration settings}. Makes (or copies from the arenas' cache) its own calibration games first
+    when play-games/owncal doesn't hold them; `progress(text)` hears what it is doing."""
+    e = entry_of(row)
+    key, _ = AR.own_cache_key(e)
+    own = os.path.join(OWN, key)
+    with _own_locks_lock:
+        lock = _own_locks[key]
+    source, cpu = "play-games", 0.0
+    with lock:
+        if not own_complete(own):
+            os.makedirs(OWN, exist_ok=True)
+            tmp = os.path.join(OWN, f".tmp-{key}-{os.getpid()}-{threading.get_ident()}")
+            subprocess.run(["rm", "-rf", tmp], check=False)
+            cached = os.path.join(AR.OWNCAL_CACHE, key)
+            man = LG.read_json(os.path.join(cached, "key.json")) if os.path.isdir(cached) else None
+            if man and man.get("key") == key and own_complete(cached):
+                if progress:
+                    progress("copying its own calibration games from the arenas' cache")
+                os.makedirs(tmp)
+                AR.copy_games(cached, tmp)
+                for f in LG.GAME_FILES:
+                    p = os.path.join(tmp, f)
+                    os.chmod(p, 0o644)
+                    want = man["files"][f]
+                    if os.path.getsize(p) != want["size"] or LG.file_md5(p) != want["md5"]:
+                        subprocess.run(["rm", "-rf", tmp], check=False)
+                        raise ValueError(f"{cached}/{f}: not the size and md5 its manifest gives")
+                source = "the arenas' cache"
+            else:
+                o = e["calibration"]
+                if progress:
+                    progress(f"making its own calibration games ({o['games']} games at depth {o['depth']}, once)")
+                cmd = ["nice", "-n", "19", e["owncal_binary"], *AR.own_args(e, AR.own_play(e), tmp)]
+                t0 = time.time()
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=OWN_TIMEOUT_S,
+                                   env=dict(engine_env(), RAYON_NUM_THREADS="1"))
+                cpu = time.time() - t0
+                if r.returncode != 0 or not own_complete(tmp):
+                    subprocess.run(["rm", "-rf", tmp], check=False)
+                    raise ValueError(f"own games failed (exit {r.returncode}): {(r.stdout + r.stderr)[-800:]}")
+                source = "made here"
+                with open(os.path.join(tmp, "arena.out"), "w") as f:
+                    f.write(" ".join(cmd) + "\n" + r.stdout + r.stderr)
+            os.rename(tmp, own)
+            LG.write_json(own + ".json", dict(key=key, made=LG.now(), source=source, wall_s=round(cpu, 2),
+                                              library_id=row["id"], experiment=row["experiment"], line=row["line"],
+                                              version=int(row["version"]), model=e["model"], md5=e["md5"],
+                                              kind=e["kind"], heldout=e["heldout"], settings=e["calibration"],
+                                              binary=e["owncal_binary"]))
+            log(f"own games of {row['id']} v{row['version']}: {source} ({key})")
+    return dict(spec=f"cal:{own}:{e['kind']}:{e['model']}", kind=e["kind"], model=e["model"], md5=e["md5"], own=own,
+                key=key, own_source=source, own_wall_s=round(cpu, 2), owncal_binary=e["owncal_binary"],
+                calibration=e["calibration"], heldout=e["heldout"])
+
+
+# ---------------------------------------------------------------- the engine
+
+def engine_env():
+    """The engine's environment: no CHESSAI_* switches (the tournaments' defaults) and one thread."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("CHESSAI_")}
+    env["RAYON_NUM_THREADS"] = "1"
+    return env
+
+
+class Engine:
+    """One `chessai-play2 play-serve` process, started when first needed and again if it dies; one request at a time
+    (a deep search holds it until it answers), while `signal` writes op=stop lines at once. Lines it prints besides its
+    answers (a model's calibration when it loads) are kept in `printed`; "@@deep" lines go to the request's progress
+    callback, "@@ponder" lines to `ponder` (the latest, with its time and the engine's pid)."""
+
+    def __init__(self, binary=BIN):
+        self.binary = binary
+        self.proc = None
+        self.lines = None
+        self.lock = threading.Lock()  # one request at a time
+        self.wlock = threading.Lock()  # one writer to the engine's input (requests, stops)
+        self.printed = collections.deque(maxlen=400)
+        self.started = None
+        self.requests = 0
+        self.ponder = None
+
+    def _reader(self, proc, q):
+        for line in proc.stdout:
+            line = line.rstrip("\n")
+            if line.startswith("@@ponder "):
+                try:
+                    d = json.loads(line[9:])
+                except ValueError:
+                    continue
+                d["at"] = time.time()
+                d["pid"] = proc.pid
+                self.ponder = d
+                continue
+            q.put(line)
+        q.put(None)
+
+    def _start(self):
+        self.proc = subprocess.Popen(["nice", "-n", "19", self.binary, "play-serve", "--use-probs", "--keep", "4"],
+                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                     text=True, bufsize=1, env=engine_env(), cwd=REPO)
+        self.lines = queue.Queue()
+        threading.Thread(target=self._reader, args=(self.proc, self.lines), daemon=True).start()
+        self.started = time.time()
+        ready = self._answer(60)
+        log(f"engine started: pid {self.proc.pid}, {ready}")
+
+    def _answer(self, timeout, progress=None):
+        printed = []
+        end = time.time() + timeout
+        while True:
+            left = end - time.time()
+            if left <= 0:
+                raise TimeoutError(f"the engine didn't answer within {timeout} s")
+            line = self.lines.get(timeout=left)
+            if line is None:
+                tail = "\n".join(list(self.printed)[-20:])
+                raise RuntimeError(f"the engine stopped (exit {self.proc.wait()}): {tail}")
+            if line.startswith("@@play "):
+                out = json.loads(line[7:])
+                if printed:
+                    out["printed"] = printed
+                return out
+            if line.startswith("@@deep "):
+                if progress:
+                    try:
+                        progress(json.loads(line[7:]))
+                    except ValueError:
+                        pass
+                continue
+            printed.append(line)
+            self.printed.append(line)
+
+    def stop(self):
+        if self.proc and self.proc.poll() is None:
+            self.proc.kill()
+            self.proc.wait()
+        self.proc = None
+
+    @staticmethod
+    def _line(fields):
+        for k, v in fields.items():
+            if "\t" in str(v) or "\n" in str(v) or "=" in k:
+                raise ValueError(f"bad request field {k}")
+        return "\t".join(f"{k}={v}" for k, v in fields.items()) + "\n"
+
+    def request(self, fields, timeout=TIMEOUT_S, progress=None):
+        line = self._line(fields)
+        with self.lock:
+            for attempt in (1, 2):
+                if self.proc is None or self.proc.poll() is not None:
+                    self._start()
+                try:
+                    with self.wlock:
+                        self.proc.stdin.write(line)
+                        self.proc.stdin.flush()
+                    self.requests += 1
+                    return self._answer(timeout, progress)
+                except (BrokenPipeError, RuntimeError, queue.Empty, TimeoutError) as x:
+                    self.stop()
+                    if attempt == 2:
+                        raise RuntimeError(f"engine: {x}") from None
+
+    def signal(self, fields):
+        """Writes a line that gets no answer (op=stop) at once, even while a request waits. False if no engine runs."""
+        line = self._line(fields)
+        with self.wlock:
+            p = self.proc
+            if p is None or p.poll() is not None:
+                return False
+            try:
+                p.stdin.write(line)
+                p.stdin.flush()
+                return True
+            except (BrokenPipeError, OSError, ValueError):
+                return False
+
+
+ENGINE = Engine()
+
+
+def check_moves(moves):
+    if not isinstance(moves, list) or len(moves) > MAX_PLIES or not all(isinstance(m, str) and UCI_RE.match(m)
+                                                                        for m in moves):
+        raise ValueError("moves: a list of UCI moves")
+    return " ".join(moves)
+
+
+def engine_move(spec, ply, moves, policy="argmax", temperature=0.02, seed=1, values=False):
+    if int(ply) not in PLIES:
+        raise ValueError(f"ply must be one of {PLIES}")
+    if policy not in ("argmax", "softmax"):
+        raise ValueError("policy: argmax or softmax")
+    f = {"op": "move", "spec": spec, "depth": int(ply), "policy": policy, "seed": int(seed), "values": int(bool(values)),
+         "moves": check_moves(moves)}
+    if policy == "softmax":
+        t = float(temperature)
+        if not 0.001 <= t <= 2:
+            raise ValueError("temperature between 0.001 and 2")
+        f["temperature"] = repr(t)
+    return ENGINE.request(f)
+
+
+def engine_legal(moves):
+    return ENGINE.request({"op": "legal", "moves": check_moves(moves)})
+
+
+def engine_eval(spec, moves):
+    return ENGINE.request({"op": "eval", "spec": spec, "moves": check_moves(moves)})
+
+
+# ---------------------------------------------------------------- deep mode: jobs
+
+JOBS = collections.OrderedDict()  # id: job (dict); the newest 60 kept
+JOBS_LOCK = threading.Lock()
+JOB_SEQ = [0]
+WATCH = [None]
+
+
+def think_text(seconds):
+    s = float(seconds or 0)
+    return "no limit" if s <= 0 else f"{s / 60:g} min" if s >= 120 else f"{s:g} s"
+
+
+def deep_fields(spec, max_ply, seconds, moves, seed=1, ponder=False, fresh=False, jid=0):
+    max_ply = int(max_ply)
+    if not 1 <= max_ply <= DEEP_MAX_PLY:
+        raise ValueError(f"max_ply must be 1 to {DEEP_MAX_PLY}")
+    seconds = float(seconds or 0)
+    if seconds not in DEEP_THINK:
+        raise ValueError(f"seconds: one of {DEEP_THINK} (0: no limit)")
+    return {"op": "deep", "id": int(jid), "spec": spec, "max_depth": max_ply, "seconds": f"{seconds:g}",
+            "seed": int(seed), "ponder": int(bool(ponder)), "fresh": int(bool(fresh)), "moves": check_moves(moves)}
+
+
+def deep_start(row, req):
+    """Starts deep mode's search for the page (POST /play/api/deep): a job the page polls. Returns {ok, job}."""
+    p = resolve(row)
+    with JOBS_LOCK:
+        JOB_SEQ[0] += 1
+        jid = JOB_SEQ[0]
+    fields = deep_fields(p["spec"], req.get("max_ply") or DEEP_MAX_PLY, req.get("seconds") or 0, req.get("moves") or [],
+                         req.get("seed") or 1, req.get("ponder"), req.get("fresh"), jid)
+    seconds = float(fields["seconds"])
+    now = time.time()
+    job = dict(id=jid, key=f"{row['id']}@{int(row['version'])}", state="running", started=now, polled=now,
+               seconds=seconds, max_ply=fields["max_depth"], iters=[], result=None, error=None, ended=None)
+    with JOBS_LOCK:
+        JOBS[jid] = job
+        while len(JOBS) > 60:
+            JOBS.popitem(last=False)
+
+    def progress(it):
+        if it.get("id") == jid:
+            job["iters"].append(it)
+
+    def run():
+        try:
+            a = ENGINE.request(fields, timeout=seconds + DEEP_MARGIN_S if seconds else DEEP_NOLIMIT_S, progress=progress)
+            job["result"] = a
+            if not a.get("ok"):
+                job["error"] = a.get("error") or "the engine refused"
+            job["state"] = "done" if a.get("ok") else "error"
+        except Exception as x:  # noqa: BLE001 (the page shows it)
+            job["error"] = f"{type(x).__name__}: {x}"
+            job["state"] = "error"
+        job["ended"] = time.time()
+
+    threading.Thread(target=run, daemon=True, name=f"deep-{jid}").start()
+    watch_start()
+    return dict(ok=True, job=jid)
+
+
+def deep_poll(req):
+    """A deep job's state (POST /play/api/poll {job}): running (with its deepest finished iteration so far) or done
+    (with the engine's answer)."""
+    try:
+        jid = int(req.get("job"))
+    except (TypeError, ValueError):
+        raise ValueError("job: a number") from None
+    job = JOBS.get(jid)
+    if job is None:
+        return dict(ok=False, error=f"no deep search {jid} here (the server may have restarted)")
+    job["polled"] = time.time()
+    out = dict(ok=True, job=jid, state=job["state"], iters=len(job["iters"]),
+               last=job["iters"][-1] if job["iters"] else None,
+               elapsed_ms=round(1000 * ((job["ended"] or time.time()) - job["started"])))
+    if job["state"] != "running":
+        out.update(result=job["result"], error=job["error"])
+    return out
+
+
+def deep_stop(req):
+    """Stops a deep job (POST /play/api/stop {job}: it answers with its deepest finished iteration) and/or the ponder
+    ({ponder: true}, or {}): op=stop lines, which the engine reads at once."""
+    sent = {}
+    if req.get("job") is not None:
+        try:
+            jid = int(req["job"])
+        except (TypeError, ValueError):
+            raise ValueError("job: a number") from None
+        job = JOBS.get(jid)
+        sent["job"] = bool(job and job["state"] == "running" and ENGINE.signal({"op": "stop", "id": jid}))
+    if req.get("ponder") or req.get("job") is None:
+        sent["ponder"] = ENGINE.signal({"op": "stop", "ponder": 1})
+    return dict(ok=True, sent=sent)
+
+
+def ponder_status(req):
+    """The engine's ponder (POST /play/api/ponder): its latest line, or None."""
+    d = ENGINE.ponder
+    if not d or not ENGINE.proc or d.get("pid") != ENGINE.proc.pid:
+        return dict(ok=True, ponder=None)
+    keep = ("state", "plies", "predicted", "predicted_san", "max_depth", "depth", "san", "value", "at_ms", "stop", "ms")
+    return dict(ok=True, ponder={k: d[k] for k in keep if k in d} | {"age_s": round(time.time() - d["at"], 1)})
+
+
+def watch_start():
+    """The orphan stop: a running deep job that nobody polled for DEEP_ORPHAN_S is stopped (a closed page)."""
+    if WATCH[0] is not None and WATCH[0].is_alive():
+        return
+
+    def watch():
+        while True:
+            time.sleep(5)
+            now = time.time()
+            for job in list(JOBS.values()):
+                if job["state"] == "running" and now - job["polled"] > DEEP_ORPHAN_S and not job.get("orphaned"):
+                    job["orphaned"] = True
+                    ENGINE.signal({"op": "stop", "id": job["id"]})
+                    log(f"deep search {job['id']} ({job['key']}) not polled for {DEEP_ORPHAN_S} s: stopped")
+
+    WATCH[0] = threading.Thread(target=watch, daemon=True, name="deep-watch")
+    WATCH[0].start()
+
+
+# ---------------------------------------------------------------- finished games
+
+def pgn_tag(v):
+    return str(v).replace("\\", "\\\\").replace('"', '\\"')
+
+
+def pgn(headers, sans, result, comments=None):
+    """A PGN game; `comments`: {ply index: text} (no braces), written after those moves."""
+    out = [f'[{k} "{pgn_tag(v)}"]' for k, v in headers]
+    words = []
+    for i, s in enumerate(sans):
+        if i % 2 == 0:
+            words.append(f"{i // 2 + 1}.")
+        elif comments and (i - 1) in comments:
+            words.append(f"{i // 2 + 1}...")
+        words.append(s)
+        if comments and i in comments:
+            words.extend(("{" + comments[i] + "}").split(" "))
+    words.append(result)
+    lines, cur = [], ""
+    for w in words:
+        if cur and len(cur) + 1 + len(w) > 79:
+            lines.append(cur)
+            cur = w
+        else:
+            cur = f"{cur} {w}" if cur else w
+    lines.append(cur)
+    return "\n".join(out) + "\n\n" + "\n".join(lines) + "\n"
+
+
+DEEP_STOPS = {"max depth": "max ply", "time": "time up", "time (the next iteration would not end in it)":
+              "time (the next ply would not finish)", "stopped": "move now", "mate found": "mate found",
+              "one legal move": "only move"}
+
+
+def deep_comment(d):
+    """A deep move's PGN comment from the page's record of it: depth, time, why it stopped, the ponder."""
+    depth, ms = int(d.get("depth") or 0), float(d.get("ms") or 0)
+    stop = str(d.get("stop") or "")
+    stop = DEEP_STOPS.get(stop) or re.sub(r"[^a-z ()]", "", stop)[:60]
+    text = f"depth {depth}, {ms / 1000:.1f} s" + (f", {stop}" if stop else "")
+    ponder = d.get("ponder")
+    if ponder in ("hit", "miss"):
+        text += f"; ponder {ponder}" + (f", {int(d.get('pdepth') or 0)} plies pondered" if ponder == "hit" else "")
+    return text
+
+
+def save_game(row, player, game):
+    """Writes a finished game as PGN under play-games/ and returns its path. `game`: the page's record (moves in UCI,
+    result, termination, colour, ply, policy, temperature, takebacks, started; deep games: mode "deep", max_ply,
+    seconds, ponder, and deep {ply index: {depth, ms, stop, ponder, pdepth}} for the model's moves)."""
+    moves = game.get("moves") or []
+    legal = engine_legal(moves)  # replays them: the SAN, and every move checked legal
+    if not legal.get("ok"):
+        raise ValueError(legal.get("error") or "the engine refused the moves")
+    result = game.get("result")
+    if result not in ("1-0", "0-1", "1/2-1/2", "*"):
+        raise ValueError("result: 1-0, 0-1, 1/2-1/2 or *")
+    you = game.get("colour")
+    if you not in ("white", "black"):
+        raise ValueError("colour: white or black")
+    ply = int(game.get("ply"))
+    deep = game.get("mode") == "deep"
+    pol = "argmax" if deep else game.get("policy") or "argmax"
+    polt = "log-odds argmax" if pol == "argmax" else f"log-odds softmax T {float(game.get('temperature') or 0.02):g}"
+    name = f"{row['id']} v{int(row['version'])} at ply {ply}"
+    comments = {}
+    if deep:
+        ply = int(game.get("max_ply") or ply)
+        if not 1 <= ply <= DEEP_MAX_PLY:
+            raise ValueError(f"max_ply must be 1 to {DEEP_MAX_PLY}")
+        think = think_text(game.get("seconds"))
+        name = f"{row['id']} v{int(row['version'])} deep to ply {ply}, {think} a move"
+        for k, d in (game.get("deep") or {}).items():
+            if str(k).isdigit() and int(k) < len(moves) and isinstance(d, dict):
+                comments[int(k)] = deep_comment(d)
+    now = datetime.datetime.now()
+    headers = [("Event", "chessai play page"), ("Site", "leagues dashboard"), ("Date", now.strftime("%Y.%m.%d")),
+               ("Round", "-"), ("White", "You" if you == "white" else name), ("Black", "You" if you == "black" else name),
+               ("Result", result), ("Termination", game.get("termination") or "unknown"),
+               ("PlyCount", len(moves)), ("Time", now.strftime("%H:%M:%S")),
+               ("LibraryId", row["id"]), ("Experiment", row["experiment"]), ("Line", row["line"]),
+               ("Version", int(row["version"])), ("VersionRole", row.get("version_role") or ""),
+               ("Model", row.get("model") or ""), ("Archetype", row.get("archetype") or ""), ("Kind", row["kind"]),
+               ("TrainPly", row.get("train_ply") or ""), ("Ply", ply), ("Policy", polt),
+               ("Seed", int(game.get("seed") or 1)), ("Takebacks", int(game.get("takebacks") or 0)),
+               ("Engine", f"{os.path.basename(BIN)} play-serve ({LG.file_md5(BIN)[:8]})"),
+               ("ModelFile", os.path.relpath(player["model"], REPO)), ("ModelMd5", player["md5"]),
+               ("Calibration", f"own games {player['key']} ({player['own_source']})")]
+    if deep:
+        i = [k for k, _ in headers].index("Policy") + 1
+        headers[i:i] = [("Mode", "deep"), ("MaxPly", ply), ("ThinkTime", think_text(game.get("seconds"))),
+                        ("Ponder", "on" if game.get("ponder") else "off")]
+    if game.get("started"):
+        headers.append(("Started", str(game["started"])[:40]))
+    text = pgn(headers, legal.get("san") or [], result, comments)
+    os.makedirs(OUT, exist_ok=True)
+    base = (f"{now:%Y%m%d-%H%M%S}-{re.sub(r'[^A-Za-z0-9_]', '_', row['id'])}v{int(row['version'])}-"
+            f"{'deep' if deep else 'p'}{ply}-{you}")
+    path = os.path.join(OUT, base + ".pgn")
+    k = 1
+    while os.path.exists(path):
+        k += 1
+        path = os.path.join(OUT, f"{base}-{k}.pgn")
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        f.write(text)
+    os.rename(tmp, path)
+    log(f"saved {path}")
+    return path
+
+
+def saved_games(limit=30):
+    """The newest saved games: [(file name, headers)]."""
+    try:
+        names = sorted((n for n in os.listdir(OUT) if n.endswith(".pgn")), reverse=True)[:limit]
+    except OSError:
+        return []
+    out = []
+    for n in names:
+        h = {}
+        try:
+            with open(os.path.join(OUT, n)) as f:
+                for line in f:
+                    m = re.match(r'^\[(\w+) "(.*)"\]$', line.strip())
+                    if not m:
+                        break
+                    h[m.group(1)] = m.group(2)
+        except OSError:
+            continue
+        out.append((n, h))
+    return out
+
+
+def saved_entry(name, h):
+    return dict(file=name, date=h.get("Date", "").replace(".", "-"), time=h.get("Time", ""), white=h.get("White", ""),
+                black=h.get("Black", ""), result=h.get("Result", ""), termination=h.get("Termination", ""),
+                plies=h.get("PlyCount", ""), takebacks=h.get("Takebacks", "0"))
+
+
+def saved_entries(limit=40):
+    return [saved_entry(n, h) for n, h in saved_games(limit)]
+
+
+def game_file(name):
+    """The path of a saved game by its file name (only names this module writes), or None."""
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+\.pgn", name or ""):
+        return None
+    p = os.path.join(OUT, name)
+    return p if os.path.isfile(p) else None
+
+
+# ---------------------------------------------------------------- the page
+
+def page_body(rows, built, esc):
+    """The play page's body (the dashboard wraps it in its page and top bar). `rows`: the model list (dashboard.py
+    play_rows); `esc`: its HTML escape."""
+    data = {"models": rows, "saved": saved_entries()}
+    blob = json.dumps(data, separators=(",", ":")).replace("</", "<\\/")
+    nplat = sum(1 for r in rows if any(x in ("plateaued", "holdout") for x in r["sets"]))
+    opt = lambda pairs: "".join(f'<option value="{esc(v)}">{esc(t)}</option>' for v, t in pairs)
+    kinds = sorted({r["kind"] for r in rows if r.get("kind")})
+    return f"""
+<link rel="stylesheet" href="/play/static/chessground.base.css">
+<link rel="stylesheet" href="/play/static/chessground.brown.css">
+<link rel="stylesheet" href="/play/static/chessground.cburnett.css">
+<link rel="stylesheet" href="/play/static/play.css">
+<h1>Play</h1>
+<p class="sub">Play a game against a model from the library ({len(rows)} models; {nplat} fully plateaued or holdouts;
+index built {esc(built or "?")}). It plays as it plays in the arenas: calibrated on its own games, searching the ply you
+choose. Finished games are saved under leagues/play-games/.</p>
+<div class="pl-wrap">
+ <div class="pl-left">
+  <div id="pl-board" class="pl-board"></div>
+  <div id="pl-promo" class="pl-promo" hidden></div>
+  <div class="pl-controls">
+   <button type="button" class="pl-btn" id="pl-new" data-tip="a new game against the chosen model, ply and colour">New game</button>
+   <button type="button" class="pl-btn" id="pl-back" data-tip="undo your last move (and the model's reply)">Take back</button>
+   <button type="button" class="pl-btn" id="pl-flip">Flip board</button>
+   <button type="button" class="pl-btn" id="pl-resign">Resign</button>
+   <button type="button" class="pl-btn" id="pl-now" hidden data-tip="stop its search now: it plays the move of the deepest ply it finished">Move now</button>
+  </div>
+  <label class="pl-typed">Or type your move <input class="pl-in pl-typed-in" id="pl-typed" placeholder="Nf3 or g1f3" autocomplete="off" spellcheck="false"></label>
+  <div id="pl-status" class="pl-status" role="status" aria-live="polite"></div>
+  <div id="pl-ponder-st" class="pl-ponder-st" aria-live="off"></div>
+ </div>
+ <div class="pl-right">
+  <section aria-labelledby="pl-h-opp">
+   <h2 id="pl-h-opp">Opponent</h2>
+   <div class="pl-filters">
+    <label>Show <select id="pl-f-set">{opt([("default", "plateaued and holdouts"), ("all", "all models")])}</select></label>
+    <label>Type <select id="pl-f-arch">{opt([("", "all"), ("F", "flat"), ("T", "tree"), ("D", "DAG"), ("M", "MoE")])}</select></label>
+    <label>Kind <select id="pl-f-kind">{opt([("", "all")] + [(k, k) for k in kinds])}</select></label>
+    <label>Trained at <select id="pl-f-ply">{opt([("", "any ply"), ("1", "ply 1"), ("2", "ply 2"), ("3", "ply 3"), ("4", "ply 4"), ("other", "other")])}</select></label>
+    <label>Sort <select id="pl-sort">{opt([("elo", "ladder Elo"), ("type", "type"), ("ply", "training ply"), ("experiment", "experiment")])}</select></label>
+    <label>Find <input class="pl-in" id="pl-q" placeholder="experiment, line, id" autocomplete="off" spellcheck="false"></label>
+    <span id="pl-count" class="muted"></span>
+   </div>
+   <select id="pl-model" size="9" aria-label="the model to play"></select>
+   <div id="pl-row" class="pl-row"></div>
+   <div class="pl-opts">
+    <fieldset><legend>Search</legend>
+     <label data-tip="a fixed ply, searched exactly as the arenas' players search it"><input type="radio" name="pl-mode" value="exact" checked> exact ply</label>
+     <label data-tip="iterative deepening: plies 1, 2, 3, ... until the think time is up or the max ply is done; it plays the move of the deepest ply it finished (each ply chooses as the arenas' player of that ply would, with a transposition table to go deeper in the time)"><input type="radio" name="pl-mode" value="deep"> deep</label></fieldset>
+    <label id="pl-ply-l">Ply <select id="pl-ply" data-tip="how deep the model searches: ply 1 values each of its moves by the position it leads to; each ply more looks one more half-move ahead (its training ply is the default; any ply can be chosen, also above the one it trained at; 7-8 take seconds a move; for deeper, choose deep)">{opt([("1", "1"), ("2", "2"), ("3", "3"), ("4", "4"), ("5", "5"), ("6", "6"), ("7", "7 (seconds)"), ("8", "8 (slow: up to ~20 s a move)")])}</select></label>
+    <span id="pl-deep-opts" class="pl-deep-opts" hidden>
+     <label>Max ply <select id="pl-maxply" data-tip="the deepest ply it searches (10 at most); it stops sooner when the think time is up">{"".join(f'<option value="{k}"{" selected" if k == DEEP_MAX_PLY else ""}>{k}</option>' for k in range(1, DEEP_MAX_PLY + 1))}</select></label>
+     <label>Think time <select id="pl-think" data-tip="how long it may think a move: it stops when the time is up (or earlier, when the next ply could not finish in it) and plays the deepest finished ply's move; with no limit it searches every ply up to the max, which can take many minutes (Move now stops it)">{"".join(f'<option value="{v}"{" selected" if v == 30 else ""}>{esc(think_text(v))}</option>' for v in DEEP_THINK)}</select></label>
+     <label data-tip="pondering: while you think, it searches the position after the reply it expects from you; if you play that reply it goes on from there (deeper in the same time), else it starts afresh (the transposition table kept); it stops when you move, take back, start a new game or leave the page, and after 10 minutes"><input type="checkbox" id="pl-ponder" checked> think on my time</label>
+    </span>
+    <fieldset><legend>You play</legend>
+     <label><input type="radio" name="pl-colour" value="white" checked> White</label>
+     <label><input type="radio" name="pl-colour" value="black"> Black</label>
+     <label><input type="radio" name="pl-colour" value="random"> Random</label></fieldset>
+    <fieldset><legend>It plays</legend>
+     <label data-tip="its best-valued move every time (the log-odds argmax; ties broken by the game's seed)"><input type="radio" name="pl-policy" value="argmax" checked> its best move</label>
+     <label id="pl-softmax-l" data-tip="a move sampled as the arenas sample (log-odds softmax at T 0.02, seeded): nearly always its best move (exact plies only)"><input type="radio" name="pl-policy" value="softmax"> as in the arenas (T 0.02)</label></fieldset>
+    <button type="button" class="pl-btn pl-main" id="pl-new2">New game</button>
+   </div>
+  </section>
+  <section aria-labelledby="pl-h-game">
+   <h2 id="pl-h-game">Game</h2>
+   <p id="pl-who" class="pl-who muted">No game yet.</p>
+   <p id="pl-cal" class="pl-cal"></p>
+   <div id="pl-eval"></div>
+   <div id="pl-moves-box" class="pl-moves-box"><table class="pl-moves"><tbody id="pl-moves"></tbody></table></div>
+  </section>
+  <section aria-labelledby="pl-h-saved">
+   <h2 id="pl-h-saved">Saved games</h2>
+   <ul id="pl-saved" class="pl-saved"></ul>
+   <details><summary>How the model plays</summary><ul class="notes">
+    <li>The model file is the library's snapshot. Its calibration is fitted on its own games: 600 games against itself
+     at depth 1, as every experiment and arena fits it. They come from the arenas' cache, or are made once and kept in
+     leagues/play-games/owncal/.</li>
+    <li>Its move is the move a tournament player chooses at the chosen ply: an alpha-beta search over its log-odds of
+     winning, ln P(win) &minus; ln P(loss). Engine: chessai-play1, which is chessai-hybrid19 plus a move server.
+     On 11,005 positions of an argmax tournament at plies 1&ndash;3 (flat, capped tree, DAG, grow6 DAG), and 1,250 at
+     ply 4, it chose the tournament's move every time, apart from exact ties.</li>
+    <li>Deep mode (engine chessai-play2) searches ply 1, then 2, 3, ... up to the max ply, until the think time is up,
+     and plays the deepest finished ply's move: each finished ply chooses as the arenas' player of that ply would.
+     A transposition table (96 MiB, fixed) remembers positions and their best moves, so it searches the best move
+     first and skips positions it already searched deep enough; its values can then come from a deeper search than
+     the ply (in a check of 661 picks at plies 1&ndash;7, 659 were the exact ply's move, one an equal-valued tie, one a
+     move 0.005 worse). No search beyond the ply
+     (quiescence, capture extensions): the same search as the arenas', only deeper. Thinking on your time, it searches
+     the position after the reply it expects; the move list says when that paid off ("pondered").</li>
+    <li>chess.js decides legality and the end of the game. Checkmate, stalemate, insufficient material, threefold
+     repetition and the fifty-move rule end it at once, as they ended the models' own games.</li>
+    <li>The bars show the model's probabilities (White wins, draw, Black wins) of the position before and after its
+     move. The value is what its search maximised.</li>
+   </ul></details>
+  </section>
+ </div>
+</div>
+<script type="application/json" id="pl-data">{blob}</script>
+<script type="module" src="/play/static/play.js"></script>
+"""
+
+
+# ---------------------------------------------------------------- the page's requests
+
+FREE_API = ("poll", "stop", "ponder")  # requests without a library row
+
+
+def api_free(name, req):
+    """A request of the page that names no model: poll, stop or ponder (deep mode)."""
+    if name == "poll":
+        return deep_poll(req)
+    if name == "stop":
+        return deep_stop(req)
+    if name == "ponder":
+        return ponder_status(req)
+    return dict(ok=False, error=f"unknown request {name}")
+
+
+def api(name, req, row):
+    """One request of the page (POST /play/api/<name>, JSON): prepare, move, deep, eval or save, for the library row
+    `row`. Returns the JSON answer (a dict with ok)."""
+    if name == "prepare":
+        p = resolve(row)
+        a = ENGINE.request({"op": "load", "spec": p["spec"]})
+        if not a.get("ok"):
+            return a
+        ev = engine_eval(p["spec"], [])
+        cal = (a.get("report") or "").strip().splitlines()
+        m = re.match(r"^calibration on \S+: (\S+ \(\d+ positions\))", cal[0]) if cal else None
+        return dict(ok=True, calibration=m.group(1) if m else (cal[0] if cal else "none"), own_source=p["own_source"],
+                    load_ms=a.get("load_ms"), probs=ev.get("probs"), kind=p["kind"],
+                    model=os.path.relpath(p["model"], REPO))
+    if name == "move":
+        p = resolve(row)
+        return engine_move(p["spec"], int(req.get("ply", 0)), req.get("moves") or [], req.get("policy") or "argmax",
+                           0.02, int(req.get("seed") or 1), values=True)
+    if name == "deep":
+        return deep_start(row, req)
+    if name == "eval":
+        p = resolve(row)
+        return engine_eval(p["spec"], req.get("moves") or [])
+    if name == "save":
+        p = resolve(row)
+        path = save_game(row, p, req.get("game") or {})
+        name = os.path.basename(path)
+        h = dict(saved_games(400)).get(name) or {}
+        return dict(ok=True, file=name, entry=saved_entry(name, h))
+    return dict(ok=False, error=f"unknown request {name}")
+
+
+# ---------------------------------------------------------------- checks from the command line
+
+def find_row(arg, rows=None):
+    ident, _, v = arg.partition("@")
+    rows = rows if rows is not None else lib_rows()
+    cands = [r for r in rows if r["id"] == ident]
+    if not cands:
+        sys.exit(f"no library row {ident}")
+    if v:
+        hit = [r for r in cands if str(int(r["version"])) == str(int(v))]
+        if hit:
+            return hit[0]
+        return dict(cands[0], version=str(int(v)), version_role="other version")
+    return cands[0]
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] not in ("resolve", "move", "legal", "deep"):
+        sys.exit(__doc__)
+    try:
+        if a[0] == "legal":
+            print(json.dumps(engine_legal(a[1:]), indent=1))
+            return
+        row = find_row(a[1])
+        p = resolve(row, progress=lambda s: print("...", s, flush=True))
+        if a[0] == "resolve":
+            print(json.dumps(p, indent=1))
+        elif a[0] == "deep":
+            f = deep_fields(p["spec"], a[2], a[3], a[4:], jid=1)
+            t = float(f["seconds"])
+            out = ENGINE.request(f, timeout=t + DEEP_MARGIN_S if t else DEEP_NOLIMIT_S,
+                                 progress=lambda it: print("... depth", it["depth"], it["san"], it["value"],
+                                                           f"{it['at_ms'] / 1000:.2f} s", flush=True))
+            print(json.dumps(out, indent=1))
+        else:
+            print(json.dumps(engine_move(p["spec"], int(a[2]), a[3:], values=True), indent=1))
+    finally:
+        ENGINE.stop()
+
+
+if __name__ == "__main__":
+    main()

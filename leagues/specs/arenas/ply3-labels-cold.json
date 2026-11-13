@@ -1,0 +1,58 @@
+{
+ "name": "ply3-labels-cold",
+ "dir": "leagues/arenas/diag/ply3-labels-cold",
+ "description": "theory-2 6.10: do depth-2 search labels (lr-settings-new's label line) carry to ply 3 as the depth-4 lineage did? Final versions and champions of the label line against the 0.0125 and 0.05 lines and the old d4mix champion, ply 3 only, T 0.02. If the label line leads at ply 3 by well over its +48 at ply 2, labels-p2-cold is confirmed as the first experiment; if it does not, prefer a ply-3 field (6.10 B).",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid9",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "plies": [
+  3
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 10,
+  "min_rounds": 20,
+  "max_rounds": 20
+ },
+ "entries": [
+  {
+   "version": "lr-settings-new:F-L+label-depth=2+label-result=0.5.loc@193",
+   "name": "lrs.labels@193",
+   "label": "depth-2 search labels, final"
+  },
+  {
+   "version": "lr-settings-new:F-L+lr-rate=0.0125.loc@193",
+   "name": "lrs.F-L-0.0125@193",
+   "label": "result labels, final"
+  },
+  {
+   "version": "lr-settings-new:F-L+lr-rate=0.05.loc@193",
+   "name": "lrs.F-L-0.05@193",
+   "label": "result labels, default rate, final"
+  },
+  {
+   "file": "cycles/runs/F-L-d4mix-c/lr426.model",
+   "kind": "lr",
+   "heldout": "lr",
+   "name": "old.F-L-d4mix-c@426",
+   "label": "depth-4 self-play with 50/50 search labels, cycle-75 champion"
+  }
+ ]
+}

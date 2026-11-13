@@ -1,0 +1,77 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-errdag2",
+ "owncal_binary": "models/from-scratch/bin/chessai-errdag2",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "error-dag-p1-cold",
+ "dir": "leagues/arenas/diag/error-dag-p1-cold",
+ "plies": [
+  1,
+  2
+ ],
+ "description": "DRAFT (11-11): cold read of error-dag-p1's final versions at plies 1-2 near argmax (T 0.02), 75 round-robins. Same shape as make_arm_read.py writes, except binary and owncal_binary are chessai-errdag2: it is the only binary that loads path-context models, and it plays the others exactly as hybrid13. Before creating, replace FINAL with the experiment's last version (every line has the same). Tags: fl=^F-L, ne=^T-L-Ne, dz0=router-split-z=0, dz160=router-split-z=160 (both with router-split-limit=4). Contrasts: arm_btg.py TOUR ne. The dry run (models/from-scratch/errdag/summary.txt) played this shape on the dry experiment's cycle-3 versions.",
+ "entries": [
+  {
+   "version": "error-dag-p1:F-L#1.loc@FINAL",
+   "name": "fl.L1@FINAL",
+   "label": "error-dag-p1 F-L#1.loc final version vFINAL"
+  },
+  {
+   "version": "error-dag-p1:F-L#2.loc@FINAL",
+   "name": "fl.L2@FINAL",
+   "label": "error-dag-p1 F-L#2.loc final version vFINAL"
+  },
+  {
+   "version": "error-dag-p1:T-L-Ne+split-limit=4+split-threshold=1000000#1.loc@FINAL",
+   "name": "ne.L1@FINAL",
+   "label": "error-dag-p1 T-L-Ne+split-limit=4+split-threshold=1000000#1.loc final version vFINAL"
+  },
+  {
+   "version": "error-dag-p1:T-L-Ne+split-limit=4+split-threshold=1000000#2.loc@FINAL",
+   "name": "ne.L2@FINAL",
+   "label": "error-dag-p1 T-L-Ne+split-limit=4+split-threshold=1000000#2.loc final version vFINAL"
+  },
+  {
+   "version": "error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#1.loc@FINAL",
+   "name": "dz0.L1@FINAL",
+   "label": "error-dag-p1 D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#1.loc final version vFINAL"
+  },
+  {
+   "version": "error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#2.loc@FINAL",
+   "name": "dz0.L2@FINAL",
+   "label": "error-dag-p1 D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#2.loc final version vFINAL"
+  },
+  {
+   "version": "error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#1.loc@FINAL",
+   "name": "dz160.L1@FINAL",
+   "label": "error-dag-p1 D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#1.loc final version vFINAL"
+  },
+  {
+   "version": "error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#2.loc@FINAL",
+   "name": "dz160.L2@FINAL",
+   "label": "error-dag-p1 D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#2.loc final version vFINAL"
+  }
+ ]
+}

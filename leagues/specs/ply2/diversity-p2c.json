@@ -1,0 +1,64 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "diversity-p2c",
+ "description": "The user's regime at ply 2: coverage from STRONGER foreign play under the Elo window (analyst 6.57; the go-ahead for frozen foreign references: the user 11-12 ~01:05, 'continue the research with the analyst's suggestions'). diversity-p2 (references error-routing-p1's v314 finals, ply-1-trained) was passed by its lines at ~cycle 8 and then trained them on 200-Elo-weaker foreign play for ~390 cycles (its equal-positions read: F-P -2/6, tree -59/-48 against probit-late-p2 at ply 2). Here the four frozen references are base-probit-p2's v599 finals, the strongest ply-2 players on disk (F-P x2 and T-P-Nc-merge fresh-gate cluster trees x2; their architecture is immaterial), which the lines are not expected to pass, under reference_window margin 30 (scope (a): a line trains on a game with a frozen reference only while every reference in it is rated at or above its current version's Elo minus 30; line-line games and self-games always train; ref-ref games train while both pass). The window should stay inert all run; every cut is logged. Lines as diversity-p2: F-P x2, T-P-Ne (limit 4, 1M, noise 0.03) x2, seed 48, ply-2 field, self-games (lines only), games_per_cycle 1584 (12 entries: 12 rounds), floor 300, cap 400; hybrid16 games, hybrid6 training. Comparators: base-probit-p2's F-P at equal versions (equal batch; the factor is stronger foreign games in place of sibling games), probit-late-p2 at equal versions, diversity-p2 (same lines and seed: reference strength in practice). Reads: per-ply arenas at plies 1 and 2 (no ply 3): ply 2 at v150, v300 and the final against bfp (v300, v450), probit-late (v300, v399) and diversity-p2 (v300, v399); ply 1 at the final; an acceleration ladder (p2c F-P v100/v150/v200 vs probit-late F-P v300); the cycle any line passes any reference (none expected); the per-cycle reference share of the batch (~58-60%). Predictions (6.57; ply 2, head to head, +-28): p2c F-P v150 vs probit-late F-P v300 0-60, v200 20-80; vs bfp at v300 -20..40, at v400 vs bfp v450 -40..20 (ceiling within 30); over diversity-p2's F-P at v300 20-80; p2c tree vs its flat -40..0; ply 1 final vs pure -20..30. Plan rules: p2c F-P 40+ over bfp at v400 = strong foreign play raises the ceiling, the league goes to ply 2 with the window; within 30 = speed only, the ply-2 question becomes compute; 40+ below = strong narrow play starves coverage, and the references must be a mix of strengths above the window (the thunderdome's own composition).",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 48,
+ "train": {
+  "seed": 48
+ },
+ "references": [],
+ "entry_ply": 2,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 400,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid16"
+ },
+ "prices_version": "P2",
+ "ply1_entries": false,
+ "frozen_references": [
+  {
+   "name": "xFP1",
+   "version": "base-probit-p2:F-P#1.loc@599"
+  },
+  {
+   "name": "xFP2",
+   "version": "base-probit-p2:F-P#2.loc@599"
+  },
+  {
+   "name": "xTNc1",
+   "version": "base-probit-p2:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#1.loc@599"
+  },
+  {
+   "name": "xTNc2",
+   "version": "base-probit-p2:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#2.loc@599"
+  }
+ ],
+ "games_per_cycle": 1584,
+ "reference_window": {
+  "margin": 30
+ }
+}

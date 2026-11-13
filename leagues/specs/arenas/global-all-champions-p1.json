@@ -1,0 +1,1083 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 4,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid17",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid17",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 2,
+  "min_rounds": 4,
+  "max_rounds": 4
+ },
+ "name": "global-all-champions-p1",
+ "dir": "leagues/arenas/diag/global-all-champions-p1",
+ "plies": [
+  1
+ ],
+ "description": "Every model the second global league ever crowned (210: 8 first champions, 202 new), one quick arena at ply 1 (the league's ply), T 0.02, hybrid17, 4 double round-robins (~1,670 games each). The user, 11-12 ~09:35: \"Run all the champion models in 1 quick arena to see how they all compare\" (after killing the league; \"They probably began to get worse at this point\").",
+ "entries": [
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@0",
+   "name": "DL120.L1@0",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.0.0 (crowned cycle 1)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@1",
+   "name": "DL120.L1@1",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.1.1 (crowned cycle 2)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@2",
+   "name": "DL120.L1@2",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.2.2 (crowned cycle 3)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@4",
+   "name": "DL120.L1@4",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.3.4 (crowned cycle 5)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@5",
+   "name": "DL120.L1@5",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.4.5 (crowned cycle 6)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@10",
+   "name": "DL120.L1@10",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.5.10 (crowned cycle 11)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@11",
+   "name": "DL120.L1@11",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.6.11 (crowned cycle 12)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@23",
+   "name": "DL120.L1@23",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.7.23 (crowned cycle 24)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@26",
+   "name": "DL120.L1@26",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.8.26 (crowned cycle 27)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@37",
+   "name": "DL120.L1@37",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.9.37 (crowned cycle 38)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@53",
+   "name": "DL120.L1@53",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.10.53 (crowned cycle 54)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@64",
+   "name": "DL120.L1@64",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.11.64 (crowned cycle 65)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@80",
+   "name": "DL120.L1@80",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.12.80 (crowned cycle 81)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@95",
+   "name": "DL120.L1@95",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.13.95 (crowned cycle 96)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@145",
+   "name": "DL120.L1@145",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.14.145 (crowned cycle 146)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@196",
+   "name": "DL120.L1@196",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.15.196 (crowned cycle 197)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@213",
+   "name": "DL120.L1@213",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.16.213 (crowned cycle 214)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@220",
+   "name": "DL120.L1@220",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.17.220 (crowned cycle 221)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@231",
+   "name": "DL120.L1@231",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.18.231 (crowned cycle 232)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@301",
+   "name": "DL120.L1@301",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.19.301 (crowned cycle 302)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@370",
+   "name": "DL120.L1@370",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.20.370 (crowned cycle 371)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@506",
+   "name": "DL120.L1@506",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.21.506 (crowned cycle 507)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z120.p1@638",
+   "name": "DL120.L1@638",
+   "label": "global league D-L-Ne-ctx-z120.p1 champion G.22.638 (crowned cycle 639)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@0",
+   "name": "DL160.L1@0",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.0.0 (crowned cycle 1)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@1",
+   "name": "DL160.L1@1",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.1.1 (crowned cycle 2)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@2",
+   "name": "DL160.L1@2",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.2.2 (crowned cycle 3)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@4",
+   "name": "DL160.L1@4",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.3.4 (crowned cycle 5)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@6",
+   "name": "DL160.L1@6",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.4.6 (crowned cycle 7)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@9",
+   "name": "DL160.L1@9",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.5.9 (crowned cycle 10)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@10",
+   "name": "DL160.L1@10",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.6.10 (crowned cycle 11)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@16",
+   "name": "DL160.L1@16",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.7.16 (crowned cycle 17)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@22",
+   "name": "DL160.L1@22",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.8.22 (crowned cycle 23)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@26",
+   "name": "DL160.L1@26",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.9.26 (crowned cycle 27)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@33",
+   "name": "DL160.L1@33",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.10.33 (crowned cycle 34)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@40",
+   "name": "DL160.L1@40",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.11.40 (crowned cycle 41)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@56",
+   "name": "DL160.L1@56",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.12.56 (crowned cycle 57)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@75",
+   "name": "DL160.L1@75",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.13.75 (crowned cycle 76)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@94",
+   "name": "DL160.L1@94",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.14.94 (crowned cycle 95)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@128",
+   "name": "DL160.L1@128",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.15.128 (crowned cycle 129)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@145",
+   "name": "DL160.L1@145",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.16.145 (crowned cycle 146)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@193",
+   "name": "DL160.L1@193",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.17.193 (crowned cycle 194)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@229",
+   "name": "DL160.L1@229",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.18.229 (crowned cycle 230)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@295",
+   "name": "DL160.L1@295",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.19.295 (crowned cycle 296)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@372",
+   "name": "DL160.L1@372",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.20.372 (crowned cycle 373)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@394",
+   "name": "DL160.L1@394",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.21.394 (crowned cycle 395)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@503",
+   "name": "DL160.L1@503",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.22.503 (crowned cycle 504)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@669",
+   "name": "DL160.L1@669",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.23.669 (crowned cycle 670)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@727",
+   "name": "DL160.L1@727",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.24.727 (crowned cycle 728)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@814",
+   "name": "DL160.L1@814",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.25.814 (crowned cycle 815)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@1030",
+   "name": "DL160.L1@1030",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.26.1030 (crowned cycle 1031)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@1308",
+   "name": "DL160.L1@1308",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.27.1308 (crowned cycle 1309)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@1390",
+   "name": "DL160.L1@1390",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.28.1390 (crowned cycle 1391)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@1606",
+   "name": "DL160.L1@1606",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.29.1606 (crowned cycle 1607)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@2323",
+   "name": "DL160.L1@2323",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.30.2323 (crowned cycle 2324)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@4111",
+   "name": "DL160.L1@4111",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.31.4111 (crowned cycle 4112)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@4735",
+   "name": "DL160.L1@4735",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.32.4735 (crowned cycle 4736)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@5539",
+   "name": "DL160.L1@5539",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.33.5539 (crowned cycle 5540)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-L-Ne-ctx-z160.p1@5626",
+   "name": "DL160.L1@5626",
+   "label": "global league D-L-Ne-ctx-z160.p1 champion G.34.5626 (crowned cycle 5627)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@0",
+   "name": "DP20.L1@0",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.0.0 (crowned cycle 1)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@1",
+   "name": "DP20.L1@1",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.1.1 (crowned cycle 2)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@4",
+   "name": "DP20.L1@4",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.2.4 (crowned cycle 5)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@6",
+   "name": "DP20.L1@6",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.3.6 (crowned cycle 7)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@8",
+   "name": "DP20.L1@8",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.4.8 (crowned cycle 9)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@12",
+   "name": "DP20.L1@12",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.5.12 (crowned cycle 13)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@16",
+   "name": "DP20.L1@16",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.6.16 (crowned cycle 17)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@20",
+   "name": "DP20.L1@20",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.7.20 (crowned cycle 21)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@27",
+   "name": "DP20.L1@27",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.8.27 (crowned cycle 28)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@37",
+   "name": "DP20.L1@37",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.9.37 (crowned cycle 38)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@51",
+   "name": "DP20.L1@51",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.10.51 (crowned cycle 52)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@62",
+   "name": "DP20.L1@62",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.11.62 (crowned cycle 63)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@67",
+   "name": "DP20.L1@67",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.12.67 (crowned cycle 68)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@94",
+   "name": "DP20.L1@94",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.13.94 (crowned cycle 95)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@154",
+   "name": "DP20.L1@154",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.14.154 (crowned cycle 155)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@191",
+   "name": "DP20.L1@191",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.15.191 (crowned cycle 192)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@210",
+   "name": "DP20.L1@210",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.16.210 (crowned cycle 211)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@220",
+   "name": "DP20.L1@220",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.17.220 (crowned cycle 221)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@229",
+   "name": "DP20.L1@229",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.18.229 (crowned cycle 230)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@363",
+   "name": "DP20.L1@363",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.19.363 (crowned cycle 364)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@379",
+   "name": "DP20.L1@379",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.20.379 (crowned cycle 380)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@447",
+   "name": "DP20.L1@447",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.21.447 (crowned cycle 448)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@513",
+   "name": "DP20.L1@513",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.22.513 (crowned cycle 514)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@682",
+   "name": "DP20.L1@682",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.23.682 (crowned cycle 683)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z20.p1@754",
+   "name": "DP20.L1@754",
+   "label": "global league D-P-Ne-ctx-z20.p1 champion G.24.754 (crowned cycle 755)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@0",
+   "name": "DP30.L1@0",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.0.0 (crowned cycle 1)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@1",
+   "name": "DP30.L1@1",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.1.1 (crowned cycle 2)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@4",
+   "name": "DP30.L1@4",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.2.4 (crowned cycle 5)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@7",
+   "name": "DP30.L1@7",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.3.7 (crowned cycle 8)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@10",
+   "name": "DP30.L1@10",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.4.10 (crowned cycle 11)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@16",
+   "name": "DP30.L1@16",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.5.16 (crowned cycle 17)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@19",
+   "name": "DP30.L1@19",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.6.19 (crowned cycle 20)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@27",
+   "name": "DP30.L1@27",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.7.27 (crowned cycle 28)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@34",
+   "name": "DP30.L1@34",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.8.34 (crowned cycle 35)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@46",
+   "name": "DP30.L1@46",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.9.46 (crowned cycle 47)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@62",
+   "name": "DP30.L1@62",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.10.62 (crowned cycle 63)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@70",
+   "name": "DP30.L1@70",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.11.70 (crowned cycle 71)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@97",
+   "name": "DP30.L1@97",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.12.97 (crowned cycle 98)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@132",
+   "name": "DP30.L1@132",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.13.132 (crowned cycle 133)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@159",
+   "name": "DP30.L1@159",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.14.159 (crowned cycle 160)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@186",
+   "name": "DP30.L1@186",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.15.186 (crowned cycle 187)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@200",
+   "name": "DP30.L1@200",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.16.200 (crowned cycle 201)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@226",
+   "name": "DP30.L1@226",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.17.226 (crowned cycle 227)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@308",
+   "name": "DP30.L1@308",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.18.308 (crowned cycle 309)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@372",
+   "name": "DP30.L1@372",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.19.372 (crowned cycle 373)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@394",
+   "name": "DP30.L1@394",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.20.394 (crowned cycle 395)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@409",
+   "name": "DP30.L1@409",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.21.409 (crowned cycle 410)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@473",
+   "name": "DP30.L1@473",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.22.473 (crowned cycle 474)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@590",
+   "name": "DP30.L1@590",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.23.590 (crowned cycle 591)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@698",
+   "name": "DP30.L1@698",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.24.698 (crowned cycle 699)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@862",
+   "name": "DP30.L1@862",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.25.862 (crowned cycle 863)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@1311",
+   "name": "DP30.L1@1311",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.26.1311 (crowned cycle 1312)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@1359",
+   "name": "DP30.L1@1359",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.27.1359 (crowned cycle 1360)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@1520",
+   "name": "DP30.L1@1520",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.28.1520 (crowned cycle 1521)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@1617",
+   "name": "DP30.L1@1617",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.29.1617 (crowned cycle 1618)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@2741",
+   "name": "DP30.L1@2741",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.30.2741 (crowned cycle 2742)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@2824",
+   "name": "DP30.L1@2824",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.31.2824 (crowned cycle 2825)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@3306",
+   "name": "DP30.L1@3306",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.32.3306 (crowned cycle 3307)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@3773",
+   "name": "DP30.L1@3773",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.33.3773 (crowned cycle 3774)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@4029",
+   "name": "DP30.L1@4029",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.34.4029 (crowned cycle 4030)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@4079",
+   "name": "DP30.L1@4079",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.35.4079 (crowned cycle 4080)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@4269",
+   "name": "DP30.L1@4269",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.36.4269 (crowned cycle 4270)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@4576",
+   "name": "DP30.L1@4576",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.37.4576 (crowned cycle 4577)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@4640",
+   "name": "DP30.L1@4640",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.38.4640 (crowned cycle 4641)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@4668",
+   "name": "DP30.L1@4668",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.39.4668 (crowned cycle 4669)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@4775",
+   "name": "DP30.L1@4775",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.40.4775 (crowned cycle 4776)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@4983",
+   "name": "DP30.L1@4983",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.41.4983 (crowned cycle 4984)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:D-P-Ne-ctx-z30.p1@5375",
+   "name": "DP30.L1@5375",
+   "label": "global league D-P-Ne-ctx-z30.p1 champion G.42.5375 (crowned cycle 5376)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@0",
+   "name": "FL.L1@0",
+   "label": "global league F-L.p1 champion G.0.0 (crowned cycle 1)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@1",
+   "name": "FL.L1@1",
+   "label": "global league F-L.p1 champion G.1.1 (crowned cycle 2)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@4",
+   "name": "FL.L1@4",
+   "label": "global league F-L.p1 champion G.2.4 (crowned cycle 5)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@6",
+   "name": "FL.L1@6",
+   "label": "global league F-L.p1 champion G.3.6 (crowned cycle 7)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@10",
+   "name": "FL.L1@10",
+   "label": "global league F-L.p1 champion G.4.10 (crowned cycle 11)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@13",
+   "name": "FL.L1@13",
+   "label": "global league F-L.p1 champion G.5.13 (crowned cycle 14)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@23",
+   "name": "FL.L1@23",
+   "label": "global league F-L.p1 champion G.6.23 (crowned cycle 24)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@27",
+   "name": "FL.L1@27",
+   "label": "global league F-L.p1 champion G.7.27 (crowned cycle 28)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@36",
+   "name": "FL.L1@36",
+   "label": "global league F-L.p1 champion G.8.36 (crowned cycle 37)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@51",
+   "name": "FL.L1@51",
+   "label": "global league F-L.p1 champion G.9.51 (crowned cycle 52)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@63",
+   "name": "FL.L1@63",
+   "label": "global league F-L.p1 champion G.10.63 (crowned cycle 64)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@101",
+   "name": "FL.L1@101",
+   "label": "global league F-L.p1 champion G.11.101 (crowned cycle 102)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@118",
+   "name": "FL.L1@118",
+   "label": "global league F-L.p1 champion G.12.118 (crowned cycle 119)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@142",
+   "name": "FL.L1@142",
+   "label": "global league F-L.p1 champion G.13.142 (crowned cycle 143)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@217",
+   "name": "FL.L1@217",
+   "label": "global league F-L.p1 champion G.14.217 (crowned cycle 218)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@220",
+   "name": "FL.L1@220",
+   "label": "global league F-L.p1 champion G.15.220 (crowned cycle 221)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@314",
+   "name": "FL.L1@314",
+   "label": "global league F-L.p1 champion G.16.314 (crowned cycle 315)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@364",
+   "name": "FL.L1@364",
+   "label": "global league F-L.p1 champion G.17.364 (crowned cycle 365)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@400",
+   "name": "FL.L1@400",
+   "label": "global league F-L.p1 champion G.18.400 (crowned cycle 401)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-L.p1@538",
+   "name": "FL.L1@538",
+   "label": "global league F-L.p1 champion G.19.538 (crowned cycle 539)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@0",
+   "name": "FP.L1@0",
+   "label": "global league F-P.p1 champion G.0.0 (crowned cycle 1)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@1",
+   "name": "FP.L1@1",
+   "label": "global league F-P.p1 champion G.1.1 (crowned cycle 2)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@2",
+   "name": "FP.L1@2",
+   "label": "global league F-P.p1 champion G.2.2 (crowned cycle 3)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@4",
+   "name": "FP.L1@4",
+   "label": "global league F-P.p1 champion G.3.4 (crowned cycle 5)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@5",
+   "name": "FP.L1@5",
+   "label": "global league F-P.p1 champion G.4.5 (crowned cycle 6)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@8",
+   "name": "FP.L1@8",
+   "label": "global league F-P.p1 champion G.5.8 (crowned cycle 9)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@10",
+   "name": "FP.L1@10",
+   "label": "global league F-P.p1 champion G.6.10 (crowned cycle 11)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@14",
+   "name": "FP.L1@14",
+   "label": "global league F-P.p1 champion G.7.14 (crowned cycle 15)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@19",
+   "name": "FP.L1@19",
+   "label": "global league F-P.p1 champion G.8.19 (crowned cycle 20)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@27",
+   "name": "FP.L1@27",
+   "label": "global league F-P.p1 champion G.9.27 (crowned cycle 28)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@30",
+   "name": "FP.L1@30",
+   "label": "global league F-P.p1 champion G.10.30 (crowned cycle 31)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@38",
+   "name": "FP.L1@38",
+   "label": "global league F-P.p1 champion G.11.38 (crowned cycle 39)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@54",
+   "name": "FP.L1@54",
+   "label": "global league F-P.p1 champion G.12.54 (crowned cycle 55)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@62",
+   "name": "FP.L1@62",
+   "label": "global league F-P.p1 champion G.13.62 (crowned cycle 63)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@87",
+   "name": "FP.L1@87",
+   "label": "global league F-P.p1 champion G.14.87 (crowned cycle 88)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@123",
+   "name": "FP.L1@123",
+   "label": "global league F-P.p1 champion G.15.123 (crowned cycle 124)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@200",
+   "name": "FP.L1@200",
+   "label": "global league F-P.p1 champion G.16.200 (crowned cycle 201)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@215",
+   "name": "FP.L1@215",
+   "label": "global league F-P.p1 champion G.17.215 (crowned cycle 216)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@365",
+   "name": "FP.L1@365",
+   "label": "global league F-P.p1 champion G.18.365 (crowned cycle 366)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:F-P.p1@463",
+   "name": "FP.L1@463",
+   "label": "global league F-P.p1 champion G.19.463 (crowned cycle 464)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@0",
+   "name": "TLc.L1@0",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.0.0 (crowned cycle 1)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@2",
+   "name": "TLc.L1@2",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.1.2 (crowned cycle 3)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@6",
+   "name": "TLc.L1@6",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.2.6 (crowned cycle 7)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@10",
+   "name": "TLc.L1@10",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.3.10 (crowned cycle 11)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@14",
+   "name": "TLc.L1@14",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.4.14 (crowned cycle 15)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@25",
+   "name": "TLc.L1@25",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.5.25 (crowned cycle 26)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@30",
+   "name": "TLc.L1@30",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.6.30 (crowned cycle 31)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@38",
+   "name": "TLc.L1@38",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.7.38 (crowned cycle 39)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@53",
+   "name": "TLc.L1@53",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.8.53 (crowned cycle 54)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@62",
+   "name": "TLc.L1@62",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.9.62 (crowned cycle 63)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@92",
+   "name": "TLc.L1@92",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.10.92 (crowned cycle 93)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@115",
+   "name": "TLc.L1@115",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.11.115 (crowned cycle 116)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@127",
+   "name": "TLc.L1@127",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.12.127 (crowned cycle 128)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@143",
+   "name": "TLc.L1@143",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.13.143 (crowned cycle 144)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@187",
+   "name": "TLc.L1@187",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.14.187 (crowned cycle 188)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@221",
+   "name": "TLc.L1@221",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.15.221 (crowned cycle 222)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@251",
+   "name": "TLc.L1@251",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.16.251 (crowned cycle 252)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@289",
+   "name": "TLc.L1@289",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.17.289 (crowned cycle 290)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@367",
+   "name": "TLc.L1@367",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.18.367 (crowned cycle 368)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@501",
+   "name": "TLc.L1@501",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.19.501 (crowned cycle 502)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-L-Nc-merge-fresh.p1@581",
+   "name": "TLc.L1@581",
+   "label": "global league T-L-Nc-merge-fresh.p1 champion G.20.581 (crowned cycle 582)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@0",
+   "name": "TPc.L1@0",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.0.0 (crowned cycle 1)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@1",
+   "name": "TPc.L1@1",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.1.1 (crowned cycle 2)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@2",
+   "name": "TPc.L1@2",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.2.2 (crowned cycle 3)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@3",
+   "name": "TPc.L1@3",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.3.3 (crowned cycle 4)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@6",
+   "name": "TPc.L1@6",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.4.6 (crowned cycle 7)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@9",
+   "name": "TPc.L1@9",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.5.9 (crowned cycle 10)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@11",
+   "name": "TPc.L1@11",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.6.11 (crowned cycle 12)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@15",
+   "name": "TPc.L1@15",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.7.15 (crowned cycle 16)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@20",
+   "name": "TPc.L1@20",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.8.20 (crowned cycle 21)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@23",
+   "name": "TPc.L1@23",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.9.23 (crowned cycle 24)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@30",
+   "name": "TPc.L1@30",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.10.30 (crowned cycle 31)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@34",
+   "name": "TPc.L1@34",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.11.34 (crowned cycle 35)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@43",
+   "name": "TPc.L1@43",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.12.43 (crowned cycle 44)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@53",
+   "name": "TPc.L1@53",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.13.53 (crowned cycle 54)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@62",
+   "name": "TPc.L1@62",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.14.62 (crowned cycle 63)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@95",
+   "name": "TPc.L1@95",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.15.95 (crowned cycle 96)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@112",
+   "name": "TPc.L1@112",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.16.112 (crowned cycle 113)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@128",
+   "name": "TPc.L1@128",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.17.128 (crowned cycle 129)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@156",
+   "name": "TPc.L1@156",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.18.156 (crowned cycle 157)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@200",
+   "name": "TPc.L1@200",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.19.200 (crowned cycle 201)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@220",
+   "name": "TPc.L1@220",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.20.220 (crowned cycle 221)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@227",
+   "name": "TPc.L1@227",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.21.227 (crowned cycle 228)"
+  },
+  {
+   "version": "/home/iv/dev/chessai/leagues/global:T-P-Nc-merge-fresh.p1@354",
+   "name": "TPc.L1@354",
+   "label": "global league T-P-Nc-merge-fresh.p1 champion G.22.354 (crowned cycle 355)"
+  }
+ ]
+}

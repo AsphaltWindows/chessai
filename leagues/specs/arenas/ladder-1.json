@@ -1,0 +1,251 @@
+{
+ "name": "ladder-1",
+ "description": "Global ladder ladder-1 (the user, 11-12 ~11:11; analyst 6.85): no training; each promising library model plays at its specified ply (its training ply), one entry per model; players at plies 1: 18, 2: 13, 3: 8, 4: 1; 10 double round-robins, near argmax (T 0.02). Elo 0 = random: the random references random, random-1, random-2 and random-3 (plies 0-3) play in the field (the user, 11-12 ~11:55: \"for the global ladder we should add the random players back in\"); the standing panels play as players, not as the anchor (the standing panels at plies 1,2 (ply 1 error-routing-p1, error-dag-probit-p1, grow-p1, grow-p1b at v300; ply 2 replay-p2, diversity-p2, probit-late-p2 at v299; an F-P and a tree each, first 1 replicate(s))). Selection: at plies with a standing panel, one entry per family in [{', '.join(fams)}] from the family's latest plateaued run, its final, the variant the record kept (LR trees forget 10, grow trees bar on, DAGs D-P z30 / D-L z160 or z120) else its first line; at plies without one, one entry per (run, family) of every finished run there; new-system runs only (no global champions, no mixed-ply, self-play or random-player runs); at most 16 a ply, references first; 2 reference(s) a ply also play at the next plies as depth anchors. It ranks deployed players (evaluator plus depth), not evaluators apart from depth: read fit.md.",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid17",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid17",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 10,
+  "min_rounds": 10,
+  "max_rounds": 10
+ },
+ "dir": "leagues/arenas/ladder/ladder-1",
+ "entries": [
+  {
+   "version": "error-routing-p1:F-P#1.loc@300",
+   "name": "errorroutingp1_a300.L1@300",
+   "label": "error-routing-p1 F-P#1.loc version v300 (library errorroutingp1_a; plateau, train ply 1); ladder: ply 1, reference; also at ply 2 as a depth anchor (outside the anchor)",
+   "plies": [
+    1,
+    2
+   ]
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@300",
+   "name": "errorroutingp1_c300.L1@300",
+   "label": "error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v300 (library errorroutingp1_c; plateau, train ply 1); ladder: ply 1, reference; also at ply 2 as a depth anchor (outside the anchor)",
+   "plies": [
+    1,
+    2
+   ]
+  },
+  {
+   "version": "error-dag-probit-p1:F-P#1.loc@300",
+   "name": "errordagprobitp1_a300.L1@300",
+   "label": "error-dag-probit-p1 F-P#1.loc version v300 (library errordagprobitp1_a; plateau, train ply 1); ladder: ply 1, reference",
+   "ply": 1
+  },
+  {
+   "version": "error-dag-probit-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@300",
+   "name": "errordagprobitp1_c300.L1@300",
+   "label": "error-dag-probit-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v300 (library errordagprobitp1_c; plateau, train ply 1); ladder: ply 1, reference",
+   "ply": 1
+  },
+  {
+   "version": "grow-p1:F-P#1.loc@300",
+   "name": "growp1_a300.L1@300",
+   "label": "grow-p1 F-P#1.loc version v300 (library growp1_a; cap, train ply 1); ladder: ply 1, reference",
+   "ply": 1
+  },
+  {
+   "version": "grow-p1:T-P-Ne+split-threshold=1000000+split-noise=0.03+split-limit=4#1.loc@300",
+   "name": "growp1_c300.L1@300",
+   "label": "grow-p1 T-P-Ne+split-threshold=1000000+split-noise=0.03+split-limit=4#1.loc version v300 (library growp1_c; cap, train ply 1); ladder: ply 1, reference",
+   "ply": 1
+  },
+  {
+   "version": "grow-p1b:F-P#1.loc@300",
+   "name": "growp1b_a300.L1@300",
+   "label": "grow-p1b F-P#1.loc version v300 (library growp1b_a; plateau, train ply 1); ladder: ply 1, reference",
+   "ply": 1
+  },
+  {
+   "version": "grow-p1b:T-P-Ne-grow#1.loc@300",
+   "name": "growp1b_c300.L1@300",
+   "label": "grow-p1b T-P-Ne-grow#1.loc version v300 (library growp1b_c; plateau, train ply 1); ladder: ply 1, reference",
+   "ply": 1
+  },
+  {
+   "version": "fponly-p1:F-P#1.loc@299",
+   "name": "fponlyp1_a299.L1@299",
+   "label": "fponly-p1 F-P#1.loc version v299 (library fponlyp1_a; plateau, train ply 1); ladder: ply 1, family F-P",
+   "ply": 1
+  },
+  {
+   "version": "capped-l-f10-p1:F-L#1.loc@319",
+   "name": "cappedlf10p1_a319.L1@319",
+   "label": "capped-l-f10-p1 F-L#1.loc version v319 (library cappedlf10p1_a; plateau, train ply 1); ladder: ply 1, family F-L",
+   "ply": 1
+  },
+  {
+   "version": "probit-f10-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@337",
+   "name": "probitf10p1_c337.L1@337",
+   "label": "probit-f10-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v337 (library probitf10p1_c; plateau, train ply 1); ladder: ply 1, family T-P-Ne",
+   "ply": 1
+  },
+  {
+   "version": "grow-p1b2:T-P-Ne-grow#1.loc@349",
+   "name": "growp1b2_c349.L1@349",
+   "label": "grow-p1b2 T-P-Ne-grow#1.loc version v349 (library growp1b2_c; plateau, train ply 1); ladder: ply 1, family T-P-Ne-grow",
+   "ply": 1
+  },
+  {
+   "version": "capped-l-f10-p1:T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10#1.loc@319",
+   "name": "cappedlf10p1_e319.L1@319",
+   "label": "capped-l-f10-p1 T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10#1.loc version v319 (library cappedlf10p1_e; plateau, train ply 1); ladder: ply 1, family T-L-Ne",
+   "ply": 1
+  },
+  {
+   "version": "grow-l-p1b:T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot+forget-factor=10#1.loc@347",
+   "name": "growlp1b_e347.L1@347",
+   "label": "grow-l-p1b T-L-Ne-grow+grow-mdl=0+grow-gate=age+grow-priority=snapshot+forget-factor=10#1.loc version v347 (library growlp1b_e; plateau, train ply 1); ladder: ply 1, family T-L-Ne-grow",
+   "ply": 1
+  },
+  {
+   "version": "error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#1.loc@366",
+   "name": "errordagprobitp1_g366.L1@366",
+   "label": "error-dag-probit-p1 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#1.loc version v366 (library errordagprobitp1_g; plateau, train ply 1); ladder: ply 1, family D-P-Ne-ctx",
+   "ply": 1
+  },
+  {
+   "version": "error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#1.loc@361",
+   "name": "errordagp1_g361.L1@361",
+   "label": "error-dag-p1 D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#1.loc version v361 (library errordagp1_g; plateau, train ply 1); ladder: ply 1, family D-L-Ne-ctx",
+   "ply": 1
+  },
+  {
+   "version": "replay-p2:F-P#1.loc@299",
+   "name": "replayp2_a299.L1@299",
+   "label": "replay-p2 F-P#1.loc version v299 (library replayp2_a; plateau, train ply 2); ladder: ply 2, reference; also at ply 1/3 as a depth anchor (outside the anchor)",
+   "plies": [
+    2,
+    1,
+    3
+   ]
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299",
+   "name": "replayp2_c299.L1@299",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v299 (library replayp2_c; plateau, train ply 2); ladder: ply 2, reference; also at ply 1/3 as a depth anchor (outside the anchor)",
+   "plies": [
+    2,
+    1,
+    3
+   ]
+  },
+  {
+   "version": "diversity-p2:F-P#1.loc@299",
+   "name": "diversityp2_a299.L1@299",
+   "label": "diversity-p2 F-P#1.loc version v299 (library diversityp2_a; plateau, train ply 2); ladder: ply 2, reference",
+   "ply": 2
+  },
+  {
+   "version": "diversity-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299",
+   "name": "diversityp2_c299.L1@299",
+   "label": "diversity-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v299 (library diversityp2_c; plateau, train ply 2); ladder: ply 2, reference",
+   "ply": 2
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@299",
+   "name": "probitlatep2_a299.L1@299",
+   "label": "probit-late-p2 F-P#1.loc version v299 (library probitlatep2_a; plateau, train ply 2); ladder: ply 2, reference",
+   "ply": 2
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299",
+   "name": "probitlatep2_c299.L1@299",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v299 (library probitlatep2_c; plateau, train ply 2); ladder: ply 2, reference",
+   "ply": 2
+  },
+  {
+   "version": "fponly-p2b:F-P#1.loc@352",
+   "name": "fponlyp2b_a352.L1@352",
+   "label": "fponly-p2b F-P#1.loc version v352 (library fponlyp2b_a; plateau, train ply 2); ladder: ply 2, family F-P",
+   "ply": 2
+  },
+  {
+   "version": "base-lr-p2:F-L#1.loc@599",
+   "name": "baselrp2_a599.L1@599",
+   "label": "base-lr-p2 F-L#1.loc version v599 (library baselrp2_a; plateau, train ply 2); ladder: ply 2, family F-L",
+   "ply": 2
+  },
+  {
+   "version": "diversity-p2d:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299",
+   "name": "diversityp2d_c299.L1@299",
+   "label": "diversity-p2d T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v299 (library diversityp2d_c; plateau, train ply 2); ladder: ply 2, family T-P-Ne",
+   "ply": 2
+  },
+  {
+   "version": "base-probit-p2:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#1.loc@599",
+   "name": "baseprobitp2_c599.L1@599",
+   "label": "base-probit-p2 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#1.loc version v599 (library baseprobitp2_c; plateau, train ply 2); ladder: ply 2, family D-P-Ne-ctx",
+   "ply": 2
+  },
+  {
+   "version": "base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#1.loc@599",
+   "name": "baselrp2_c599.L1@599",
+   "label": "base-lr-p2 D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#1.loc version v599 (library baselrp2_c; plateau, train ply 2); ladder: ply 2, family D-L-Ne-ctx",
+   "ply": 2
+  },
+  {
+   "version": "flat-p3:F-L#1.loc@199",
+   "name": "flatp3_a199.L1@199",
+   "label": "flat-p3 F-L#1.loc version v199 (library flatp3_a; plateau, train ply 3); ladder: ply 3, provisional reference",
+   "ply": 3
+  },
+  {
+   "version": "flat-p3-b:F-L#1.loc@199",
+   "name": "flatp3b_a199.L1@199",
+   "label": "flat-p3-b F-L#1.loc version v199 (library flatp3b_a; plateau, train ply 3); ladder: ply 3, provisional reference",
+   "ply": 3
+  },
+  {
+   "version": "flat-p3-w4-w3f1:F-L#1.loc@96",
+   "name": "flatp3w4w3f1_a96.L1@96",
+   "label": "flat-p3-w4-w3f1 F-L#1.loc version v96 (library flatp3w4w3f1_a; plateau, train ply 3); ladder: ply 3, run flat-p3-w4-w3f1 F-L",
+   "ply": 3
+  },
+  {
+   "version": "flat-p3-w3f1:F-L#1.loc@99",
+   "name": "flatp3w3f1_a99.L1@99",
+   "label": "flat-p3-w3f1 F-L#1.loc version v99 (library flatp3w3f1_a; cap, train ply 3); ladder: ply 3, run flat-p3-w3f1 F-L",
+   "ply": 3
+  },
+  {
+   "version": "flat-p2-w3:F-L#1.loc@99",
+   "name": "flatp2w3_a99.L1@99",
+   "label": "flat-p2-w3 F-L#1.loc version v99 (library flatp2w3_a; cap, train ply 3); ladder: ply 3, run flat-p2-w3 F-L",
+   "ply": 3
+  },
+  {
+   "version": "flat-p3-w3:F-L#1.loc@78",
+   "name": "flatp3w3_a78.L1@78",
+   "label": "flat-p3-w3 F-L#1.loc version v78 (library flatp3w3_a; plateau, train ply 3); ladder: ply 3, run flat-p3-w3 F-L",
+   "ply": 3
+  },
+  {
+   "version": "flat-p3-w4:F-L#1.loc@99",
+   "name": "flatp3w4_a99.L1@99",
+   "label": "flat-p3-w4 F-L#1.loc version v99 (library flatp3w4_a; cap, train ply 4); ladder: ply 4, provisional reference",
+   "ply": 4
+  }
+ ]
+}

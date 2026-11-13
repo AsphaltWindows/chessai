@@ -1,0 +1,39 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "models": [
+  {
+   "model": "F-L",
+   "replicates": 4,
+   "start": {
+    "experiment": "flat-p3",
+    "version": 199
+   },
+   "start_forget": 1
+  }
+ ],
+ "seed": 24,
+ "train": {
+  "seed": 24
+ },
+ "references": [],
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 60
+ },
+ "cycles": 100,
+ "rounds_per_cycle": 6,
+ "min_rounds": 6,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid10"
+ },
+ "prices_version": "P2",
+ "name": "flat-p3-w3f1",
+ "entry_ply": 3,
+ "ply1_entries": false,
+ "description": "W3 without reheating (theory-2 6.19): flat-p3-w3 exactly, but start_forget 1 (AdaGrad sums kept). W3 ended 27-51 below its own start; if this run holds within ~15 of flat-p3's finals, the reheated step was the cause. Launched 11-11 ~05:05 by the coordinator under the user's standing instruction; ~0.6 CPU-h."
+}

@@ -1,0 +1,77 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-errdag3",
+ "owncal_binary": "models/from-scratch/bin/chessai-errdag3",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "error-dag-probit-p1-cold",
+ "dir": "leagues/arenas/diag/error-dag-probit-p1-cold",
+ "plies": [
+  1,
+  2
+ ],
+ "description": "DRAFT (11-11): cold read of error-dag-probit-p1's final versions at plies 1-2 near argmax (T 0.02), 75 round-robins. Same shape as make_arm_read.py writes, except binary and owncal_binary are chessai-errdag3: it is the only binary that loads probit path-context models, and it plays the others exactly as hybrid13. Before creating, replace FINAL with the experiment's last version (every line has the same). Tags: fp=^F-P, ne=^T-P-Ne, dz0=router-split-z=0, dz30=router-split-z=30 (both with router-split-limit=4). Contrasts: arm_btg.py TOUR ne.",
+ "entries": [
+  {
+   "version": "error-dag-probit-p1:F-P#1.loc@FINAL",
+   "name": "fp.L1@FINAL",
+   "label": "error-dag-probit-p1 F-P#1.loc final version vFINAL"
+  },
+  {
+   "version": "error-dag-probit-p1:F-P#2.loc@FINAL",
+   "name": "fp.L2@FINAL",
+   "label": "error-dag-probit-p1 F-P#2.loc final version vFINAL"
+  },
+  {
+   "version": "error-dag-probit-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@FINAL",
+   "name": "ne.L1@FINAL",
+   "label": "error-dag-probit-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc final version vFINAL"
+  },
+  {
+   "version": "error-dag-probit-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@FINAL",
+   "name": "ne.L2@FINAL",
+   "label": "error-dag-probit-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc final version vFINAL"
+  },
+  {
+   "version": "error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=0+router-split-limit=4#1.loc@FINAL",
+   "name": "dz0.L1@FINAL",
+   "label": "error-dag-probit-p1 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=0+router-split-limit=4#1.loc final version vFINAL"
+  },
+  {
+   "version": "error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=0+router-split-limit=4#2.loc@FINAL",
+   "name": "dz0.L2@FINAL",
+   "label": "error-dag-probit-p1 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=0+router-split-limit=4#2.loc final version vFINAL"
+  },
+  {
+   "version": "error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#1.loc@FINAL",
+   "name": "dz30.L1@FINAL",
+   "label": "error-dag-probit-p1 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#1.loc final version vFINAL"
+  },
+  {
+   "version": "error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#2.loc@FINAL",
+   "name": "dz30.L2@FINAL",
+   "label": "error-dag-probit-p1 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#2.loc final version vFINAL"
+  }
+ ]
+}

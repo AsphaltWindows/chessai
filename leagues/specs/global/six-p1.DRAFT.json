@@ -1,0 +1,39 @@
+{
+ "kind": "global",
+ "root": "/home/iv/dev/chessai/leagues",
+ "description": "DRAFT (11-11): replace ZP and ZL in the DAG recipe names with the router-split z values from the error-dag-probit-p1 and error-dag-p1 reads, and add those two recipe rows first. The user's global league (11-10 design, built 11-11 13:50): the six agreed 11-11 ~12:00 ('those 6 sound fine'), untrained, at ply 1 ('in the global league they should be on ply 1 because that's the ply we tested them on'): F-L, F-P, the fresh-gate cluster trees T-P-Nc-merge-fresh and T-L-Nc-merge-fresh (limit 4, 1M; probit noise 0.03), and the error DAGs D-P-Ne-ctx and D-L-Ne-ctx (NB error routers, path context, leaf limit 4 plus router limit 4, 1M; probit noise 0.03). Rules: current and champion entries at each model's ply, training on games where both players are rated at or above the model's Elo minus 30, self-games, patience by training positions (20M, 5-cycle floor, every model), the four random references, 5 double round-robins a cycle. Tournament binary chessai-errdag4 (11-11 14:05: byte-identical to errdag3/errdag2/hybrid13 in play, ~0.6 of the CPU); after create, move DAG lines' training to errdag4 too (train_binary.py --from chessai-errdag3 or chessai-errdag2 ... chessai-errdag4).",
+ "models": [
+  {
+   "recipe": "F-L",
+   "ply": 1
+  },
+  {
+   "recipe": "F-P",
+   "ply": 1
+  },
+  {
+   "recipe": "T-P-Nc-merge-fresh",
+   "ply": 1
+  },
+  {
+   "recipe": "T-L-Nc-merge-fresh",
+   "ply": 1
+  },
+  {
+   "recipe": "D-P-Ne-ctx-zZP",
+   "ply": 1
+  },
+  {
+   "recipe": "D-L-Ne-ctx-zZL",
+   "ply": 1
+  }
+ ],
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-errdag4"
+ },
+ "prices_version": "P2",
+ "seed": 41,
+ "train": {
+  "seed": 41
+ }
+}

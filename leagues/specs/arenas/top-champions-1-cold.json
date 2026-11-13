@@ -1,0 +1,95 @@
+{
+ "name": "top-champions-1-cold",
+ "dir": "leagues/arenas/top-champions-1-cold",
+ "description": "Twin of top-champions-1 played at softmax temperature 0.02 (near argmax) instead of 0.1, same calibrations, 100 round-robins (11-11 ~00:45): the dip twins showed the late copy tree's 63-Elo lead over F-L at T 0.1 vanishing at T 0.02, so the standard arena's ranking may depend on how each model's calibration sets its play temperature. Alpha-beta plays argmax, so this is the measurement closer to the goal. The user's arena of 11-11 ~00:20: the old champion league's top 5 champions (cycle 75, by champion Elo at ply 2), the top 5 of the leaf-sources pair arena, and the top 1 of the lr-settings and probit-settings pair arenas, all at ply 2. The old champions are the champion run's model files (cycles/runs/), calibrated as there: 600 own games at depth 1, log-odds softmax T 0.1, seed 5, under the lr held-out set; hybrid9 replays their champion-run own games byte-for-byte (checked 00:20), so the default own-games binary is used.",
+ "binary": "models/from-scratch/bin/chessai-hybrid9",
+ "plies": [
+  2
+ ],
+ "entries": [
+  {
+   "file": "cycles/runs/T-L-Ne-share3-c/bdt394.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "champ.T-L-Ne-share3-c@394",
+   "label": "old champion league #1 (champion Elo 1886 at cycle 75)"
+  },
+  {
+   "file": "cycles/runs/T-L-Ne-fresh-c/bdt1720.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "champ.T-L-Ne-fresh-c@1720",
+   "label": "old champion league #2 (1878)"
+  },
+  {
+   "file": "cycles/runs/T-L-Te-merge-c/bdt999.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "champ.T-L-Te-merge-c@999",
+   "label": "old champion league #3 (1874)"
+  },
+  {
+   "file": "cycles/runs/T-L-Ne-c/bdt2101.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "champ.T-L-Ne-c@2101",
+   "label": "old champion league #4 (1866)"
+  },
+  {
+   "file": "cycles/runs/T-L-Nc-share-c/bdt545.model",
+   "kind": "bdt",
+   "heldout": "lr",
+   "name": "champ.T-L-Nc-share-c@545",
+   "label": "old champion league #5 (1862)"
+  },
+  {
+   "version": "leaf-sources:F-L#2.loc@93",
+   "name": "leaf-sources.F-L#2.loc@93",
+   "label": "leaf-sources pair #1 (1668)"
+  },
+  {
+   "version": "leaf-sources:F-L#1.loc@86",
+   "name": "leaf-sources.F-L#1.loc@86",
+   "label": "leaf-sources pair #2 (1631)"
+  },
+  {
+   "version": "leaf-sources-new:F-L#1.loc@105",
+   "name": "leaf-sources-new.F-L#1.loc@105",
+   "label": "leaf-sources pair #3 (1616)"
+  },
+  {
+   "version": "leaf-sources-new:F-L#2.loc@144",
+   "name": "leaf-sources-new.F-L#2.loc@144",
+   "label": "leaf-sources pair #4 (1612)"
+  },
+  {
+   "version": "leaf-sources-new:F-P.loc@43",
+   "name": "leaf-sources-new.F-P.loc@43",
+   "label": "leaf-sources pair #5 (1608)"
+  },
+  {
+   "version": "lr-settings-new:F-L+lr-rate=0.0125.loc@136",
+   "name": "lr-settings-new.F-L+lr-rate=0.0125.loc@136",
+   "label": "lr-settings pair #1 (1517)"
+  },
+  {
+   "version": "probit-settings-new:F-P+probit-tau=1e-5.loc@151",
+   "name": "probit-settings-new.F-P+probit-tau=1e-5.loc@151",
+   "label": "probit-settings pair #1 (1882)"
+  }
+ ],
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 20,
+  "min_rounds": 100,
+  "max_rounds": 100
+ }
+}

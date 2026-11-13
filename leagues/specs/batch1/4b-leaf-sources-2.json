@@ -1,0 +1,15 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "name": "leaf-sources-2",
+ "models": [
+  "F-L",
+  "F-P",
+  "F-N"
+ ],
+ "options": [
+  "self-play",
+  "local"
+ ],
+ "cycles": 100
+}

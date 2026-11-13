@@ -1,0 +1,54 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 600,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid13"
+ },
+ "name": "error-routing-p1",
+ "seed": 30,
+ "train": {
+  "seed": 30
+ },
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Nc-merge",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03",
+    "--revise-on": "fresh"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "description": "G2, NB error routing (theory-2 6.24), as the user allows error trees: no merges (the user, 11-08: error-tree/DAG work stays non-merging), so no fresh gate. F-P x2; probit error trees T-P-Ne limit 4, threshold 1M, split noise 0.03 x2; seat 1's cluster trees (T-P-Nc-merge, fresh gate) x2. Compares the archetypes as allowed (routing approach and gate differ), each against F-P in the same field. Launched by the coordinator when probit-limit8-p1 ends, 11-11; own games at T 0.1, read cold at T 0.02, plies 1-2."
+}

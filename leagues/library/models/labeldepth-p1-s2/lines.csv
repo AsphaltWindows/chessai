@@ -1,0 +1,4 @@
+line,model,option,kind,archetype,status,version,version_name,champion,champion_name,patience,entered_cycle,retired_cycle,train_binary,train_args,selfplay_binary,selfplay_args,label,base_model,train_overrides,selfplay_overrides,replicate,seed_offset
+F-P.loc,F-P,local,probit,F-P,active,400,E.L.17.400,240,E.L.17.240,,1,,models/from-scratch/bin/chessai-hybrid6,--use-probs,,,F-P,F-P,,,1,0
+F-P+label-depth=1+label-result=0.5.loc,F-P+label-depth=1+label-result=0.5,local,probit,F-P,active,400,E.L.20.400,356,E.L.20.356,,1,,models/from-scratch/bin/chessai-hybrid6,--use-probs --label-depth 1 --label-result 0.5,,,F-P label-depth=1 label-result=0.5,F-P,label-depth=1 label-result=0.5,,1,0
+F-P+label-depth=2+label-result=0.5.loc,F-P+label-depth=2+label-result=0.5,local,probit,F-P,active,400,E.L.20.400,396,E.L.20.396,,1,,models/from-scratch/bin/chessai-hybrid6,--use-probs --label-depth 2 --label-result 0.5,,,F-P label-depth=2 label-result=0.5,F-P,label-depth=2 label-result=0.5,,1,0

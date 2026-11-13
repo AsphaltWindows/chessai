@@ -1,0 +1,64 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 600,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-errdag2"
+ },
+ "name": "error-dag-p1",
+ "seed": 34,
+ "train": {
+  "seed": 34
+ },
+ "models": [
+  {
+   "model": "F-L",
+   "replicates": 2
+  },
+  {
+   "model": "T-L-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "D-L-Ne-ctx",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--router-split-z": "0",
+    "--router-split-limit": "4"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "D-L-Ne-ctx",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--router-split-z": "160",
+    "--router-split-limit": "4"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "description": "The user's error-DAG test (11-11 ~10:05-10:10; spec drafted by the errdag fork, deferred at 11:20 when the probit version took G3's slot; launched in error-growth-p1's slot at the user's request (11-11 ~12:10: \"have we tried the LR error dag as well?\", the six to include error DAGs)). Question: do error-routed DAGs with path parameters at least match the error-routed trees once the router-split threshold is calibrated?\n- Lines:\n  - D-L-Ne-ctx at --router-split-z 0 x2 and at --router-split-z 160 x2, both leaf limit 4 plus router limit 4, 1M.\n  - T-L-Ne limit 4, 1M x2.\n  - F-L x2 beside.\n- D-L-Ne-ctx: chessai-errdag2, the BDD with LR leaves, CNBP error routers and --path-context. Non-merging, no leaf sharing.\n- --router-split-limit 4: --split-limit counts leaf splits only, router splits stop at 4, and a router may split only while router splits made < leaf splits made. So the DAG is the tree plus at most 4 router splits, with the tree's whole leaf budget.\n- --router-split-z Z: a router splits when its window's mean router error rose by more than Z SE over its previous window's (and is at least the mean of all routers). At inf the DAG trains and plays exactly as the tree.\n- Offline (models/from-scratch/errdag/summary.txt): 30 fixed ply-1 rounds, 100k windows, 2 seeds, 10 held-out parts, leaf limit 4 plus router limit 4. Every arm keeps the tree's 9 leaves.\n  - Router splits per seed: z 0: 4 and 3; z 30: 4 and 1; z 50: 4 and 0; z 100: none (the tree).\n  - None beats the tree. Winner log-loss: 0.0007 better (SE 0.0007) at z 0, 0.0001 worse (0.0006) at z 30, 0.0003 worse (0.0005) at z 50. Full log-loss: 0.0030 worse (0.0013), 0.0000 (0.0014), 0.0018 better (0.0012).\n- z by count (the analyst's rule): z 0 makes about 4 router splits per 4 leaf splits, the sweep's z 50 about 2. The rises are drift, so their SE count grows with the window; scaled by sqrt(10) to 1M windows, z 50 becomes about 160. That scaling is an assumption: once the trees have their 4 leaf splits, count the z-160 lines' sibling sets (the first line of their model files, \"pathcontext 1 N\"), and move that pair's z if they sit at 0 or 4.\n- Tournament binary: chessai-errdag2. It loads path-context models and plays the others exactly as hybrid13.\n- After create: python3 leagues/specs/ply1/train_binary.py --from chessai-hybrid4gfx leagues/experiments/error-dag-p1. F-L and T-L-Ne then train on hybrid6 (exact); the DAG lines keep errdag2.\n- Cold read: leagues/specs/arenas/error-dag-p1-cold.DRAFT.json.\n- Prediction: both DAG pairs within 15 of the tree at ply 1, no gain."
+}

@@ -1,0 +1,83 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid8",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid8",
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "plies": [
+  2
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 10,
+  "min_rounds": 40,
+  "max_rounds": 40
+ },
+ "name": "diag-cal1-routing2",
+ "dir": "leagues/arenas/diag/cal1-routing2",
+ "description": "Diagnostic (a), second set, 11-10 ~19:20: final champions of error-targets, residual-leaves and trigger-gradient at ply 2 with their experiments' calibration (own ply-1 games). Twin: diag-cal2-routing2.",
+ "entries": [
+  {
+   "version": "error-targets:F-L.loc@165",
+   "name": "et.F-L",
+   "label": "error-targets champion v165"
+  },
+  {
+   "version": "error-targets:T-L-Le+split-limit=1+split-threshold=1000000.loc@208",
+   "name": "et.T-L-Le-L1",
+   "label": "error-targets champion v208"
+  },
+  {
+   "version": "error-targets:T-L-Le+route-before-train+split-limit=1+split-threshold=1000000.loc@232",
+   "name": "et.T-L-Le-rbt-L1",
+   "label": "error-targets champion v232"
+  },
+  {
+   "version": "error-targets:T-L-Le+route-before-train+error-target=gap+split-limit=1+split-threshold=1000000.loc@175",
+   "name": "et.T-L-Le-rbt+error-target=gap-L1",
+   "label": "error-targets champion v175"
+  },
+  {
+   "version": "error-targets:T-L-Le+route-before-train+error-target=gap+split-bootstrap=1000000+split-limit=1+split-threshold=1000000.loc@362",
+   "name": "et.T-L-Le-rbt+error-target=gap-boot-L1",
+   "label": "error-targets champion v362"
+  },
+  {
+   "version": "residual-leaves:F-L.loc@307",
+   "name": "rl.F-L",
+   "label": "residual-leaves champion v307"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+split-limit=4+split-threshold=1000000.loc@380",
+   "name": "rl.T-L-Nc-L4",
+   "label": "residual-leaves champion v380"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+leaf-residual+residual-inherit-sums+split-limit=4+split-threshold=1000000.loc@348",
+   "name": "rl.T-L-Nc-resid-L4",
+   "label": "residual-leaves champion v348"
+  },
+  {
+   "version": "trigger-gradient:F-L.loc@234",
+   "name": "tg.F-L",
+   "label": "trigger-gradient champion v234"
+  },
+  {
+   "version": "trigger-gradient:T-L-Nc+split-limit=8+split-threshold=1000000.loc@271",
+   "name": "tg.T-L-Nc-L8",
+   "label": "trigger-gradient champion v271"
+  },
+  {
+   "version": "trigger-gradient:T-L-Nc+split-gradient=9.5+split-limit=8+split-threshold=1000000.loc@295",
+   "name": "tg.T-L-Nc-T4-L8",
+   "label": "trigger-gradient champion v295"
+  }
+ ]
+}

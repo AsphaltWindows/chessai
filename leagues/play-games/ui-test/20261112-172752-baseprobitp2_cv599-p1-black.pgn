@@ -1,0 +1,38 @@
+[Event "chessai play page"]
+[Site "leagues dashboard"]
+[Date "2026.11.12"]
+[Round "-"]
+[White "baseprobitp2_c v599 at ply 1"]
+[Black "You"]
+[Result "1-0"]
+[Termination "checkmate"]
+[PlyCount "109"]
+[Time "17:27:52"]
+[LibraryId "baseprobitp2_c"]
+[Experiment "base-probit-p2"]
+[Line "D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#1.loc"]
+[Version "599"]
+[VersionRole "final"]
+[Model "D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#1"]
+[Archetype "D-P-Ne"]
+[Kind "bdd"]
+[TrainPly "2"]
+[Ply "1"]
+[Policy "log-odds argmax"]
+[Seed "767533501"]
+[Takebacks "0"]
+[Engine "chessai-play1 play-serve (26f4a935)"]
+[ModelFile "leagues/library/models/base-probit-p2/runs/D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#1.loc/bdd599.model"]
+[ModelMd5 "6991ec9bc2ae10a3b7c77935e061218b"]
+[Calibration "own games bf670b0be6e0857232d72350031d8e5f (play-games)"]
+[Started "2026-11-12T22:27:44.693Z"]
+
+1. f3 e5 2. Na3 d5 3. Nb5 Bf5 4. Nxc7+ Qxc7 5. Nh3 Bxh3 6. gxh3 Bb4 7. a4 g5 8.
+c3 Ke7 9. cxb4 Nd7 10. Qb3 Rc8 11. Qxd5 Qc3 12. dxc3 Rc4 13. Qxc4 f6 14. Qc8 h6
+15. Bxg5 Kd6 16. Qxd7+ Kxd7 17. Bxf6 Kd6 18. Bxh8 h5 19. Bxe5+ Ke7 20. Bd4 Kd6
+21. h4 Kc7 22. Rg1 Kc8 23. Rg6 a6 24. Rd1 b5 25. axb5 Kd8 26. bxa6 Nf6 27.
+Bxf6+ Kc8 28. Kf2 Kc7 29. a7 Kb7 30. a8=Q+ Kxa8 31. Bd4 Kb7 32. Bg2 Kc8 33. Rd3
+Kc7 34. Bc5 Kc8 35. Rg8+ Kc7 36. Rh8 Kb7 37. Rd4 Kc7 38. Rc4 Kd7 39. b5 Kc7 40.
+b6+ Kd7 41. b7 Ke6 42. b8=Q Kf7 43. Qe5 Kg6 44. Qxh5+ Kf6 45. Qe5+ Kg6 46. Qd4
+Kf5 47. Qe5+ Kg6 48. Qd5 Kg7 49. Qd4+ Kg6 50. Qe5 Kf7 51. Qd4 Kg6 52. h5+ Kf7
+53. h6 Kg6 54. Qe5 Kf7 55. Qf5# 1-0

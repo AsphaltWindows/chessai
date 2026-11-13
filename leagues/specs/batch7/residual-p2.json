@@ -1,0 +1,68 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "residual-p2",
+ "seed": 70,
+ "train": {
+  "seed": 70
+ },
+ "references": [],
+ "entry_ply": 2,
+ "ply1_entries": false,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300,
+  "rate_scale": "sqrt",
+  "guard_z": 1.0
+ },
+ "cycles": 401,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid20"
+ },
+ "cold_games": {
+  "temperature": 0.02,
+  "share": 0.5,
+  "train": false
+ },
+ "rate_every": 4,
+ "champion_se_kind": "draw-aware",
+ "champion_se": 3,
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2,
+   "train_binary": "chessai-hybrid6"
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "replicates": 2,
+   "train_binary": "chessai-hybrid6"
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03",
+    "--leaf-residual": true,
+    "--residual-inherit-sums": true
+   },
+   "to": "train",
+   "replicates": 2,
+   "train_binary": "chessai-hybrid6rp"
+  }
+ ],
+ "description": "RESIDUAL LEAVES AT PLY 2 (written 2026-11-12 ~21:55 by the residual fork; NOT launched by it; the coordinator launches). The user approved residual leaves 11-12 ~21:48 (\"sure let's try residual leaves\") after the coordinator's explanation (a shared trunk trained on every position plus a per-leaf correction). Design: analyst 6.98: chessai-hybrid6rp's residual probit leaves ARE the wanted trunk + residual, hierarchical: every delegator's shadow trains on every example through it and a leaf predicts shadow + delta, so the trunk tracks the moving ply-2 stream at the flat's speed whatever the leaf's share (the data lag of 6.43-6.46, where it bites). Flags: the std's capped T-P-Ne exactly + --leaf-residual --residual-inherit-sums (the delta starts as the plain copy and moves as a plain leaf would; NOT the non-inherit form, which also changes the predictions' spread). Pure ply 2 FROM SCRATCH (a warm start would confound the lag with the rung); one seed (70; ply-2 run-to-run SD ~5; a second seed only if the result lands 15-40). Lines x2: F-P (hybrid6), T-P-Ne capped (hybrid6), the same + residual (hybrid6rp; flags off it trains byte-identically to hybrid6, checked on T-P-Ne by the residual fork). Settings as the standard: 1,584 games, self-games, cold T 0.02 share 0.5 rating-only, rate_every 4, crowning at 3 draw-aware SEs, plateau scaled sqrt guard_z 1, floor 300, cap 400; tournament chessai-hybrid20. READS: against y + v + l @299 (replay-p2, diversity-p2, probit-late-p2: F-P x2 and T-P-Ne capped x2 each) at v150, v300 and the final, plies 2 and 1. BANDS (ply 2): residual - capped 20..60 (centre 35); residual - F-P -10..40 (centre 15); ply 1: residual - capped -20..20. RULES: 30+ over capped at ply 2 => the trunk beats the lag (next: a ply-3 twin and a shrunk-delta variant); within 15 => the partition has nothing to add at ply 2. Prior: the LR T3 run (Nov 10, mixed plies, 400 cycles) showed no lasting gain; 6.98: not evidence against (no lag at ply 1, other regime, LR deltas had the dead-step defect). Honest expectation 20-60 over the capped tree, level with or a little above F-P. Cost ~5-7 CPU-h."
+}

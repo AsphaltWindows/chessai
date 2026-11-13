@@ -1,0 +1,48 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "replay-p2",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 38,
+ "train": {
+  "seed": 38
+ },
+ "references": [],
+ "entry_ply": 2,
+ "self_games": true,
+ "replay": {
+  "share": 0.5,
+  "window": 50
+ },
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 400
+ },
+ "cycles": 600,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid16"
+ },
+ "prices_version": "P2",
+ "ply1_entries": false,
+ "description": "Replay test at ply 2 (11-11 ~22:00, analyst 6.46 (i)). The offline order and mix checks showed the probit and LR learners follow their most recent data, so a pure ply-2 field ends on its newest, narrowest games; a stationary mix was best (the interleaved P2x/P2 flat beat the P2-only flat by 186 at ply 2; trees beat flats on stationary data and lose under a switch).\n- Question: does replaying the run's own earlier games lift F-P and the error tree at ply 2, and does it open a tree-vs-flat gap that probit-late-p2 (a tie) did not show?\n- One factor against probit-late-p2: \"replay\": {\"share\": 0.5, \"window\": 50}. Each cycle's local set is its own games (round-robin games and self-games, as before) plus as many again, sampled uniformly without replacement from the own games of the 50 cycles before, deterministically from the seed and the cycle (leagues.py replay_option; FORMATS.md config.json `replay`). Everything else is probit-late-p2's: seed 38 (a twin: cycle 1 has nothing to replay and plays and trains as probit-late-p2's cycle 1), F-P x2 and T-P-Ne (NB error router, non-merging, limit 4, 1M, noise 0.03) x2, ply-2 field (entry_ply 2, no ply-1 entries, no references), self-games, 12 rounds a cycle, the scaled plateau with floor 400 (cap 600). Games on chessai-hybrid16 (probit-late-p2 played hybrid13: the same games, PERF-LEDGER); after create, leagues/specs/ply1/train_binary.py moves training to chessai-hybrid6 (as probit-late-p2). Checked by a 3-cycle pilot of this spec in a scratch root (models/from-scratch/replay/pilot): cycles 1-2 played probit-late-p2's 816 games exactly and its 4 version-1 models came out byte for byte; versions 2-3 differ (cycle 2 replayed cycle 1's 192 games, cycle 3 768 of 960 kept).\n- Comparator: probit-late-p2 itself (done at cycle 400), read head-to-head at equal versions, v300 and v399: each replay line against its probit-late-p2 counterpart (F-P vs F-P, T-P-Ne vs T-P-Ne), pooled over the replicates at the same version and ply (h2h_btg.py, analyst 6.44's read rule), cold at plies 1-3 at T 0.02; and the tree-vs-flat head-to-head inside each run at the same versions.\n- Cost: probit-late-p2 took ~2.0 CPU-h for 400 cycles (tournament 1.2, own calibration 0.44, self-games 0.24, training 0.12) and 0.86 h wall. Replay doubles each training set: the pilot's cycle-3 training took 1.46 CPU s against probit-late-p2's 0.57 (~0.2 CPU-h more over 400 cycles), and keeps 50 cycles of games in replaypool/ (~38,000 games, ~1.5 GB on disk at the pilot's ~40 KB a game; deletable by hand after the read): ~2.3 CPU-h, ~1 h wall."
+}

@@ -1,0 +1,73 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid8",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid8",
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "plies": [
+  2
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 10,
+  "min_rounds": 40,
+  "max_rounds": 40
+ },
+ "name": "diag-cal1-routing",
+ "dir": "leagues/arenas/diag/cal1-routing",
+ "description": "Diagnostic (a), 11-10 ~19:50 (the user: 'continue the tests'): final champions of split-growth and single-split (F-L and LR-leaf trees) at ply 2 with their experiments' calibration (own ply-1 games). Twin: diag-cal2-routing.",
+ "entries": [
+  {
+   "version": "split-growth:F-L.loc@390",
+   "name": "sg.F-L",
+   "label": "split-growth champion v390"
+  },
+  {
+   "version": "split-growth:T-L-Nc-merge+split-limit=1+split-threshold=1000000.loc@381",
+   "name": "sg.T-L-Nc-merge-L1",
+   "label": "split-growth champion v381"
+  },
+  {
+   "version": "split-growth:T-L-Nc-merge+split-limit=4+split-threshold=1000000.loc@398",
+   "name": "sg.T-L-Nc-merge-L4",
+   "label": "split-growth champion v398"
+  },
+  {
+   "version": "split-growth:T-L-Nc+split-limit=1+split-threshold=1000000.loc@337",
+   "name": "sg.T-L-Nc-L1",
+   "label": "split-growth champion v337"
+  },
+  {
+   "version": "split-growth:T-L-Nc+split-limit=4+split-threshold=1000000.loc@394",
+   "name": "sg.T-L-Nc-L4",
+   "label": "split-growth champion v394"
+  },
+  {
+   "version": "single-split:F-L.loc@150",
+   "name": "ss.F-L",
+   "label": "single-split champion v150"
+  },
+  {
+   "version": "single-split:T-L-Le+split-limit=1+split-threshold=1000000.loc@287",
+   "name": "ss.T-L-Le",
+   "label": "single-split champion v287"
+  },
+  {
+   "version": "single-split:T-L-Nc-merge+split-limit=1+split-threshold=1000000.loc@517",
+   "name": "ss.T-L-Nc-merge",
+   "label": "single-split champion v517"
+  },
+  {
+   "version": "single-split:T-L-Tc-merge+split-limit=1+split-threshold=1000000.loc@746",
+   "name": "ss.T-L-Tc-merge",
+   "label": "single-split champion v746"
+  }
+ ]
+}

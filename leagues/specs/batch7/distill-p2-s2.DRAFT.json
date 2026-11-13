@@ -1,0 +1,107 @@
+{
+ "description": "DRAFT (2026-11-13 ~14:15, the distill fork for the coordinator; the user's go 11-13 ~12:55: \"We can test distillatoin inside stronger field, let's go next\"). DISTILLATION INSIDE THE STANDARD FIELD, seed 87 (the twin, seed 86, is read pooled with it). QUESTION: trained at ply 2 inside the training standard's mixed field, do trees and DAGs that learn from the field's F-P search pass the field's flats (the goal: a model that outperforms the parameter-limited ones)? Single-field evidence so far: labels-tree-p2 (a 4-line field) put the F-P-labelled capped tree level with the labelled flat; here every tree/DAG of the standard distills, in the standard's stronger 8-line field, against the standard's own result-label flats. DESIGN: exactly the ply-2 standard from scratch, std-v1-p2-x3 (seed 69): the 8 lines, every setting (every game at ply 2, 1,584 games a cycle with self-games, training games at T 0.1, cold games T 0.02 share 0.5 rating only, rate every 4, draw-aware crowning 3 SE, plateau floor 300 sqrt guard 1, cap 601), EXCEPT (1) the six tree/DAG lines train with --label-depth 2 --label-result 0.5 --label-model F-P: each position's target is half a depth-2 search by the field's F-P line (its current version, the one that played the cycle's games: leagues.py label_line_args, the moving labeller), calibrated on the round's results, half the game's result; leaves and error-router targets train on the blended label; F-L and F-P stay on result labels (chessai-hybrid6, as x3); (2) tournament chessai-hybrid21 (hybrid20's exact successor: the same games, the route-state cap raised). LINES: F-L; F-P; T-L-Ne-cap, T-P-Ne-cap, T-L-Ne-grow-f10-std, T-P-Ne-grow-std, D-L-Ne-ctx-grow-std, D-P-Ne-ctx-grow-std (+ the label overrides): recipe rows holding x3's train arguments token for token (make_recipes.py HAND, 11-13; x3's own names plus the overrides would run to 128 characters), on chessai-treelab, which without --label-* trains byte-identically to grow7 and hybrid6 on these six arms (models/from-scratch/tree-labels/id_p1_tl.txt; grow7 = hybrid6 on the capped trees, fastbin/grow7/id_p1_g7.txt). COMPARATORS: within the run each tree/DAG vs the field's F-P and F-L (the goal cell); across runs each line vs std-v1-p2-x3's same recipe (one seed; run SD ~28 a line at ply 2). READS (models/from-scratch/batch7-reads/distill-read.sh mid|final): windows v290/295/300 and final-10/-5/final, both seeds in one arena per ply, plies 2 and 3, the y/v/l @299 stranger panel (make_split_read.py defaults: hybrid21 / hybrid18, T 0.02, field-mean anchor, 30 RR); per recipe tree - field F-P and tree - field F-L, pooled per seed and both; x3's lines at the same windows on the same panel. PRE-REGISTERED RULE: any distilled tree/DAG leading the field's best flat by 30+ at plies 2 AND 3 (two-seed window means) is the first pass of the goal; within 15 means distillation lifts trees only to the flats' level. COST: measured in the smoke (cycles 1-3 on the idle machine, ~340k positions a cycle): labels ~3.8 s wall, ~7.7 CPU-s per labelled line a cycle; training 41-53 CPU-s a cycle against x3's 3-6 at the same cycles. With x3's 63.6 CPU-s a cycle (review-1113c, cycles 1-400) and its ~198k positions a cycle after cycle 100, the six label computations add 29-69 CPU-s a cycle (4.9 idle to 11.5 busy each): 93-133 CPU-s a cycle, ~10-15 CPU-h a seed to cycle 400, ~16-22 to the cap (601). The shared label cache (review-1113c's candidate 1, built next and swapped in between cycles only after its byte-identity proofs) leaves one label computation of six: -24 to -58 CPU-s a cycle.",
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "distill-p2-s2",
+ "models": [
+  {
+   "model": "F-L",
+   "train_binary": "chessai-hybrid6"
+  },
+  {
+   "model": "F-P",
+   "train_binary": "chessai-hybrid6"
+  },
+  {
+   "model": "T-L-Ne-cap",
+   "set": {
+    "--label-depth": "2",
+    "--label-result": "0.5",
+    "--label-model": "F-P"
+   },
+   "to": "train",
+   "train_binary": "chessai-treelab"
+  },
+  {
+   "model": "T-P-Ne-cap",
+   "set": {
+    "--label-depth": "2",
+    "--label-result": "0.5",
+    "--label-model": "F-P"
+   },
+   "to": "train",
+   "train_binary": "chessai-treelab"
+  },
+  {
+   "model": "T-L-Ne-grow-f10-std",
+   "set": {
+    "--label-depth": "2",
+    "--label-result": "0.5",
+    "--label-model": "F-P"
+   },
+   "to": "train",
+   "train_binary": "chessai-treelab"
+  },
+  {
+   "model": "T-P-Ne-grow-std",
+   "set": {
+    "--label-depth": "2",
+    "--label-result": "0.5",
+    "--label-model": "F-P"
+   },
+   "to": "train",
+   "train_binary": "chessai-treelab"
+  },
+  {
+   "model": "D-L-Ne-ctx-grow-std",
+   "set": {
+    "--label-depth": "2",
+    "--label-result": "0.5",
+    "--label-model": "F-P"
+   },
+   "to": "train",
+   "train_binary": "chessai-treelab"
+  },
+  {
+   "model": "D-P-Ne-ctx-grow-std",
+   "set": {
+    "--label-depth": "2",
+    "--label-result": "0.5",
+    "--label-model": "F-P"
+   },
+   "to": "train",
+   "train_binary": "chessai-treelab"
+  }
+ ],
+ "seed": 87,
+ "train": {
+  "seed": 87
+ },
+ "references": [],
+ "entry_ply": 2,
+ "ply1_entries": false,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300,
+  "rate_scale": "sqrt",
+  "guard_z": 1.0
+ },
+ "cycles": 601,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid21"
+ },
+ "cold_games": {
+  "temperature": 0.02,
+  "share": 0.5,
+  "train": false
+ },
+ "rate_every": 4,
+ "champion_se_kind": "draw-aware",
+ "champion_se": 3
+}

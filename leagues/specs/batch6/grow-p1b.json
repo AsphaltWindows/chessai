@@ -1,0 +1,45 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "grow-p1b",
+ "description": "Growth rule, the MDL bar as the only factor, at ply 1 (analyst 6.48, 11-11 ~22:25, after grow-p1: every one of grow1's 16 undone trials passed the 2-block-SE z bar (z 3.1-9.9, gains 0.0024-0.0068 nats) and failed only the MDL bar k ln n / 2n; the trial gain is prequential, so the bar charges the parametric cost twice, amortised over the past n while a kept split pays on every future example). Lines: F-P x2; T-P-Ne-grow (grow-p1's grow line as a recipe: T-P-Ne without --reset-leaves inf, with --trial-error log, --split-threshold 1M, --split-noise 0.03, --split-limit 1000000, --split-rule grow; grow1's rule: stagnation 2 windows at 2 block-SE, a credit per 5M positions capped at 2, trials against an unsplit shadow kept iff gain > 2 block-SE and the MDL bar) x2; the same with --grow-mdl 0 (no MDL bar; the z bar alone decides) x2. The analyst's arm A also had --grow-min-gain 0.001, which no binary has; the z bar sat at 0.0006-0.0017 in grow-p1, so A here is the bar's pure removal and a min-gain floor is the follow-up if A over-grows. Arm B (grow4: no stagnation gate) runs in the next field. Every line trains on chessai-grow1 (train_binary.py after create); games chessai-hybrid16; seed 46. Floor 300, cap 400. Read: cold, T 0.02, one arena per ply (1, 2), v150 and the final, head to head A vs grow1 and each vs F-P, plus split_table.py. Predictions (6.48): A keeps 20-30 splits per seed by v399 (41-61 leaves; nodes pass 64 near v300); A minus grow1 -15..10 at ply 1, -30..0 at ply 2; A over F-P 80-120 at ply 1. Rule: A within 10 of grow1 at both plies with 40+ leaves says growth is governed by the z bar and the credit rate D alone (size is then the user's choice through D); A 20+ below at ply 2 says set a min-gain at the level below which A's kept splits sit (probably 0.003). Cost ~ grow-p1's (~1.5 CPU-h) plus deeper trees' training.",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne-grow",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne-grow",
+   "set": {
+    "--grow-mdl": "0"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 46,
+ "train": {
+  "seed": 46
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 400,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid16"
+ }
+}

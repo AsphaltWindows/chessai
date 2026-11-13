@@ -1,0 +1,67 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid13",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "growth-300k-p1-cold",
+ "dir": "leagues/arenas/diag/growth-300k-p1-cold",
+ "plies": [
+  1,
+  2
+ ],
+ "description": "Cold read of growth-300k-p1's final versions at plies 1-2 near argmax (six-model shortlist, theory-2 6.24). Tags: fp=^F-P, t300k=split-threshold=300000, t1m=split-threshold=1000000",
+ "entries": [
+  {
+   "version": "growth-300k-p1:F-P#1.loc@340",
+   "name": "fp.L1@340",
+   "label": "growth-300k-p1 F-P#1.loc final version v340"
+  },
+  {
+   "version": "growth-300k-p1:F-P#2.loc@340",
+   "name": "fp.L2@340",
+   "label": "growth-300k-p1 F-P#2.loc final version v340"
+  },
+  {
+   "version": "growth-300k-p1:T-P-Nc-merge+split-limit=8+split-threshold=300000+split-noise=0.03+revise-on=fresh#1.loc@340",
+   "name": "t300k.L1@340",
+   "label": "growth-300k-p1 T-P-Nc-merge+split-limit=8+split-threshold=300000+split-noise=0.03+revise-on=fresh#1.loc final version v340"
+  },
+  {
+   "version": "growth-300k-p1:T-P-Nc-merge+split-limit=8+split-threshold=300000+split-noise=0.03+revise-on=fresh#2.loc@340",
+   "name": "t300k.L2@340",
+   "label": "growth-300k-p1 T-P-Nc-merge+split-limit=8+split-threshold=300000+split-noise=0.03+revise-on=fresh#2.loc final version v340"
+  },
+  {
+   "version": "growth-300k-p1:T-P-Nc-merge+split-limit=8+split-threshold=1000000+split-noise=0.03+revise-on=fresh#1.loc@340",
+   "name": "t1m.L1@340",
+   "label": "growth-300k-p1 T-P-Nc-merge+split-limit=8+split-threshold=1000000+split-noise=0.03+revise-on=fresh#1.loc final version v340"
+  },
+  {
+   "version": "growth-300k-p1:T-P-Nc-merge+split-limit=8+split-threshold=1000000+split-noise=0.03+revise-on=fresh#2.loc@340",
+   "name": "t1m.L2@340",
+   "label": "growth-300k-p1 T-P-Nc-merge+split-limit=8+split-threshold=1000000+split-noise=0.03+revise-on=fresh#2.loc final version v340"
+  }
+ ]
+}

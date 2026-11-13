@@ -1,0 +1,41 @@
+{
+  "kind": "experiment",
+  "root": "/home/iv/dev/chessai/leagues",
+  "name": "residual-leaves-probit",
+  "models": [
+    "F-P",
+    {
+      "model": "T-P-Nc-merge",
+      "set": {
+        "--revise": null,
+        "--split-limit": "4",
+        "--split-threshold": "1000000"
+      },
+      "to": "train"
+    },
+    {
+      "model": "T-P-Nc-merge",
+      "set": {
+        "--revise": null,
+        "--leaf-residual": true,
+        "--residual-inherit-sums": true,
+        "--split-limit": "4",
+        "--split-threshold": "1000000"
+      },
+      "to": "train"
+    }
+  ],
+  "options": [
+    "local"
+  ],
+  "seed": 7,
+  "train": {
+    "seed": 7
+  },
+  "rounds_per_cycle": 9,
+  "min_rounds": 9,
+  "tournament": {
+    "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid8"
+  },
+  "cycles": 1000
+}

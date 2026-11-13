@@ -1,0 +1,45 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "s7v3-p1-s1",
+ "description": "DRAFT (the PAIRS3 BUILD fork, 2026-11-13 ~03:xx; not created, not launched: the coordinator launches). S7v3: data-chosen PAIRWISE FEATURES for the flat probit, third statistic (analyst 6.111 on s7-p1's lists: hubs, inert pairs, leakage). Seed 77 replicate 1 of 2; s7v3-p1-s2 (seed 78) is the other. QUESTION: does F-P-S7v3 beat plain F-P at ply 1? BAND (6.111): S7 minus plain 20-80 at the final; within 15 WITH A CLEAN LIST (no value in more than ~5 pairs, under 10% inert |mu| < 2 sd, once the list fills) closes the feature lever. LINES (two, one factor: the pairs): F-P on chessai-pairs3f without the flag (training byte-identical to hybrid6) and F-P-S7v3 (recipes.txt row F-P-S7v3: chessai-pairs3f --use-probs --pairs on: the binary's defaults, the marginal contrast and the floored SE). F-P-S7v3: every conjunction of two feature values is a candidate (356,642; 2,415 active a position); at the end of each training round that crosses a multiple of 1M examples (from the model's start) the window since the previous checkpoint is tested (the statistics restart at every checkpoint: no leakage from earlier models): z = the pair's interaction contrast over its own SE clustered by game, the component terms included (frequency-aware: null mean z^2 ~1 in each band of games), and the selection divides by the larger of that SE and the per-example SE (pairs3f: a side-to-move pair compares positions within games, so a tiny effect gets a tiny clustered SE; the floor asks an effect worth a weight); the 20 with the largest floored |z| above 5 become weights (mean 0, sd 0.5 x prior 0.3), at most 300 in all, after dropping each pair active in 3M examples since chosen whose |mean| is below 1.0 sd. Checks, null by band, offline held-out test, kill -9 smoke and the clean-list smoke: models/from-scratch/pairs3/summary.txt. Model files: probit version 2, pairs1/2/3/3f load them; the statistics are training state, runs/<line>/probitN.state (kind probit-pairs3, ~66 MB; the driver keeps the current version's). PLAY: ply 1, games_per_cycle 1584 (with 4 entries the 48-round cap binds: 576 tournament games + 192 self-games a cycle, ~94k positions: a checkpoint every ~11 cycles), T 0.1 round robins and self-games, every line trains on them; tournament binary chessai-pairs3f (plays every model as hybrid21). RATING: rate_every 4, cold games T 0.02 share 0.5, rating only. CROWNING: draw-aware, 3 SEs. PLATEAU: scaled, sqrt, guard_z 1, floor 300 (min_cycles 300), cap 400 (cycles 401). READS: as s7-p1's (make_split_read.py --binary chessai-pairs3f). LOGS: runs/F-P-S7v3.loc.log: \"pairs: N chosen of cap 300; ...\" and one \"pairs checkpoint at T examples: window E examples, G games, mean z^2 by games under 100 / 100-999 / 1000+, max |z|, over the bar N (floored: M); dropped ...; added ...\" line per checkpoint. COST: ~0.7-1.0 CPU-h a run. Seeds 77 and 78: unused before.",
+ "seed": 77,
+ "train": {
+  "seed": 77
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300,
+  "rate_scale": "sqrt",
+  "guard_z": 1.0
+ },
+ "cycles": 401,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-pairs3f"
+ },
+ "cold_games": {
+  "temperature": 0.02,
+  "share": 0.5,
+  "train": false
+ },
+ "rate_every": 4,
+ "champion_se_kind": "draw-aware",
+ "champion_se": 3,
+ "models": [
+  {
+   "model": "F-P",
+   "train_binary": "chessai-pairs3f"
+  },
+  {
+   "model": "F-P-S7v3"
+  }
+ ]
+}

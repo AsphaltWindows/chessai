@@ -1,0 +1,52 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 600,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid13"
+ },
+ "name": "lr-share-p1",
+ "seed": 31,
+ "train": {
+  "seed": 31
+ },
+ "models": [
+  {
+   "model": "F-L",
+   "replicates": 2
+  },
+  {
+   "model": "T-L-Ne-share3",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-L-Nc-merge",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--revise-on": "fresh"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "description": "G6 (theory-2 6.24, after the pre-screen): the LR error tree with leaf sharing 0.3 (T-L-Ne-share3, non-merging per the user's 11-08 rule; the best old error-tree reading, 31 at ply 1 and 81 at ply 2 cold) limit 4, threshold 1M x2, against fresh-gate LR trees (T-L-Nc-merge limit 4, threshold 1M; lr-trees-p1's arm, so also seat 2's second seed) x2, F-L x2 beside. Prediction: share3 20-40 over F-L at ply 1. Own games at T 0.1, read cold at T 0.02, plies 1-2. Launched by the coordinator when G1 or G4 ends, 11-11."
+}

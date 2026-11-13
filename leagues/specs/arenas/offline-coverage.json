@@ -1,0 +1,61 @@
+{
+ "name": "offline-coverage",
+ "dir": "leagues/arenas/diag/offline-coverage",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 150,
+  "max_rounds": 150
+ },
+ "plies": [
+  1,
+  2
+ ],
+ "description": "Analyst 6.45 check (ii) (11-11 ~21:25): coverage. The pair trained one pass on 21.6M of P2x (G2's ply-1-field finals playing at ply 2: weaker, different players) against the pair on 21.6M of P2 (the ply-2 field's own finals). Coverage predicts the P2x flat over the P2 flat by 100-250 at ply 2 (weaker players make better ply-2 training data). Verdict on head-to-heads (h2h_btg.py).",
+ "entries": [
+  {
+   "file": "models/from-scratch/offline-ply/models/P2x/fp/probit108.model",
+   "kind": "probit",
+   "name": "p2xfp.S1@108",
+   "label": "F-P on 21.6M of P2x (ply-1-field models playing at ply 2)"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/models/P2x/tne/bdt108.model",
+   "kind": "bdt",
+   "name": "p2xtne.S1@108",
+   "label": "T-P-Ne on 21.6M of P2x"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/models/P2/fp/probit108.model",
+   "kind": "probit",
+   "name": "p2fp.S1@108",
+   "label": "F-P on 21.6M of P2 (ply-2 field)"
+  },
+  {
+   "file": "models/from-scratch/offline-ply/models/P2/tne/bdt108.model",
+   "kind": "bdt",
+   "name": "p2tne.S1@108",
+   "label": "T-P-Ne on 21.6M of P2"
+  }
+ ]
+}

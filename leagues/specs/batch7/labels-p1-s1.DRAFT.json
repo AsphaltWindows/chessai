@@ -1,0 +1,51 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "seed": 73,
+ "train": {
+  "seed": 73
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300,
+  "rate_scale": "sqrt",
+  "guard_z": 1.0
+ },
+ "cycles": 401,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid20"
+ },
+ "cold_games": {
+  "temperature": 0.02,
+  "share": 0.5,
+  "train": false
+ },
+ "rate_every": 4,
+ "champion_se_kind": "draw-aware",
+ "champion_se": 3,
+ "name": "labels-p1-s1",
+ "models": [
+  {
+   "model": "F-P",
+   "train_binary": "chessai-hybrid6"
+  },
+  {
+   "model": "F-P",
+   "set": {
+    "--label-depth": "2",
+    "--label-result": "0.5"
+   },
+   "to": "train",
+   "train_binary": "chessai-hybrid6"
+  }
+ ],
+ "description": "DRAFT (coordinator 11-12 ~23:10; analyst 6.99 lever 2, agenda item 15 positional weakness). SEARCH LABELS, ONE FACTOR: the training label. Two-line ply-1 field: F-P on game results vs F-P on --label-depth 2 --label-result 0.5 (each position labelled half by a depth-2 search with the model as it starts the round, calibrated on the round's results, half by the game result; zero knowledge, TD-leaf-like); both train on the same local set (1,584 games a cycle). Seed 73 (s1; the other seed is a separate run). hybrid20 tournament, T 0.1 training games, cold T 0.02 share 0.5 rating-only, rate every 4, draw-aware crowning 3 SE, plateau floor 300 sqrt guard 1, cap 401. Reads: label line minus result line against the FP face of the r/e/g/h @300 panel at v150, v300 and final, plies 1-2. Bands (6.99): 20-80 at ply 1, 30-100 at ply 2; 40+ adopts search labels for the standard's flats, under 15 closes."
+}

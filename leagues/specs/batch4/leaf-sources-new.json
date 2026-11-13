@@ -1,0 +1,74 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "models": [
+  {
+   "model": "F-L",
+   "replicates": 2
+  },
+  "F-P",
+  "F-N"
+ ],
+ "options": [
+  "self-play",
+  "local"
+ ],
+ "name": "leaf-sources-new",
+ "references": [],
+ "ply1_entries": false,
+ "plateau": {
+  "cycles": 50,
+  "min_cycles": 100
+ },
+ "cycles": 1000,
+ "rounds_per_cycle": 13,
+ "min_rounds": 13,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid9"
+ },
+ "prices_version": "P2",
+ "batch4": {
+  "original": "leaf-sources",
+  "note": "Batch 4: leaf-sources rerun without random players or ply-1 entries until the champions plateau. Rounds: 3101 games with a model at ply 2 per cycle in the original over 240 per round (8 lines, two ply-2 entries each).",
+  "binaries": {
+   "F-L#1.sp": {
+    "train": "chessai-hybrid6",
+    "selfplay": "chessai-hybrid4gfx"
+   },
+   "F-L#1.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "F-L#2.sp": {
+    "train": "chessai-hybrid6",
+    "selfplay": "chessai-hybrid4gfx"
+   },
+   "F-L#2.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "F-P.sp": {
+    "train": "chessai-hybrid6",
+    "selfplay": "chessai-hybrid4gfx"
+   },
+   "F-P.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   },
+   "F-N.sp": {
+    "train": "chessai-hybrid6",
+    "selfplay": "chessai-hybrid4gfx"
+   },
+   "F-N.loc": {
+    "train": "chessai-hybrid6",
+    "selfplay": null
+   }
+  },
+  "rounds_from": {
+   "original": "leaf-sources",
+   "ply2_games_per_cycle": 3101.2,
+   "lines": 8,
+   "games_per_round": 240
+  }
+ }
+}

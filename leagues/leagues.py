@@ -3,8 +3,11 @@
 a root, each a league dir with the files of leagues/FORMATS.md. One code base runs both kinds.
 
     python3 leagues/leagues.py create SPEC.json          make a league from a spec (see make_config)
-    python3 leagues/leagues.py add LEAGUE RECIPE...      global league: new recipes enter untrained at the next cycle
+    python3 leagues/leagues.py add LEAGUE --ply P RECIPE...   global league: new models (recipe at ply P) enter
+                                                         untrained at the next cycle
     python3 leagues/leagues.py run LEAGUE [--cycles N]   run cycles; an interrupted cycle resumes where it stopped
+    python3 leagues/leagues.py extend LEAGUE --cycles N  an experiment that ended at its cap goes on to cap N, as if
+                                                         N had been its cap (its last cycle runs again and trains)
     python3 leagues/leagues.py status [ROOT|LEAGUE]      every league of a root, or one league
     python3 leagues/leagues.py stop LEAGUE               ask the driver to stop after the current cycle (writes STOP)
     python3 leagues/leagues.py index ROOT                rewrite ROOT/index.json
@@ -15,24 +18,49 @@ leagues/repeat.sh LEAGUE runs one cycle per driver process until STOP, a failure
 
 A cycle, by phase (state.json "phase"; each phase can be re-run after an interruption):
   copy (experiments with the global option): copy the fewest newest unused full global rounds whose ply-2 CPU
-      covers min_rounds experiment rounds; waiting while there are none
-  calibration: untrained version 0 of entering lines; own calibration games of every version in the field
-  tournament: the cycle's double round-robins of the field (current@1, current@2, champion@2, anchors, references)
+      covers min_rounds experiment rounds (games_per_cycle's R instead, with it); waiting while there are none
+  calibration: version 0 of entering lines (untrained, or a copy of its warm start's model: "start" in the spec);
+      own calibration games of every version in the field; with games_per_cycle T (or the global league's
+      games_per_entry G) the cycle's rounds from its field of N entries: round(T / (N (N - 1))), from 1 to 48
+  tournament: the cycle's double round-robins of the field (experiments: current@1, current@2, champion@2,
+      references; an experiment may drop the references and the ply-1 entries: references [], ply1_entries false;
+      with "entry_ply": P other than 2 its entries are current@P and champion@P only. The global league (the 11-10
+      design): the references and each model's current and champion at the model's own ply); with "openings"
+      (experiments) every game opens with K random plies, the self-games' and top-up games' too, not the cold games'
   batch (global): the cycle's rounds become the batch experiments copy from
-  decide: champion tests at champion_se SE, patience (global), anchors (global)
-  train: global-league, local and global lines train once on their games (games with a model at ply 2)
-  self-play (experiments): self-play lines play for the generation CPU of the local lines' games
+  decide: champion tests at champion_se SE (experiments with "champion_se_kind": "draw-aware": the draw-aware SE,
+      contrast_ses_draws), patience (global: rule 6, by the training positions of each version that
+      failed to become champion), the
+      plateau rule (experiments with "plateau": the cycle is the last one when no line has crowned a champion for
+      plateau.cycles cycles; with plateau.guard_z G, not while a line's champion test in the cycle has z above G); with "rate_every": N (experiments with cold games that rate only) only the rated cycles
+      1, N + 1, 2N + 1, ... play the cold games and decide (champion tests, crownings, the plateau rule, the train
+      filter's floors); the others play and train, keeping the last rated cycle's floors
+  self-games (leagues with "self_games": true; the global league by default): each round, every model entry (at the
+      entry ply; in the global league every model entry) plays one game against itself, seeded; training games only
+      (not in the ratings, the champion test or the plateau rule)
+  train: global-league, local and global lines train once on their games (experiments: games with a model at the
+      entry ply, 2 unless entry_ply says otherwise, and the self-games; with "replay" also games replayed from the
+      local sets of earlier cycles; the global league: each model on the games and self-games whose players are all
+      rated at or above its current version's Elo minus train.margin); an experiment's observers ("observers": lines
+      that never play) train after its lines on its local set
+  self-play (experiments): self-play lines play for the generation CPU of the local lines' games (self-games
+      included)
   records: the CSVs, the cycle's report, the state
 """
 import argparse
+import bisect
+import codecs
+import contextlib
 import copy
 import csv
 import datetime
 import fcntl
+import fractions
 import hashlib
 import io
 import json
 import math
+import mmap
 import os
 import re
 import shlex
@@ -56,14 +84,40 @@ OUTCOMES = ("white_wins.games", "black_wins.games", "draws.games")
 GAME_FILES = OUTCOMES + ("human.games",)
 LABEL_FLAGS = ("--label-depth", "--label-result", "--label-model")
 SUFFIX = {"self-play": "sp", "local": "loc", "global": "glb"}
+OBSERVER_SUFFIX = "obs"  # an observer line's name: <model id>.obs (observers_option, 2026-11-12)
+OBSERVER_STATUS = "observer"  # an observer's status (state.json, lines.csv): never "active", never in a field
 OPTION_LETTER = {"self-play": "S", "local": "L", "global": "G"}  # experiment versions: E.<letter>.<major>.<v>
 SELFPLAY_BUDGET_DEFAULT = 120.0  # priced CPU s per line per cycle, self-play-only experiments
+PLATEAU_K2_DEFAULT = 50  # a scaled plateau's K for 2 lines: K = round(k2 x sqrt(2 / lines))
+SELF_GAMES_SEED_OFFSET = 1000003  # self-games' replay-games --seed is the league's seed plus this: other seed streams
+SELF_GAMES_TWIN = ".twin"  # an entry's twin in the self-games' players list (no entry name ends so)
+COLD_GAMES_SEED_OFFSET = 2000003  # cold_games' tournament --seed is the league's seed plus this: another seed stream
+COLD_DIR, COLD_POOL = "cold", "coldpool"  # cold_games' tournament directory, and its saved games (with train)
+COLD_T_BASE = 1000000  # a cold game's t in the local set: this plus its cold round (its link sorts after the others)
+TOPUP_SEED_OFFSET = 3000017  # self_games_topup's replay-games --seed is the league's seed plus this: another seed stream
+TOPUP_POOL = "topuppool"  # a cycle's top-up games (self_games_topup): round<t>/<white>~<black>~<j>/ and games.csv
+TOPUP_T_STRIDE = 10_000_000  # replay-games' t of cycle c's top-up game i (every line's): c x this + i, its own seed
+TRAIN_FILTER_SMOOTH_DEFAULT = 1  # train_filter's smoothing in cycles when the spec gives none (the user 11-12: none)
+TRAIN_FILTER_SE = "se"  # train_filter's margin "se": a line's floor is its current cold Elo minus that rating's SE
 OPTION_ORDER = ("self-play", "local", "global")
 REFERENCE_PLY = {"random": 0, "random-1": 1, "random-2": 2, "random-3": 3}
 ANCHOR = "random"  # the tournament's --anchor, pinned at Elo 0
 NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.+-]*")
 ENTRY_RE = re.compile(r"^(?P<line>.+)@(?P<v>\d+)(?P<f>F?)-(?P<ply>\d+)$")
+FROZEN_ROLE = "frozen-reference"  # a frozen external reference's role in the field (frozen_references_option)
+FROZEN_VERSION_RE = re.compile(r"^(?P<exp>[^:]+):(?P<line>.+)@(?P<v>\d+)$")  # <experiment>:<line>@<version>
+CAL_LINE_RE = re.compile(r"^calibration on (?P<path>\S+): (?P<params>\S+) \((?P<n>\d+) positions\)$", re.M)
 EXIT_STOPPED, EXIT_DONE, EXIT_INJECTED = 3, 4, 9
+# The global league's design (models/NEW-DESIGN.md "The global league", decided 2026-11-10 ~20:30-21:45, built
+# 2026-11-11): config.json "global_design". create makes only these; a global league without it (the 11-09 design:
+# ply-1 and ply-2 entries, anchors, 20 cycles' patience) is refused by run and add.
+GLOBAL_DESIGN = "11-10"
+GLOBAL_MARGIN_DEFAULT = 30  # train.margin: a model trains on games whose players are all rated >= its Elo - margin
+# rule 6 (the user, 2026-11-11 ~13:50): a cycle without a new champion adds the positions the current version trained
+# on over "positions"; 100% retires, but not within floor_cycles cycles of the line's entry or last crowning
+PATIENCE_RULE = {"rule": "positions", "positions": 20_000_000, "floor_cycles": 5}
+GLOBAL_CYCLES_EXTRA = ["ply", "patience_positions", "patience_total", "train_floor", "train_self_games"]
+GLOBAL_LINES_EXTRA = ["ply", "patience_total", "patience_from"]  # global lines.csv's last columns
 
 DEFAULTS = {
     "seed": 1, "nice": 10, "threads": 4, "jobs": 2,
@@ -113,6 +167,71 @@ LINES_FIELDS = ["line", "model", "option", "kind", "archetype", "status", "versi
                 "selfplay_binary", "selfplay_args", "label", "base_model", "train_overrides", "selfplay_overrides",
                 "replicate", "seed_offset"]
 BATCH_GAMES_FIELDS = ["t", "white", "black", "result", "plies", "cpu_s", "ply2", "price_s"]
+SELF_GAMES_FIELDS = ["cycle", "t", "entry", "white", "black", "result", "plies", "price_s"]
+SELF_GAMES_TOTALS_FIELDS = ["self_games", "self_games_plies", "self_games_price_s", "self_games_proc_cpu_s",
+                            "self_games_wall_s"]  # totals.csv's last columns in a league with self_games only
+REPLAY_TOTALS_FIELDS = ["replay_games", "replay_target", "replay_available", "replay_from", "replay_to",
+                        "replay_price_s", "replay_cpu_s"]  # totals.csv's last columns in an experiment with replay only
+# totals.csv's last columns in an experiment with frozen_references only: the local set's games by kind (local_mix)
+FROZEN_TOTALS_FIELDS = ["local_games", "local_line_line", "local_self_games", "local_line_ref", "local_ref_ref",
+                        "local_random", "local_line_line_share", "local_self_games_share", "local_line_ref_share",
+                        "local_ref_ref_share", "local_random_share"]
+# totals.csv's last columns in a league with games_per_cycle only: T; gpc_bound, where the rounds' cap or floor kept the
+# cycle from T ("under T": GPC_MAX_ROUNDS rounds are fewer games; "over T": one round is more than 2 T); the training
+# batch, train_games and train_positions: what each line that trains on the league's games (local or global-league
+# lines) trained on this cycle, their mean (halves up) where they differ; blank when none trained (an experiment's
+# last cycle)
+GPC_TOTALS_FIELDS = ["games_per_cycle", "gpc_bound", "train_games", "train_positions"]
+# totals.csv's columns after the local_* ones in an experiment with reference_window only: its margin M; the lines whose
+# local set it cut this cycle, the games it cut (summed over those lines) and the frozen references below some line's
+# floor (entries, ";"-joined); all but the margin blank when no local set was built (the last cycle)
+REFWIN_TOTALS_FIELDS = ["ref_window_margin", "ref_window_lines", "ref_window_excluded", "ref_window_below"]
+# observers.csv (an experiment with observers only): each observer in each cycle: the version it held, what it trained
+# on (the participants' local set; blank in a cycle that trains nothing) and its version after the cycle. totals.csv's
+# last columns with observers only: their number and their training CPU (train_cpu_s stays the participants')
+OBSERVERS_FIELDS = ["cycle", "date", "line", "model", "version", "version_name", "train_games", "train_positions",
+                    "train_cpu_s", "data_cpu_s", "data_price_s", "next_version", "note", "label"]
+OBSERVER_TOTALS_FIELDS = ["observers", "observer_train_cpu_s"]
+# totals.csv's last columns in an experiment with cold_games only (cold_games_option): its temperature, share and
+# train; the cycle's cold round-robins (cold/, cold_rounds.csv): their rounds and games, the games' own CPU, the cold
+# tournament process's CPU (its games, rating fit and tables) and wall time, the games' price; and the cold games that
+# joined the local set (0 without train, and in an experiment's last cycle, which trains nothing)
+COLD_TOTALS_FIELDS = ["cold_temperature", "cold_share", "cold_train", "cold_rounds", "cold_games", "cold_cpu_s",
+                      "cold_proc_cpu_s", "cold_wall_s", "cold_price_s", "cold_in_local"]
+# cycles.csv's last columns in an experiment with train_filter only (train_filter_option): each line's training set in
+# a cycle that trains: its rating (train_filter_ratings: its current version's cold Elo in the cycle's fit; with
+# "smooth", its versions' mean), that version's standard error in the fit, and its floor (the rating minus the margin
+# or the SE; blank while unrated, when nothing is cut), its own games in the local set (one of its entries plays them)
+# and how many of them it kept, the local set's games and positions it kept and their shares of the whole set, and its
+# top-up games (self_games_topup; 0 without it), their positions and opponent (its champion's entry, or "self": its
+# current version's twin); all blank in a cycle that trains nothing (an experiment's last)
+FILTER_CYCLES_FIELDS = ["filter_rating", "filter_se", "filter_floor", "filter_own_games", "filter_own_kept",
+                        "filter_kept_games", "filter_kept_positions", "filter_kept_share",
+                        "filter_kept_positions_share", "topup_games", "topup_positions", "topup_opponent"]
+# totals.csv's last columns in an experiment with train_filter only: the margin ("se" or Elo) and the smoothing
+# (cycles); the local set before the filter (games, positions); the lines the filter cut games from and the games it
+# cut (summed over the lines); the top-up games (summed over the lines), their positions and price, and the
+# replay-games process's CPU and wall time (0 without self_games_topup); all but the margin and the smoothing blank in a
+# cycle that trains nothing
+FILTER_TOTALS_FIELDS = ["filter_margin", "filter_smooth", "filter_set_games", "filter_set_positions",
+                        "filter_lines_cut", "filter_cut_games", "topup_games", "topup_positions", "topup_price_s",
+                        "topup_proc_cpu_s", "topup_wall_s"]
+TOPUP_GAMES_FIELDS = ["t", "j", "line", "white", "black", "result", "plies", "price_s", "replay_t"]  # topuppool/games.csv
+RATE_SCALES = ("sqrt", "linear", "none")  # rate_every: a scaled plateau's K times sqrt(N), N or 1 (plateau.rate_scale)
+UNRATED_DECISION = "unrated-cycle"  # rate_every: a line's decision in a cycle that doesn't rate (no champion test)
+# cycles.csv's last columns in an experiment with rate_every only: rated (1 in a rated cycle: cold games and champion
+# tests; 0 in the others) and champion_age (the cycles since the line's champion in the cycle was crowned: the cycle
+# minus its crowning cycle; the first champions are crowned in cycle 1, so 0 there)
+RATE_CYCLES_FIELDS = ["rated", "champion_age"]
+RATE_TOTALS_FIELDS = ["rated"]  # totals.csv's last column in an experiment with rate_every only (1 or 0, as above)
+CHAMPION_SE_KINDS = ("nominal", "draw-aware")  # champion_se_kind (champion_se_kind_option): the champion test's SE
+# cycles.csv's last columns in an experiment with champion_se_kind "draw-aware" only: the champion test's nominal SE
+# (contrast_ses: p(1-p) per game) and the z it gives, beside se_diff and z (the draw-aware SE and its z, which decide)
+DRAWSE_CYCLES_FIELDS = ["se_nominal", "z_nominal"]
+GAME_SCORES = {"1-0": 1.0, "0-1": 0.0, "1/2-1/2": 0.5}  # a games.csv result as its white player's score
+GPC_MAX_ROUNDS = 48  # games_per_cycle's cap on a cycle's rounds (analyst 6.53)
+MIX_KINDS = ("line_line", "self_games", "line_ref", "ref_ref", "random")
+REPLAY_GAMES_FIELDS = ["t", "white", "black", "price_s", "cpu_s"]  # replaypool/c<cycle>/games.csv
 PLIES_FIELDS = ["round", "games", "plies", "price_s"]
 PRICES_FIELDS = ["version", "context", "kind", "depth", "us_per_game", "us_per_ply", "source", "games", "plies",
                  "note"]
@@ -208,11 +327,15 @@ def link_tree(src, dst):
 
 
 def parse_flags(tokens):
-    """[(flag, value or True)] in order; a flag takes the next token as its value unless that is another flag."""
+    """[(flag, value or True)] in order; a flag takes the next token as its value unless that is another flag; a
+    token --flag=value is the flag with that value (how a value that starts with "-" is passed; 2026-11-11)."""
     out, i = [], 0
     while i < len(tokens):
         t = tokens[i]
-        if i + 1 < len(tokens) and not tokens[i + 1].startswith("--"):
+        if t.startswith("--") and "=" in t:
+            out.append(tuple(t.split("=", 1)))
+            i += 1
+        elif i + 1 < len(tokens) and not tokens[i + 1].startswith("--"):
             out.append((t, tokens[i + 1]))
             i += 2
         else:
@@ -221,11 +344,20 @@ def parse_flags(tokens):
     return out
 
 
+def flag_tokens(flag, val):
+    """A (flag, value) pair as arguments: the bare flag for True; --flag=value for a value that starts with "-"
+    (clap reads a separate "-2" as a flag, so --revise -2 was refused; 2026-11-11); else the flag, then the value."""
+    if val is True:
+        return [flag]
+    val = str(val)
+    return [f"{flag}={val}"] if val.startswith("-") else [flag, val]
+
+
 def without_flags(tokens, flags):
     out = []
     for k, v in parse_flags(tokens):
         if k not in flags:
-            out += [k] if v is True else [k, v]
+            out += flag_tokens(k, v)
     return out
 
 
@@ -370,13 +502,80 @@ def parse_entry(name):
 
 def is_model_ply2(name):
     """A model (not a random reference) playing at ply 2."""
+    return is_model_at(name, 2)
+
+
+def is_model_at(name, ply):
+    """A model (not a random reference) playing at the given ply (ply None: at any ply)."""
     p = parse_entry(name)
-    return p is not None and p[3] == 2
+    return p is not None and (ply is None or p[3] == ply)
 
 
-def qualifies(white, black):
-    """The training rule: a game counts if at least one side is a model at ply 2 (random-2 doesn't count)."""
-    return is_model_ply2(white) or is_model_ply2(black)
+def qualifies(white, black, ply=2):
+    """The training rule: a game counts if at least one side is a model at the league's entry ply (ply 2 unless the
+    config's entry_ply says otherwise; random-2 doesn't count). ply None: a model at any ply (the global league's
+    league-wide count; its models train by the Elo window, window_ok)."""
+    return is_model_at(white, ply) or is_model_at(black, ply)
+
+
+def entry_ply(cfg):
+    """The ply of a league's main entries (each line's current version and its champion; the champion test, the
+    plateau rule and the training rule are at it): config entry_ply (2026-11-10 ~22:30), 2 when absent (every league
+    made before). The global league has none: each model has its own ply (line_ply)."""
+    return cfg.get("entry_ply", 2)
+
+
+def is_global11(cfg):
+    """A global league of the 11-10 design (config.json global_design; create makes only these from 2026-11-11)."""
+    return cfg.get("kind") == "global" and cfg.get("global_design") == GLOBAL_DESIGN
+
+
+def line_ply(cfg, lc):
+    """The ply a line's entries play at: the global league's lines have their own ("ply"); an experiment's lines are
+    at its entry ply."""
+    return lc.get("ply", entry_ply(cfg))
+
+
+def data_ply(cfg):
+    """The league-wide qualifying ply (the ply2_* columns, the self-games' entries, the batch's ply2 column): the
+    entry ply in an experiment; None in the global league (a game counts if a model plays in it, at any ply; each
+    model then trains on its Elo window)."""
+    return None if is_global11(cfg) else entry_ply(cfg)
+
+
+def window_ok(name, floor, ratings):
+    """The global league's training rule for one player of a game (NEW-DESIGN rule 4, the user 11-10 ~21:10): rated
+    at or above the floor, a model's current Elo minus train.margin. An unrated player counts (only a new entry is
+    unrated, and new models train on nearly everything), and so does every player when the floor is None (the model's
+    own current version unrated)."""
+    if floor is None:
+        return True
+    r = ratings.get(name)
+    return r is None or r[0] >= floor
+
+
+def patience_step(ls, lc, crowned, c):
+    """Rule 6 for one line in cycle c (models/NEW-DESIGN.md rule 6, the user 2026-11-11 ~13:50): (positions added,
+    positions since the last crowning, the cycle of the last crowning or entry). A new (or first) champion resets
+    the count to 0 and restarts the floor; any other cycle adds the positions the current version trained on (the
+    training that made it, in the cycle before: 0 when there was none), the top model included."""
+    if crowned:
+        return 0, 0, c
+    add = ls.get("trained_positions", 0)
+    since = ls["patience_from"] if "patience_from" in ls else lc["entered_cycle"]
+    return add, ls.get("patience_total", 0) + add, since
+
+
+def patience_level(total, rule):
+    """Rule 6's level (1 = 100%): the positions since the last crowning over the rule's positions."""
+    return total / rule["positions"]
+
+
+def patience_retires(total, since, rule):
+    """Rule 6's retirement: the positions since the last crowning reach the rule's positions, and at least
+    floor_cycles cycles have passed since the line's entry or last crowning (cycle c0: never before c0 +
+    floor_cycles)."""
+    return total >= rule["positions"] and since >= rule["floor_cycles"]
 
 
 def major_of(crowned, v):
@@ -488,18 +687,33 @@ def pricer(us, kinds):
     return lambda white, black, plies: game_price(us, side_of(white, kinds), side_of(black, kinds), plies)
 
 
+def player_kinds(cfg):
+    """{line: kind} of a league's lines, and of its frozen references by name (their entries parse to the name as
+    the line: <name>@<v>F-<ply>), for side_of and pricer."""
+    kinds = {lc["line"]: lc["kind"] for lc in cfg["lines"]}
+    for x in frozen_refs(cfg):
+        kinds[x["name"]] = x["kind"]
+    return kinds
+
+
 def selfplay_depth(lc):
     return int(dict(parse_flags(lc["selfplay_args"] or [])).get("--depth", 0))
 
 
 def needed_prices(cfg):
-    """The price keys a league's games need: references at their plies, every line's kind at plies 1 and 2, and each
-    self-play line's kind at its self-play depth."""
+    """The price keys a league's games need: references at their plies, every line's kind at plies 1 and 2 and at the
+    entry ply (P with entry_ply P; a global-league line: at its own ply only), each self-play line's kind at its
+    self-play depth, and each frozen reference's kind at the entry ply."""
     need = {price_key("tournament", "random", REFERENCE_PLY[r]) for r in cfg["references"]}
+    plies = sorted({1, 2, entry_ply(cfg)})
     for lc in cfg["lines"]:
-        need |= {price_key("tournament", lc["kind"], d) for d in (1, 2)}
+        if lc.get("observer"):  # an observer never plays (observers_option)
+            continue
+        need |= {price_key("tournament", lc["kind"], d) for d in ([lc["ply"]] if "ply" in lc else plies)}
         if lc["option"] == "self-play":
             need.add(price_key("self-play", lc["kind"], selfplay_depth(lc)))
+    for x in frozen_refs(cfg):
+        need.add(price_key("tournament", x["kind"], entry_ply(cfg)))
     return need
 
 
@@ -512,13 +726,125 @@ def check_prices(cfg):
 # ---------------------------------------------------------------- the rules (pure; the selftest checks them)
 
 def champion_decision(elo_cur, elo_champ, se, k):
-    """(decision, diff, z) of the champion test: the current version replaces the champion if its ply-2 rating leads
-    the champion's by at least k standard errors of the difference."""
+    """(decision, diff, z) of the champion test: the current version replaces the champion if its rating at the entry
+    ply (2 unless entry_ply says otherwise) leads the champion's by at least k standard errors of the difference."""
     if elo_cur is None or elo_champ is None or se is None or not se > 0:
         return "unrated", None, None
     diff = elo_cur - elo_champ
     z = diff / se
     return ("new-champion" if z >= k else "champion-kept"), diff, z
+
+
+def rounds_for_games(g, n):
+    """The rounds of a global-league cycle with "games_per_entry" G (variable-length cycles; the user, 2026-11-11
+    ~20:10: "we should just have variable length cycles based on the number of participants in the league"). A round
+    is a double round-robin, 2 (N - 1) games for each of the field's N entries, so ceil(G / (2 (N - 1))) rounds give
+    every entry at least G games: at least 1, and 1 when the field has fewer than 2 entries."""
+    if n < 2:
+        return 1
+    return max(1, -(-g // (2 * (n - 1))))
+
+
+def games_per_entry(cfg):
+    """A global league's "games_per_entry" (G), or None without it (then a cycle plays rounds_per_cycle rounds, as
+    before 2026-11-11 ~20:30). Only a global league of the 11-10 design has it; G is a whole number from 1."""
+    g = cfg.get("games_per_entry")
+    if g is None:
+        return None
+    if not is_global11(cfg):
+        raise ValueError("games_per_entry is the global league's (the 11-10 design); an experiment plays "
+                         "rounds_per_cycle rounds a cycle")
+    if not is_count(g, 1):
+        raise ValueError(f"games_per_entry must be a whole number from 1, not {g!r}")
+    return g
+
+
+def rounds_for_cycle_games(t, n):
+    """(R, bound): the rounds of a cycle with "games_per_cycle" T for its field of N entries (the user, 2026-11-12
+    ~01:15: "equilibrate the amount of games towards some standard range/amount by changing the number of rounds per
+    cycle based on the number of active participants"; the rule analyst 6.53's). A round is a double round-robin,
+    N (N - 1) games, so R = round(T / (N (N - 1))), halves up, at least 1 and at most GPC_MAX_ROUNDS. bound: "under T"
+    when the cap binds (GPC_MAX_ROUNDS rounds are fewer than T games), "over T" when the floor does (one round is more
+    than 2 T games), else "". A field of fewer than 2 entries plays no games: 1 round, no bound."""
+    if n < 2:
+        return 1, ""
+    per = n * (n - 1)
+    r = (2 * t + per) // (2 * per)
+    if r > GPC_MAX_ROUNDS:
+        return GPC_MAX_ROUNDS, "under T"
+    if r < 1:
+        return 1, "over T"
+    return r, ""
+
+
+def games_per_cycle(cfg):
+    """A league's "games_per_cycle" (T), or None without it (then a cycle plays rounds_per_cycle rounds, the global
+    option's plan or games_per_entry's rounds, as before 2026-11-12). Experiments and global leagues; a whole number
+    from 1; not with games_per_entry."""
+    t = cfg.get("games_per_cycle")
+    if t is None:
+        return None
+    if not is_count(t, 1):
+        raise ValueError(f"games_per_cycle must be a whole number from 1, not {t!r}")
+    if cfg.get("games_per_entry") is not None:
+        raise ValueError("games_per_cycle and games_per_entry are both set; give one (the games of a cycle, or of "
+                         "each entry)")
+    return t
+
+
+def gpc_plan(t, field):
+    """A cycle's games_per_cycle record (cur["games_per_cycle"]): T, the field's N entries, R and its bound."""
+    r, bound = rounds_for_cycle_games(t, len(field))
+    return dict(t=t, n=len(field), rounds=r, bound=bound)
+
+
+def gpc_rule(g, played):
+    """The cycle report's words for games_per_cycle's rounds: g the cycle's record (gpc_plan), played the rounds it
+    played (with the global option, the copy plan's: at least R, unless the batch was too small)."""
+    t, n, r = g["t"], g["n"], g["rounds"]
+    if n < 2:
+        return f"; games_per_cycle {t}: fewer than 2 entries, 1 round"
+    per = n * (n - 1)
+    s = f"; games_per_cycle {t} over {n} entries: round({t} / {per}) = {plural((2 * t + per) // (2 * per), 'round')}"
+    if g["bound"] == "under T":
+        s += f", capped at {r}: {r * per} games, under T"
+    elif g["bound"] == "over T":
+        s += f", at least 1: {per} games, over T"
+    if played != r:
+        s += f"; the global option's copy plan played {played}"
+    return s
+
+
+def train_batch(cfg, cur):
+    """The cycle's training batch: [(games, positions)] of each line that trained on the league's games this cycle (a
+    local or global-league line with a training record), in config order."""
+    out = []
+    for lc in cfg["lines"]:
+        tr = cur["trained"].get(lc["line"])
+        if lc["option"] in ("league", "local") and tr and tr.get("games") is not None:
+            out.append((tr["games"], tr.get("positions") or 0))
+    return out
+
+
+def mean_half_up(xs):
+    """The mean of whole numbers, to the nearest whole number (halves up)."""
+    return (2 * sum(xs) + len(xs)) // (2 * len(xs))
+
+
+def train_batch_line(cfg, cur):
+    """The cycle report's words for the training batch (a league with games_per_cycle)."""
+    tb = train_batch(cfg, cur)
+    if not tb:
+        return "- Training batch: none (no line trained on the cycle's games)."
+    gs, ps = [x[0] for x in tb], [x[1] for x in tb]
+    rw = (cur.get("ref_window") or {}).get("lines")  # reference_window's cut, when it cut anything
+    cut = (f" The reference window cut {plural(sum(r['excluded'] for r in rw.values()), 'game')} from "
+           f"{plural(len(rw), 'line')}'s sets." if rw else "")
+    if len(set(gs)) == 1 and len(set(ps)) == 1:
+        return (f"- Training batch: {gs[0]:,} games, {ps[0]:,} positions "
+                f"({'each of ' + plural(len(tb), 'line') if len(tb) > 1 else 'its 1 line'}).{cut}")
+    return (f"- Training batch: {mean_half_up(gs):,} games and {mean_half_up(ps):,} positions on average over "
+            f"{plural(len(tb), 'line')} ({min(gs):,}-{max(gs):,} games, {min(ps):,}-{max(ps):,} positions).{cut}")
 
 
 def anchor_update(anchors, current1, anchor_ratings, cycle, rules, used_entries=()):
@@ -623,15 +949,26 @@ def class_moves(rows):
     return means, ((tot[0] / tot[2], tot[1] / tot[2]) if tot[2] else (40.0, 40.0))
 
 
-def estimate_round_ply2_price(names, sides, us, moves, fallback):
+def estimate_round_ply2_price(names, sides, us, moves, fallback, ply=2):
     """One double round-robin's qualifying price for a field of entry names: each ordered qualifying pair priced at
-    its classes' mean moves. sides: {name: (kind, depth)}."""
+    its classes' mean moves. sides: {name: (kind, depth)}; ply: the league's entry ply (the training rule's)."""
     total = 0.0
     for a in names:
         for b in names:
-            if a != b and qualifies(a, b):
+            if a != b and qualifies(a, b, ply):
                 mw, mb = moves.get((entry_class(a), entry_class(b)), fallback)
                 total += side_price(us, "tournament", sides[a], mw) + side_price(us, "tournament", sides[b], mb)
+    return total
+
+
+def estimate_self_games_price(names, sides, us, moves, fallback, ply=2):
+    """One round's self-games' price (a league with self_games): each entry whose game against itself qualifies,
+    priced at the mean moves of its class against itself."""
+    total = 0.0
+    for a in names:
+        if qualifies(a, a, ply):
+            mw, mb = moves.get((entry_class(a), entry_class(a)), fallback)
+            total += side_price(us, "tournament", sides[a], mw) + side_price(us, "tournament", sides[a], mb)
     return total
 
 
@@ -659,6 +996,27 @@ def read_ratings(tour):
     return out
 
 
+def league_ratings(L):
+    """A league's tournament ratings (read_ratings). With a rating zero (config rating_zero: an experiment without
+    the random reference) they are re-centred on it, so it rates 0; while it is unrated they stay as the tournament
+    gives them (relative to the rated players' mean). With cold_games, the cold round-robins' fit (rating_tour)."""
+    ratings = read_ratings(rating_tour(L))
+    z = L.cfg.get("rating_zero")
+    if z and z in ratings:
+        z0 = ratings[z][0]
+        ratings = {k: (e - z0, ci, g) for k, (e, ci, g) in ratings.items()}
+    return ratings
+
+
+def fit_pin(L, ratings):
+    """The player contrast_ses pins: the tournament's anchor (random), or with a rating zero that entry, or while it
+    is unrated the first rated player by name (a contrast's SE is the same whichever rated player is pinned)."""
+    z = L.cfg.get("rating_zero")
+    if not z:
+        return ANCHOR
+    return z if z in ratings or not ratings else min(ratings)
+
+
 def contrast_ses(tour, ratings, pairs, anchor=ANCHOR):
     """Copied from cycles/champ/cycle.py (contrast_ses): each pair's standard error from the fit's covariance (the
     inverse of its information matrix at its ratings, from every game in games.csv between rated players, retired ones
@@ -666,14 +1024,16 @@ def contrast_ses(tour, ratings, pairs, anchor=ANCHOR):
     small dense rest. pairs: [(players a, players b)], each the mean rating of a minus that of b. Returns the list of
     standard errors, or None if the matrix is not positive definite."""
     w2 = (math.log(10) / 400) ** 2
-    count = {}
-    with open(os.path.join(tour, "games.csv")) as f:
-        next(f, None)
-        for line in f:
-            _, white, black, _ = line.split(",", 3)
-            if white != black and white in ratings and black in ratings:
-                key = (white, black) if white < black else (black, white)
-                count[key] = count.get(key, 0) + 1
+    count = _pair_counts_fast(tour, ratings)
+    if count is None:
+        count = {}
+        with open(os.path.join(tour, "games.csv")) as f:
+            next(f, None)
+            for line in f:
+                _, white, black, _ = line.split(",", 3)
+                if white != black and white in ratings and black in ratings:
+                    key = (white, black) if white < black else (black, white)
+                    count[key] = count.get(key, 0) + 1
     a_ = {}
     for (a, b), n in count.items():
         p = 1 / (1 + 10 ** (-(ratings[a][0] - ratings[b][0]) / 400))
@@ -725,6 +1085,99 @@ def contrast_ses(tour, ratings, pairs, anchor=ANCHOR):
     return out
 
 
+def contrast_ses_draws(tour, ratings, pairs, anchor=ANCHOR):
+    """The draw-aware standard errors of contrast_ses' contrasts (champion_se_kind "draw-aware"; analyst 6.93 after the
+    coordinator's split-half check, models/from-scratch/t01check/NOTES.md "SE verification": in-run cold fits, the
+    split-half SD was 0.60 of contrast_ses' SE pooled, and this SE predicted it within 0.02-0.04): the HC0 sandwich
+    e' A^-1 B A^-1 e. A is the fit's information as contrast_ses builds it (n p(1-p) per pair at the fit's ratings,
+    every game in games.csv between rated players, retired ones included, the anchor pinned); B the games' observed
+    score variance, (s - p)^2 per game (s 1, 1/2 or 0, the pair's first player's score) where A has p(1-p): a draw is
+    worth less information than p(1-p) counts. The players in no pair are eliminated from A as contrast_ses does (the
+    same order), recording each step; each contrast's y = A^-1 e is solved on the small dense rest, then back-substituted
+    over the eliminated players (their e is 0), and its variance is the sum over pairs of B's weight times the squared
+    difference of y (0 at the anchor). Gauge-free like contrast_ses (a contrast's SE doesn't depend on the pinned
+    player). Returns the list of standard errors, or None if the matrix is not positive definite or a game's result is
+    not 1-0, 0-1 or 1/2-1/2."""
+    w2 = (math.log(10) / 400) ** 2
+    res = {}  # (a, b), a < b: [games, a's score sum, a's squared score sum]
+    with open(os.path.join(tour, "games.csv")) as f:
+        next(f, None)
+        for line in f:
+            _, white, black, rest = line.split(",", 3)
+            if white != black and white in ratings and black in ratings:
+                s = GAME_SCORES.get(rest.split(",", 1)[0].strip())
+                if s is None:
+                    return None
+                key = (white, black) if white < black else (black, white)
+                if key[0] != white:
+                    s = 1.0 - s
+                v = res.get(key)
+                if v is None:
+                    v = res[key] = [0, 0.0, 0.0]
+                v[0] += 1
+                v[1] += s
+                v[2] += s * s
+    a_, b_ = {}, []
+    for (a, b), (n, s1, s2) in res.items():
+        p = 1 / (1 + 10 ** (-(ratings[a][0] - ratings[b][0]) / 400))
+        w = n * p * (1 - p) * w2
+        b_.append((a, b, (s2 - 2 * p * s1 + n * p * p) * w2))
+        for x in (a, b):
+            if x != anchor:
+                row = a_.setdefault(x, {})
+                row[x] = row.get(x, 0.0) + w
+        if a != anchor and b != anchor:
+            a_[a][b] = a_[a].get(b, 0.0) - w
+            a_[b][a] = a_[b].get(a, 0.0) - w
+    keep = sorted({x for a, b in pairs for x in list(a) + list(b) if x in a_})
+    kept = set(keep)
+    steps = []
+    for x in sorted((x for x in a_ if x not in kept), key=lambda x: (len(a_[x]), x)):
+        row = a_.pop(x)
+        d = row.pop(x)
+        if not d > 0:
+            return None
+        nb = list(row.items())
+        for u, a_ux in nb:
+            ru = a_[u]
+            del ru[x]
+            f = a_ux / d
+            for v, a_xv in nb:
+                ru[v] = ru.get(v, 0.0) - f * a_xv
+        steps.append((x, d, nb))
+    k = len(keep)
+    lower = [[a_[p].get(q, 0.0) for q in keep] for p in keep]
+    for j in range(k):
+        row_j = lower[j]
+        d = row_j[j] - sum(v * v for v in row_j[:j])
+        if not d > 0:
+            return None
+        row_j[j] = d = math.sqrt(d)
+        for i in range(j + 1, k):
+            row_i = lower[i]
+            row_i[j] = (row_i[j] - sum(x * y for x, y in zip(row_i[:j], row_j[:j]))) / d
+    index = {p: i for i, p in enumerate(keep)}
+    out = []
+    for a, b in pairs:
+        e = [0.0] * k
+        for names, sign in ((a, 1.0), (b, -1.0)):
+            for n in names:
+                if n in index:
+                    e[index[n]] += sign / len(names)
+        z = []
+        for i, row in enumerate(lower):  # L z = e
+            z.append((e[i] - sum(x * v for x, v in zip(row[:i], z))) / row[i])
+        y = [0.0] * k
+        for i in reversed(range(k)):  # L' y = z
+            y[i] = (z[i] - sum(lower[m][i] * y[m] for m in range(i + 1, k))) / lower[i][i]
+        ya = dict(zip(keep, y))
+        for x, d, nb in reversed(steps):  # the eliminated players (e 0 there): d y_x + sum a_xv y_v = 0
+            ya[x] = -sum(a_xv * ya[v] for v, a_xv in nb) / d
+        var = sum(wb * (ya.get(a2, 0.0) - ya.get(b2, 0.0)) ** 2 for a2, b2, wb in b_)
+        out.append(math.sqrt(var) if var > 0 else 0.0)
+    return out
+
+
 # ---------------------------------------------------------------- leagues: creation
 
 def deep_merge(base, over):
@@ -741,10 +1194,38 @@ def league_dir_of(root, kind, name):
     return os.path.join(root, "global") if kind == "global" else os.path.join(root, "experiments", name)
 
 
-def global_line(row, entered):
-    return dict(line=row["recipe"], model=row["recipe"], recipe=row["recipe"], option="league", kind=row["kind"],
-                archetype=row["archetype"], train_binary=row["train_binary"], train_args=row["train_args"],
-                selfplay_binary=None, selfplay_args=None, heldout=row["heldout"], entered_cycle=entered)
+def global_line_name(recipe, ply):
+    """A global-league line: one model, a recipe at a ply, named <recipe>.p<ply> (F-L.p1). The same recipe at another
+    ply (an upgrade) is another model and another line."""
+    return f"{recipe}.p{ply}"
+
+
+def global_line(row, entered, ply):
+    """A global-league line (the 11-10 design): the recipe at a ply, named <recipe>.p<ply> (no label: the line id
+    shows the ply)."""
+    return dict(line=global_line_name(row["recipe"], ply), model=row["recipe"], recipe=row["recipe"],
+                option="league", kind=row["kind"], archetype=row["archetype"], train_binary=row["train_binary"],
+                train_args=row["train_args"], selfplay_binary=None, selfplay_args=None, heldout=row["heldout"],
+                entered_cycle=entered, ply=ply)
+
+
+def global_models(items, default_ply=None):
+    """The global league's models from a spec's "models" (or add's arguments): each {"recipe": R, "ply": P}, P a whole
+    number from 1; a string R takes default_ply (add's --ply; refused without one). Returns [(recipe, ply)], each
+    pair once."""
+    out = []
+    for m in items:
+        if isinstance(m, str) and default_ply is not None:
+            m = {"recipe": m, "ply": default_ply}
+        if (not isinstance(m, dict) or set(m) != {"recipe", "ply"} or not isinstance(m["recipe"], str)
+                or isinstance(m["ply"], bool) or not is_count(m["ply"], 1)):
+            sys.exit('spec: the global league\'s models are {"recipe": R, "ply": P} (P a whole number from 1): each '
+                     f'model plays at its own ply (the 11-10 design); got {m!r}')
+        out.append((m["recipe"], m["ply"]))
+    dup = sorted({f"{r} at ply {p}" for r, p in out if out.count((r, p)) > 1})
+    if dup:
+        sys.exit(f"spec: models given twice: {', '.join(dup)}")
+    return out
 
 
 def recipe_rows(recipes, names):
@@ -809,7 +1290,7 @@ def apply_overrides(args, overrides):
             seen.add(flag)
     flat = []
     for flag, val in out:
-        flat += [flag] if val is True else [flag, str(val)]
+        flat += flag_tokens(flag, val)
     return flat
 
 
@@ -832,20 +1313,24 @@ def override_token(flag, v, sep="="):
 def expand_models(items, recipes, options):
     """An experiment spec's models as model variants, in spec order. An item is a model name (recipes.txt's model
     column) or {"model": NAME, "set": {flag: value}, "sweep": {flag: [values]} (one flag, or two for a grid),
-    "to": "auto" | "train" | "selfplay" | "both" or {flag: one of these}, "replicates": N}. "auto" (the default)
-    applies a flag to each argument list whose binary accepts it; every flag must be accepted where it goes. Returns
-    [dict(id, label, row, train_overrides, selfplay_overrides, replicate, seed_offset)]."""
+    "to": "auto" | "train" | "selfplay" | "both" or {flag: one of these}, "replicates": N, "start": {"experiment": E,
+    "version": V}, "start_forget": F, "start_reset": true} (a warm start: warm_start_option), "train_binary": B}
+    (entry_train_binary). "auto" (the default) applies a flag to each argument list whose binary accepts it; every
+    flag must be accepted where it goes. Returns [dict(id, label, row, train_overrides, selfplay_overrides, replicate,
+    seed_offset)], each with start (experiment, version, forget; reset when true) when its item has one."""
     by_model = {r["model"]: r for r in recipes}
     out = []
     for item in items:
         item = {"model": item} if isinstance(item, str) else dict(item)
-        unknown = set(item) - {"model", "set", "sweep", "to", "replicates"}
+        unknown = set(item) - {"model", "set", "sweep", "to", "replicates", "start", "start_forget", "start_reset",
+                               "train_binary"}
         if unknown:
             sys.exit(f"spec: unknown model keys {sorted(unknown)}")
         m = item.get("model")
         if m not in by_model:
             sys.exit(f"{m}: not a model in {RECIPES}")
-        row = by_model[m]
+        start = warm_start_request(m, item)
+        row = entry_train_binary(m, item, by_model[m])
         fixed = [(f, override_value(v)) for f, v in (item.get("set") or {}).items()]
         sweep = list((item.get("sweep") or {}).items())
         if len(sweep) > 2:
@@ -897,6 +1382,12 @@ def expand_models(items, recipes, options):
                     tr_ov.append((f, v))
                 if want_sp:
                     sp_ov.append((f, v))
+            if "train_binary" in item:  # the entry's own binary takes every training argument, the row's included
+                accepted = binary_flags(row["train_binary"], "train")[0]
+                bad = sorted({f for f, _ in parse_flags(apply_overrides(row["train_args"], tr_ov)) if f not in accepted})
+                if bad:
+                    sys.exit(f"spec: {m}: {os.path.basename(row['train_binary'])} train doesn't accept "
+                             f"{', '.join(bad)} (train_binary)")
             base_id = m + "".join("+" + override_token(f, v) for f, v in overrides)
             base_label = " ".join([m] + [override_token(f, v) for f, v in overrides])
             for r in range(1, reps + 1):
@@ -905,11 +1396,57 @@ def expand_models(items, recipes, options):
                     sys.exit(f"spec: model id {vid!r} has characters a line name can't have")
                 out.append(dict(id=vid, label=base_label + (f" #{r}" if reps > 1 else ""), row=row,
                                 train_overrides=tr_ov, selfplay_overrides=sp_ov, replicate=r, seed_offset=r - 1))
+                if start:
+                    out[-1]["start"] = dict(start)
     ids = [x["id"] for x in out]
     dup = sorted({i for i in ids if ids.count(i) > 1})
     if dup:
         sys.exit(f"spec: models given twice: {', '.join(dup)}")
     return out
+
+
+def warm_start_request(m, item):
+    """A spec model entry's warm start as the spec gives it: dict(experiment, version, forget) or None (the rules:
+    warm_start_option)."""
+    start, forget, reset = item.get("start"), item.get("start_forget"), item.get("start_reset")
+    if start is None:
+        if forget is not None:
+            sys.exit(f"spec: {m}: start_forget without start")
+        if reset is not None:
+            sys.exit(f"spec: {m}: start_reset without start")
+        return None
+    if (not isinstance(start, dict) or set(start) != {"experiment", "version"}
+            or not isinstance(start["experiment"], str) or not start["experiment"]
+            or not is_count(start["version"], 0)):
+        sys.exit(f'spec: {m}: start must be {{"experiment": NAME or DIR, "version": V (a whole number from 0)}}')
+    f = 1 if forget is None else forget
+    if isinstance(f, bool) or not isinstance(f, (int, float)) or not 0 < f < float("inf"):
+        sys.exit(f"spec: {m}: start_forget must be a number above 0")
+    if reset is not None and not isinstance(reset, bool):
+        sys.exit(f"spec: {m}: start_reset must be true or false")
+    out = dict(experiment=start["experiment"], version=start["version"], forget=f)
+    if reset:  # only when true, so that the config is as before without it
+        out["reset"] = True
+    return out
+
+
+def entry_train_binary(m, item, row):
+    """A spec model entry's "train_binary" (added 2026-11-12 for the ply-2 rung of training standard v1, whose warm
+    starts need chessai-grow7's --warm-reset and --start-leaf-forget at create): the entry's lines train with this
+    binary instead of their recipe's (recipes.txt), as specs/ply1/train_binary.py would set it after create, so that
+    create checks the warm start's flags against the binary that runs them. A name in models/from-scratch/bin, a path
+    from the repository or an absolute path; it must accept every training argument (expand_models). Returns the row
+    with it; without the key the row as it is."""
+    tb = item.get("train_binary")
+    if tb is None:
+        return row
+    if not isinstance(tb, str) or not tb:
+        sys.exit(f"spec: {m}: train_binary must be a binary's name (in {BIN}) or path")
+    path = tb if os.path.isabs(tb) else os.path.join(REPO, tb) if os.sep in tb else os.path.join(BIN, tb)
+    path = os.path.normpath(path)
+    if not os.path.isfile(path) or not os.access(path, os.X_OK):
+        sys.exit(f"spec: {m}: train_binary {path}: no such binary")
+    return dict(row, train_binary=path)
 
 
 def seeded_args(args, binary, sub, kind, offset):
@@ -940,7 +1477,7 @@ def experiment_line(v, option):
     sp = option == "self-play"
     sp_args = (seeded_args(apply_overrides(row["selfplay_args"], v["selfplay_overrides"]), row["selfplay_binary"],
                            "self-play", row["kind"], v["seed_offset"]) if sp else None)
-    return dict(line=f"{v['id']}.{SUFFIX[option]}", model=v["id"], label=v["label"], base_model=row["model"],
+    lc = dict(line=f"{v['id']}.{SUFFIX[option]}", model=v["id"], label=v["label"], base_model=row["model"],
                 recipe=row["recipe"], option=option, kind=row["kind"], archetype=row["archetype"],
                 train_binary=row["train_binary"], train_args=tr_args,
                 selfplay_binary=row["selfplay_binary"] if sp else None, selfplay_args=sp_args,
@@ -948,6 +1485,9 @@ def experiment_line(v, option):
                 train_overrides=[list(x) for x in v["train_overrides"]],
                 selfplay_overrides=[list(x) for x in v["selfplay_overrides"]] if sp else [],
                 replicate=v["replicate"], seed_offset=v["seed_offset"])
+    if v.get("start"):
+        lc["start"] = dict(v["start"])  # completed by warm_start_option
+    return lc
 
 
 def make_config(spec):
@@ -957,7 +1497,14 @@ def make_config(spec):
     prices.csv's last), "selfplay_budget_s": S (self-play-only experiments: priced CPU s per line per cycle, default
     120; refused for other leagues)}, plus any key of DEFAULTS to override (nested keys merge). The global league's
     models are recipes (recipes.txt's recipe column); an experiment's are models (its model column), each run under
-    every chosen option. The prices version's constants are copied into the config: the league keeps them."""
+    every chosen option. The prices version's constants are copied into the config: the league keeps them.
+    The global league (the 11-10 design, global_options): its models are {"recipe": R, "ply": P}; "train":
+    {"margin": M} sets the training window (default 30); "self_games" defaults to true; "games_per_entry": G (optional)
+    makes each cycle's rounds ceil(G / (2 (N - 1))) for its field of N entries instead of rounds_per_cycle.
+    "games_per_cycle": T (optional, experiments and the global league; 2026-11-12) makes each cycle's rounds
+    round(T / (N (N - 1))), from 1 to GPC_MAX_ROUNDS (rounds_for_cycle_games), instead of rounds_per_cycle and
+    min_rounds (the global option's least rounds), which the spec can't also give and the config then leaves out; not
+    with games_per_entry. Without it the config is as before."""
     kind = spec.get("kind")
     if kind not in ("global", "experiment"):
         sys.exit("spec: kind must be global or experiment")
@@ -968,18 +1515,37 @@ def make_config(spec):
     models = list(spec.get("models") or [])
     if not models:
         sys.exit("spec: give models")
-    if kind == "global" and (len({json.dumps(m) for m in models}) != len(models)
-                             or not all(isinstance(m, str) for m in models)):
-        sys.exit("spec: the global league's models are recipe names, each once")
+    if kind == "global":
+        models = global_models(models)
+        for k, why in (("anchors", "has no anchors"), ("patience_cycles", "retires by rule 6 (patience by training "
+                                                                          "positions), not after a number of cycles")):
+            if k in spec:
+                sys.exit(f"spec: {k}: the global league (the 11-10 design) {why}")
+    elif "margin" in (spec.get("train") or {}):
+        sys.exit("spec: train.margin is the global league's training window; an experiment's lines train on games "
+                 "with a model at the entry ply")
+    elif "games_per_entry" in spec:
+        sys.exit("spec: games_per_entry is the global league's (variable-length cycles); an experiment plays "
+                 "rounds_per_cycle rounds a cycle")
+    elif "patience_rule" in spec:
+        sys.exit("spec: patience_rule is the global league's rule 6; an experiment's lines don't retire")
+    if "games_per_cycle" in spec:  # 2026-11-12; kept out of DEFAULTS: without it the config is as before
+        if not is_count(spec["games_per_cycle"], 1):
+            sys.exit("spec: games_per_cycle must be a whole number from 1 (the games of a cycle's round-robins)")
+        both = [k for k in ("rounds_per_cycle", "min_rounds", "games_per_entry") if k in spec]
+        if both:
+            sys.exit(f"spec: games_per_cycle sets each cycle's rounds from its field; give it or {' and '.join(both)}, "
+                     f"not both")
     cfg = deep_merge(DEFAULTS, {k: v for k, v in spec.items() if k in DEFAULTS})
     cfg = dict(name=name, kind=kind, created=now(), root=root, **cfg)
     recipes = load_recipes()
     lines = []
     if kind == "global":
-        for row in recipe_rows(recipes, models):
-            lines.append(global_line(row, 1))
+        for row, (_, p) in zip(recipe_rows(recipes, [r for r, _ in models]), models):
+            lines.append(global_line(row, 1, p))
         cfg["cycles"] = None
         cfg["global_source"] = None
+        global_options(spec, cfg)
     else:
         options = list(spec.get("options") or [])
         if not options or set(options) - set(OPTION_ORDER) or len(set(options)) != len(options):
@@ -997,9 +1563,16 @@ def make_config(spec):
             g = read_json(os.path.join(src, "config.json"))
             if not g or g.get("kind") != "global":
                 sys.exit(f"{src}: no global league there (config.json of kind global)")
+            if is_global11(g):
+                sys.exit(f"spec: the global option copies the global league's games with a model at ply 2 (the 11-09 "
+                         f"design); {src} is of the 11-10 design (each model at its own ply), for which the option "
+                         f"isn't built (NEW-DESIGN Open: a G line with an Elo cutoff)")
             cfg["global_source"] = src
         else:
             cfg["global_source"] = None
+    entry_ply_option(spec, cfg, lines)
+    warm_start_option(cfg, lines)
+    label_lines_option(cfg, lines)
     costs = load_costs()
     for lc in lines:
         if lc["option"] == "self-play":  # games per round, fixed here so a replay plays the same rounds
@@ -1018,9 +1591,1060 @@ def make_config(spec):
         cfg["selfplay_budget_s"] = None
     version, us = load_prices(spec.get("prices_version"))
     cfg["prices"] = config_prices(version, us)
+    batch4_options(spec, cfg)
     check_prices(cfg)
     check_binaries(cfg)
+    self_games_option(spec, cfg)
+    replay_option(spec, cfg)
+    frozen_references_option(spec, cfg)
+    reference_window_option(spec, cfg)
+    if "games_per_cycle" in spec:  # it replaces rounds_per_cycle and min_rounds (checked above)
+        cfg["games_per_cycle"] = spec["games_per_cycle"]
+        del cfg["rounds_per_cycle"], cfg["min_rounds"]
+    observers_option(spec, cfg, recipes)  # last: the options above see the participants only
+    cold_games_option(spec, cfg)
+    train_filter_option(spec, cfg)
+    self_games_topup_option(spec, cfg)
+    openings_option(spec, cfg)
+    champion_se_kind_option(spec, cfg)
+    plateau_guard_option(spec, cfg)
+    rate_every_option(spec, cfg)  # last: it checks the options above and scales the plateau
     return league_dir_of(root, kind, name), cfg
+
+
+def is_count(x, lowest):
+    return isinstance(x, int) and not isinstance(x, bool) and x >= lowest
+
+
+def observers_option(spec, cfg, recipes):
+    """"observers": [model entries, as "models" gives them] (added 2026-11-12; the user's idea and name: "use the games
+    generated from uniform fields to train models of other types but not have them participate in the field, so that
+    we can later test their strengths in arenas"), kept out of the config without it, so that a spec without it gives
+    the same config.json and the same league as before. Experiments with the local option only. Each entry expands as
+    a model entry does (model, set, sweep, to, replicates; a warm start is refused) into observer lines, appended to
+    the config's lines after the participants' with "observer": true, named <model id>.obs (the participants' are
+    <model id>.loc, so an observer of a participant's model never shares its name), their recipe's training binary
+    and arguments, and seeds as a participant's of the same replicate (train_seed: the league's train seed, the cycle
+    and the seed offset). An observer's status is "observer" (state.json, lines.csv), never "active": it is never in
+    the field (no round-robin entries, no self-games, no own calibration), never rated, crowned or retired, never a
+    reference, and never counted where the participants are (games_per_cycle's N is the field's entries; the scaled
+    plateau's lines, rating_zero and the prices are fixed above from the participants only). Its version 0 is made
+    when it enters (cycle 1's calibration phase, as a line's); in every cycle that trains, after the participants, it
+    trains once on the participants' local set (the cycle's qualifying round-robin games and self-games, in the
+    participants' order; with replay, the replayed games too; with reference_window, the whole set, never a line's
+    cut), from its previous version, so it has a version per cycle as a participant does (version v: trained through
+    cycle v). The participants' self-games are part of that set (each participant's own games against itself); an
+    observer has no self-games of its own and nothing tops that up. The participants' games, models and records are
+    the same with and without observers; an observer given a participant's model and replicate trains byte for byte
+    as that participant. Records: observers.csv (OBSERVERS_FIELDS, a row per observer per cycle), totals.csv's
+    observers and observer_train_cpu_s (train_cpu_s stays the participants'), the cycle report's Observers line,
+    lines.csv (status observer, no champion), the index's observers count (its lines and models are the
+    participants'). arena.py reads an observer's versions as any line's (<experiment>:<line>.obs@<v>); it has no
+    in-run calibration to compare with."""
+    obs = spec.get("observers")
+    if obs is None:
+        return
+    if cfg["kind"] != "experiment":
+        sys.exit("spec: observers are for experiments: they train on an experiment's local games")
+    if not isinstance(obs, list) or not obs:
+        sys.exit("spec: observers must be a list of model entries, as models gives them (leave the key out for none)")
+    if "local" not in (spec.get("options") or []):
+        sys.exit("spec: observers train on the local lines' games: the experiment needs the local option")
+    for item in obs:
+        if isinstance(item, dict) and ("start" in item or "start_forget" in item or "start_reset" in item):
+            sys.exit("spec: observers: a warm start (start, start_forget, start_reset) is not supported for an "
+                     "observer")
+    names = {lc["line"] for lc in cfg["lines"]} | {x["name"] for x in frozen_refs(cfg)}
+    for v in expand_models(obs, recipes, ["local"]):
+        lc = experiment_line(v, "local")
+        lc["line"] = f"{v['id']}.{OBSERVER_SUFFIX}"
+        lc["observer"] = True
+        if lc["line"] in names:
+            sys.exit(f"spec: observers: {lc['line']} is given twice")
+        names.add(lc["line"])
+        cfg["lines"].append(lc)
+    check_binaries(cfg)
+
+
+def observer_lines(cfg):
+    """An experiment's observers (observers_option), in config order; [] without them."""
+    return [lc for lc in cfg["lines"] if lc.get("observer")]
+
+
+def cold_games_option(spec, cfg):
+    """"cold_games": {"temperature": T, "share": S, "train": true or false} (2026-11-12; the user's decision at 10:54:
+    "let's see how the addition of the T 0.02 games affects the model strengths ... if it doesn't affect the strength
+    negatively let's add this T 0.02 games into training if not, fine let's run a small number of additional games to
+    compute the actual experiment ratings"), kept out of the config without it, so that a spec without it gives the
+    same config.json and the same league as before. Experiments of local lines with games_per_cycle (the self-play and
+    global options, replay and frozen references: not built). Each cycle, after the round-robins (which are as without
+    the key: the same command, games and saved games), the field plays cold round-robins in the cold-games phase
+    (phase_cold): the same entries, own calibrations and policy, the tournament's flags with --temperature T, in their
+    own directory, cold/ (players.txt, retired.txt, games.csv, ratings.csv, tournament.log, ...), seed the league's
+    plus COLD_GAMES_SEED_OFFSET; R = round(S x games_per_cycle / (N (N - 1))) double round-robins for the field's N
+    entries, halves up, from 1 to GPC_MAX_ROUNDS (cold_rounds_for). The in-run ratings are the cold games' fit alone
+    (league_ratings reads cold/ratings.csv, and the champion test's SE comes from cold/games.csv: rating_tour), so every
+    decision runs on them: the champion test and crownings, the plateau rule, and with them the field; history.csv's and
+    cycles.csv's Elo are the cold fit's. tour/ keeps the round-robins and their own fit, which nothing decides on. With
+    "train": true the cycle's qualifying cold games join the shared local set after its round-robin games and self-games
+    (links t = COLD_T_BASE + the cold round, so they sort last), and their CPU and price join the set's data CPU and
+    price (data_cpu_target_s and data_price_target_s stay the round-robins' and self-games'): every local line and every
+    observer trains on them. With false they rate only (saved nowhere). Self-games stay one per entry per round-robin
+    round, at the tournament's temperature. Records: cold_rounds.csv (ROUNDS_FIELDS, the cold rounds), totals.csv's
+    COLD_TOTALS_FIELDS, the cycle report's Cold games line, the index's cold_games. T a number above 0 (the
+    tournament's --temperature: nats of log-odds with the log-odds-softmax policy), S a number above 0."""
+    if spec.get("cold_games") is None:
+        return
+    cfg["cold_games"] = spec["cold_games"]
+    try:
+        cold_games_of(cfg)
+    except ValueError as e:
+        sys.exit(f"spec: {e}")
+
+
+def cold_games_of(cfg):
+    """An experiment's cold_games ({"temperature", "share", "train"}; cold_games_option), None without it; ValueError
+    when it is malformed or the league can't have it (create refuses it; run checks it, as config.json may be
+    edited)."""
+    cg = cfg.get("cold_games")
+    if cg is None:
+        return None
+    if cfg.get("kind") != "experiment":
+        raise ValueError("cold_games is for experiments (the global league's ratings: not built)")
+    if not isinstance(cg, dict) or set(cg) != {"temperature", "share", "train"}:
+        raise ValueError('cold_games must be {"temperature": T, "share": S, "train": true or false}')
+    t, s = cg["temperature"], cg["share"]
+    if isinstance(t, bool) or not isinstance(t, (int, float)) or not math.isfinite(t) or not t > 0:
+        raise ValueError("cold_games.temperature must be a number above 0 (the cold games' --temperature)")
+    if isinstance(s, bool) or not isinstance(s, (int, float)) or not math.isfinite(s) or not s > 0:
+        raise ValueError("cold_games.share must be a number above 0 (the cold games' share of games_per_cycle)")
+    if not isinstance(cg["train"], bool):
+        raise ValueError("cold_games.train must be true or false")
+    if cfg.get("games_per_cycle") is None:
+        raise ValueError("cold_games needs games_per_cycle (its share is of the cycle's games)")
+    if any(lc["option"] != "local" for lc in cfg["lines"]):
+        raise ValueError("cold_games is built for experiments of local lines (with self-play or global lines: not "
+                         "built)")
+    if cfg.get("replay") is not None:
+        raise ValueError("cold_games with replay: not built")
+    if frozen_refs(cfg):
+        raise ValueError("cold_games with frozen_references: not built")
+    return cg
+
+
+def cold_rounds_for(cg, t, n):
+    """(R, bound): cold_games' rounds for a field of N entries in a league with games_per_cycle T:
+    rounds_for_cycle_games(S x T, N), the share's games in whole double round-robins (halves up, from 1 to
+    GPC_MAX_ROUNDS; S read as its decimal, so 0.25 x 1584 is 396 exactly)."""
+    return rounds_for_cycle_games(fractions.Fraction(repr(cg["share"])) * t, n)
+
+
+def cold_flags(cfg):
+    """The cold round-robins' flags: the tournament's, with cold_games' --temperature in place of any it gives (its
+    policy kept)."""
+    return without_flags(cfg["tournament"].get("flags", []), ["--temperature"]) + [
+        "--temperature", num_arg(cold_games_of(cfg)["temperature"])]
+
+
+def rating_tour(L):
+    """The tournament directory whose fit is the league's in-run ratings: tour/, or with cold_games cold/."""
+    return L.p(COLD_DIR) if L.cfg.get("cold_games") is not None else L.p("tour")
+
+
+def train_filter_option(spec, cfg):
+    """"train_filter": {"margin": M, "smooth": K} (2026-11-12, the user's Elo-filtered multi-kind experiment:
+    NEW-DESIGN "The global league's new purpose", analyst 6.85 (b); the rule as the user set it at 13:22-13:24, the
+    global league's qualify rule: both players at least the current model's strength minus the standard error), kept
+    out of the config without it, so that a spec without it gives the same config.json and the same league as before;
+    config.json keeps both values (K defaults to TRAIN_FILTER_SMOOTH_DEFAULT, 1). Experiments with cold_games (so local
+    lines and games_per_cycle), without observers. In each cycle that trains, line L's floor is its rating R_L minus M
+    (train_filter_ratings, filter_floor): R_L its current version's cold Elo in the cycle's fit; M "se"
+    (TRAIN_FILTER_SE: that rating's standard error in the fit, its 95% interval over 1.96) or a number (Elo). A game of
+    the local set trains L only if every player in it is rated at or above the floor (filter_keeps; an unrated player
+    counts; L's current version is never below its own floor): L's own games too, round-robin games, self-games and,
+    with cold_games' train, cold games alike. With K > 1 (numeric margins only) every rating is smoothed
+    (smoothed_ratings): R_L the mean of L's last K current versions' cold Elo, each as rated in its own cycle's fit,
+    another line's current version at its line's R, any other entry (a champion) at the mean of its own cold Elo over
+    the last K cycles. While L's current version is unrated (with "se": or has no SE) nothing is cut. The cut is
+    decided once a cycle (train_filter_plan; kept in state.json's current.train_filter and logged). A line it cuts
+    nothing from (and that has no top-up games) trains on the cycle's shared local set, as without the key; the others
+    on their own sets, trainsets/<line> (train_filter_sets), priced and costed without the cut games. Records:
+    cycles.csv's FILTER_CYCLES_FIELDS (each line's rating, SE, floor, own games and those it kept, kept games and
+    positions, their shares), totals.csv's FILTER_TOTALS_FIELDS, the cycle report's Train filter line, the index's
+    train_filter. M is "se" or a number from 0 (Elo), K a whole number from 1 (cycles; "se" takes 1: this cycle's fit
+    alone)."""
+    if spec.get("train_filter") is None:
+        return
+    cfg["train_filter"] = spec["train_filter"]
+    try:
+        train_filter_of(cfg)
+    except ValueError as e:
+        sys.exit(f"spec: {e}")
+    cfg["train_filter"] = dict(margin=spec["train_filter"]["margin"], smooth=train_filter_smooth(cfg))
+
+
+def train_filter_of(cfg):
+    """An experiment's train_filter margin M (train_filter_option): "se" or a number; None without it; ValueError when
+    it is malformed or the league can't have it (create refuses it; run checks it, as config.json may be edited)."""
+    tf = cfg.get("train_filter")
+    if tf is None:
+        return None
+    if cfg.get("kind") != "experiment":
+        raise ValueError("train_filter is for experiments (the global league has its own training window)")
+    if not isinstance(tf, dict) or "margin" not in tf or not set(tf) <= {"margin", "smooth"}:
+        raise ValueError('train_filter must be {"margin": M} or {"margin": M, "smooth": K}')
+    m = tf["margin"]
+    if m != TRAIN_FILTER_SE and (isinstance(m, bool) or not isinstance(m, (int, float)) or not math.isfinite(m)
+                                 or m < 0):
+        raise ValueError('train_filter.margin must be "se" (a line\'s current cold Elo minus its standard error) or a '
+                         "number from 0 (Elo below a line's rating)")
+    k = tf.get("smooth", TRAIN_FILTER_SMOOTH_DEFAULT)
+    if isinstance(k, bool) or not isinstance(k, int) or k < 1:
+        raise ValueError("train_filter.smooth must be a whole number from 1 (the cycles its ratings are smoothed over)")
+    if m == TRAIN_FILTER_SE and k != 1:
+        raise ValueError('train_filter: a "se" margin rates on this cycle\'s fit alone (smooth 1)')
+    if cfg.get("cold_games") is None:
+        raise ValueError("train_filter needs cold_games (its floors are the cold ratings)")
+    if observer_lines(cfg):
+        raise ValueError("train_filter with observers: not built (an observer trains on the whole local set)")
+    if cfg.get("reference_window") is not None:
+        raise ValueError("train_filter with reference_window: not built")
+    return m
+
+
+def train_filter_smooth(cfg):
+    """train_filter's smoothing K in cycles (train_filter_option): the value's "smooth", else
+    TRAIN_FILTER_SMOOTH_DEFAULT."""
+    return cfg["train_filter"].get("smooth", TRAIN_FILTER_SMOOTH_DEFAULT)
+
+
+def self_games_topup_option(spec, cfg):
+    """"self_games_topup": true (2026-11-12, with train_filter: NEW-DESIGN's "topped up to the standard with
+    self-games ... (logged)", analyst 6.66 (2) and 6.85 (b)), kept out of the config without it (false is the same),
+    so that a spec without it gives the same config.json and the same league as before. Experiments with train_filter
+    and self_games. In each cycle that trains, after the self-games (phase_topup), each line the filter cut games from
+    plays top-up games, k = min(games_per_cycle, U - K) for the K games it kept of the local set's U, so that its set
+    has the local set's size again (at most games_per_cycle more): its current version against its champion as
+    decided this cycle, colours alternating (the current version white first), or against itself (its twin, as a
+    self-game) when that champion is the current version (crowned this cycle, or the line's first cycle) or is rated
+    below the line's floor, so every top-up game passes the line's filter. Training games only, never rated: saved to
+    topuppool/ (gone after the cycle) and linked into the line's set spread over the cycle's rounds (game j in round
+    t0 + floor(j R / k) of R), each after its round's game of the same players. Priced as tournament games; their
+    price, and the replay-games process's CPU shared by price, join the line's data price and CPU. Records:
+    cycles.csv's topup_games, topup_positions and topup_opponent, totals.csv's topup columns, the cycle report's Train
+    filter line, the index's self_games_topup."""
+    tu = spec.get("self_games_topup")
+    if tu is None or tu is False:
+        return
+    cfg["self_games_topup"] = tu
+    try:
+        topup_of(cfg)
+    except ValueError as e:
+        sys.exit(f"spec: {e}")
+
+
+def topup_of(cfg):
+    """Whether an experiment has self_games_topup (self_games_topup_option); ValueError when it is malformed or the
+    league can't have it."""
+    tu = cfg.get("self_games_topup")
+    if tu is None:
+        return False
+    if tu is not True:
+        raise ValueError("self_games_topup must be true (leave it out for none)")
+    if train_filter_of(cfg) is None:
+        raise ValueError("self_games_topup tops up train_filter's cut: the experiment needs train_filter")
+    if not cfg.get("self_games"):
+        raise ValueError("self_games_topup needs self_games (its games are played as the self-games are)")
+    return True
+
+
+OPENING_FLAGS = ("--opening-plies", "--opening-temperature")
+
+
+def openings_option(spec, cfg):
+    """"openings": {"plies": K} or {"plies": K, "temperature": null or T} (2026-11-12; the user, ~15:03: "I'm not sure
+    different opening moves will help but we can test it"; analyst 6.91: K 6, uniform: game variety from random
+    opening plies instead of the temperature), kept out of the config without it, so that a spec without it gives the
+    same config.json and the same league as before. Experiments. Every training game the tournament binary plays opens
+    with K plies of uniformly random legal moves drawn from the game's own seeded random numbers (with "temperature": T,
+    each mover's log-odds softmax at T instead), then the tournament's policy and temperature: the round-robins (tour/),
+    the self-games and self_games_topup's games (the binary's --opening-plies K, and --opening-temperature T, on
+    `tournament` and `replay-games`). Not the cold games (cold_games' round-robins, the rating set: as without the key)
+    and not the own calibration games (`arena`). The opening plies are the game's like any other: training positions
+    labelled with the game's result, in games.csv's plies, the prices and the saved games. Needs a tournament binary
+    whose `tournament` and `replay-games` take the flags (chessai-hybrid19 or later); the flags themselves are refused
+    in tournament.flags (the cold games would play them too). K a whole number from 1, T null (uniform) or a number
+    above 0."""
+    given = [f for f, _ in parse_flags(cfg["tournament"].get("flags", [])) if f.split("=", 1)[0] in OPENING_FLAGS]
+    if given:
+        sys.exit(f"spec: give openings, not {', '.join(given)} in tournament.flags (the cold games would open with "
+                 f"them too)")
+    if spec.get("openings") is None:
+        return
+    cfg["openings"] = spec["openings"]
+    try:
+        op = openings_of(cfg)
+    except ValueError as e:
+        sys.exit(f"spec: {e}")
+    binary = cfg["tournament"]["binary"]
+    need = set(OPENING_FLAGS) if op.get("temperature") is not None else {"--opening-plies"}
+    for sub in ("tournament", "replay-games"):
+        lacks = need - binary_flags(binary, sub)[0]
+        if lacks:
+            sys.exit(f"spec: openings need a tournament binary whose {sub} takes {', '.join(sorted(lacks))} "
+                     f"(chessai-hybrid19 or later); {binary} lacks them")
+
+
+def openings_of(cfg):
+    """An experiment's openings ({"plies": K, "temperature": null or T}; openings_option), None without it; ValueError
+    when it is malformed or the league can't have it (create refuses it; run checks it, as config.json may be
+    edited)."""
+    op = cfg.get("openings")
+    if op is None:
+        return None
+    if cfg.get("kind") != "experiment":
+        raise ValueError("openings is for experiments (the global league: not built)")
+    if not isinstance(op, dict) or "plies" not in op or set(op) - {"plies", "temperature"}:
+        raise ValueError('openings must be {"plies": K} or {"plies": K, "temperature": null or T}')
+    if not is_count(op["plies"], 1):
+        raise ValueError("openings.plies must be a whole number from 1 (the random plies that open each game)")
+    t = op.get("temperature")
+    if t is not None and (isinstance(t, bool) or not isinstance(t, (int, float)) or not math.isfinite(t) or not t > 0):
+        raise ValueError("openings.temperature must be null (uniformly random plies) or a number above 0 (the "
+                         "opening's log-odds softmax temperature)")
+    return op
+
+
+def openings_flags(cfg):
+    """The tournament binary's flags for openings (openings_option) on the round-robins, the self-games and the top-up
+    games: [] without the key."""
+    op = openings_of(cfg)
+    if op is None:
+        return []
+    return ["--opening-plies", str(op["plies"])] + (
+        ["--opening-temperature", num_arg(op["temperature"])] if op.get("temperature") is not None else [])
+
+
+def champion_se_kind_option(spec, cfg):
+    """"champion_se_kind": "nominal" or "draw-aware" (2026-11-12, the training standard v1, models/STANDARD.md; analyst
+    6.93), kept out of the config without it and with "nominal", so that such a spec gives the same config.json and the
+    same league as before. The SE of the champion test. Nominal (contrast_ses): p(1-p) per game, which counts a draw
+    as a full binomial trial; in-run cold fits its SE was ~1.7x the real noise (split-half SD 0.60 of it pooled: F-P
+    0.49, trees 0.66-0.70; models/from-scratch/t01check/NOTES.md), so a 2.0-SE test was about a 3.3 true-SE test, and
+    a kind-biased one (4.1 for F-P, 3.0 for trees). Draw-aware (contrast_ses_draws): the HC0 sandwich, (s - p)^2 per
+    game, which predicted that split-half SD within 0.02-0.04; the test crowns at champion_se of these SEs (analyst
+    6.93: 3 for the standard, about 1.8 nominal). Experiments only. Records: cycles.csv's se_diff and z are the
+    draw-aware SE and its z (they decide), its DRAWSE_CYCLES_FIELDS (se_nominal, z_nominal) the nominal ones beside
+    them; the cycle report's Champion test line; the index's champion_se_kind. Also checked here for every spec:
+    champion_se, when given, is a number above 0 (create took any value before; a spec with a placeholder such as
+    "TODO" is refused)."""
+    k = spec.get("champion_se")
+    if "champion_se" in spec and (isinstance(k, bool) or not isinstance(k, (int, float)) or not 0 < k < float("inf")):
+        sys.exit("spec: champion_se must be a number above 0 (the champion test's bar, in standard errors)")
+    kind = spec.get("champion_se_kind")
+    if kind is None or kind == "nominal":
+        return
+    if kind not in CHAMPION_SE_KINDS:
+        sys.exit(f"spec: champion_se_kind must be {' or '.join(repr(x) for x in CHAMPION_SE_KINDS)}")
+    if cfg.get("kind") != "experiment":
+        sys.exit("spec: champion_se_kind is for experiments (the global league: not built)")
+    cfg["champion_se_kind"] = kind
+
+
+def plateau_guard_option(spec, cfg):
+    """plateau.guard_z: G (2026-11-12, the training standard v1; the coordinator after analyst 6.94: "never stop on
+    plateau while the last rated test's current-minus-champion is above G draw-aware SEs"; G 1.0 in the standard),
+    kept out of the config without it, so that such a spec gives the same config.json and the same league as before;
+    config.json keeps it as plateau.guard_z. Experiments with a plateau. When the plateau rule would stop the
+    experiment in a cycle that decides (with rate_every, a rated one), the stop is held while any line's champion test
+    in that cycle has z above G, z the test's own (current minus champion over the test's SE: draw-aware with
+    champion_se_kind "draw-aware", else nominal); the next cycle that decides checks again, and the cap still ends the
+    experiment. A held cycle: driver.log's "plateau ... held by plateau.guard_z", the cycle report's Champion test
+    line, state.json's current plateau_held ([line, z] of the lines that hold it)."""
+    pl = spec.get("plateau")
+    if not isinstance(pl, dict) or "guard_z" not in pl:
+        return
+    g = pl["guard_z"]
+    if isinstance(g, bool) or not isinstance(g, (int, float)) or not 0 <= g < float("inf"):
+        sys.exit("spec: plateau.guard_z must be a number from 0 (the z above which a line's champion test holds the "
+                 "plateau's stop)")
+    cfg["plateau"]["guard_z"] = g
+
+
+def rate_every_option(spec, cfg):
+    """"rate_every": N (2026-11-12; the user, ~15:10: "We can split cycles into sub-cycles. each sub-cycle is like
+    today's cycle but we don't update champions (we still play and train). That way the ratio of training to testing
+    games is increased"; analyst 6.92: N 4, a mechanics option), kept out of the config without it and with N 1 (every
+    cycle rates: the same config.json and the same league as before). Experiments with cold_games that rate only
+    (cold_games.train false; so local lines and games_per_cycle), without reference_window, with train_filter only
+    unsmoothed (smooth 1). The rated cycles are 1, N + 1, 2N + 1, ...: (c - 1) mod N = 0 (rated_cycle). A rated cycle
+    is a cycle as without the key. Every other cycle plays its round-robins, self-games and top-up games and trains
+    every line as configured (the round-robins' own fit, tour/ratings.csv, decides nothing, as with cold_games), but
+    plays no cold games and decides nothing (decide_unrated): no fit, no champion test and no crowning (each line's
+    decision UNRATED_DECISION; an entering line's first champion aside), no plateau check, and train_filter keeps the
+    last rated cycle's floors (each line's rating, SE and floor) and ratings, a line's version made since then (its
+    current one) taking the rating of its line's version rated then (train_filter_carry); self_games_topup's test of
+    the champion against the floor uses them too. The experiment's cycles (its cap) must be a rated cycle, 1 + a
+    multiple of N (create and run refuse others), so it ends on one; its last cycle trains nothing as before. The
+    plateau rule is checked on rated cycles only (any min_cycles: the first rated cycle from it on), its K in training
+    cycles: an explicit plateau.cycles as given; a scaled plateau needs "rate_scale" in the spec's plateau, "sqrt",
+    "linear" or "none" (no default: the user chooses), K = round(round(K2 x sqrt(2 / lines)) x sqrt(N), N or 1)
+    (rate_scaled_cycles), and config.json keeps that K as plateau.cycles with rate_every and rate_scale added to
+    plateau.scaled. Records: cycles.csv's RATE_CYCLES_FIELDS (rated, champion_age) and totals.csv's RATE_TOTALS_FIELDS
+    (rated); an unrated cycle's Elo columns in cycles.csv and history.csv are blank (it has no fit), it adds no
+    cold_rounds.csv rows and its cold columns in totals.csv are 0; the cycle report's Rated/Unrated cycle line; the
+    index's rate_every; state.json keeps each line's champion_cycle and, with train_filter, rate_carry (the last rated
+    cycle's floors and ratings)."""
+    n = spec.get("rate_every")
+    pl = spec.get("plateau") if isinstance(spec.get("plateau"), dict) else {}
+    if n is not None and not is_count(n, 1):
+        sys.exit("spec: rate_every must be a whole number from 1 (1: every cycle rates, as without the key)")
+    if n is None or n == 1:
+        if "rate_scale" in pl:
+            sys.exit("spec: plateau.rate_scale is for experiments with rate_every above 1")
+        return
+    if cfg.get("kind") != "experiment":
+        sys.exit("spec: rate_every is for experiments (the global league: not built)")
+    cfg["rate_every"] = n
+    p = cfg.get("plateau")
+    if p is not None and "scaled" in p:
+        rs = pl.get("rate_scale")
+        if rs not in RATE_SCALES:
+            sys.exit('spec: a scaled plateau with rate_every above 1 needs "rate_scale": "sqrt", "linear" or "none" '
+                     "in the plateau (its K, round(K2 x sqrt(2 / lines)), times sqrt(N), N or 1; no default)")
+        p["cycles"] = rate_scaled_cycles(p["cycles"], n, rs)
+        p["scaled"] = dict(p["scaled"], rate_every=n, rate_scale=rs)
+    elif "rate_scale" in pl:
+        sys.exit("spec: plateau.rate_scale is for scaled plateaus (an explicit plateau.cycles counts training cycles "
+                 "as given)")
+    try:
+        rate_every_of(cfg)
+    except ValueError as e:
+        sys.exit(f"spec: {e}")
+
+
+def rate_scaled_cycles(k, n, scale):
+    """A scaled plateau's K under rate_every N (rate_every_option): K x sqrt(N), N or 1 by scale ("sqrt", "linear",
+    "none"), rounded half up, at least 1."""
+    f = {"sqrt": math.sqrt(n), "linear": n, "none": 1}[scale]
+    return max(1, int(math.floor(k * f + 0.5)))
+
+
+def rate_every_of(cfg):
+    """An experiment's rate_every N (rate_every_option), None without it; ValueError when it is malformed or the league
+    can't have it (create refuses it; run checks it, as config.json may be edited)."""
+    n = cfg.get("rate_every")
+    if n is None:
+        return None
+    if not is_count(n, 2):
+        raise ValueError("rate_every must be a whole number from 2 (1 is every cycle: create leaves it out)")
+    if cfg.get("kind") != "experiment":
+        raise ValueError("rate_every is for experiments (the global league: not built)")
+    cg = cold_games_of(cfg)
+    if cg is None:
+        raise ValueError("rate_every needs cold_games (the rated cycles' rating set)")
+    if cg["train"]:
+        raise ValueError("rate_every with cold games that train: not built (a rated cycle's local set would hold more "
+                         "games than the others')")
+    if reference_window_of(cfg) is not None:
+        raise ValueError("rate_every with reference_window: not built")
+    if train_filter_of(cfg) is not None and train_filter_smooth(cfg) != 1:
+        raise ValueError("rate_every with a smoothed train_filter: not built (smooth must be 1)")
+    c = cfg["cycles"]
+    if (c - 1) % n:
+        lo = c - (c - 1) % n
+        raise ValueError(f"rate_every {n}: the experiment's cycles must be a rated cycle, 1 + a multiple of {n}, so "
+                         f"that its last cycle rates (e.g. {lo} or {lo + n}, not {c})")
+    sc = (cfg.get("plateau") or {}).get("scaled")
+    if sc is not None and (sc.get("rate_every") != n or sc.get("rate_scale") not in RATE_SCALES):
+        raise ValueError("plateau.scaled must keep this rate_every and its rate_scale (sqrt, linear or none), as "
+                         "create computes them")
+    return n
+
+
+def rated_cycle(cfg, c):
+    """Whether cycle c rates: every cycle, or with rate_every N cycles 1, N + 1, 2N + 1, ... ((c - 1) mod N = 0)."""
+    n = cfg.get("rate_every")
+    return not n or (c - 1) % n == 0
+
+
+def next_rated_cycle(cfg, c):
+    """The first rated cycle after cycle c (rated_cycle)."""
+    n = cfg.get("rate_every") or 1
+    return c + n - (c - 1) % n
+
+
+def unrated_text(cfg, c):
+    """An unrated cycle in words, for the log and the report."""
+    return f"rate_every {cfg['rate_every']}: cycle {c} doesn't rate, cycle {next_rated_cycle(cfg, c)} does"
+
+
+def global_options(spec, cfg):
+    """The global league's config (NEW-DESIGN "The global league", the 11-10 design; built 2026-11-11):
+    "global_design": "11-10"; no anchors and no flat patience; rule 6 in patience_rule ({"rule": "positions",
+    "positions": P, "floor_cycles": K}: a spec may set P, a whole number from 1, default 20,000,000, and K, a whole
+    number from 0, default 5; "positions" is the only rule); no ply-1 entries besides the ply-1 models' own
+    (ply1_entries false; each line has its "ply"); the training rule's margin train.margin (spec "train":
+    {"margin": M}, a number from 0, default 30), with train.qualify saying the rule in words."""
+    m = (spec.get("train") or {}).get("margin", GLOBAL_MARGIN_DEFAULT)
+    if isinstance(m, bool) or not isinstance(m, (int, float)) or not 0 <= m < float("inf"):
+        sys.exit("spec: train.margin must be a number from 0 (Elo)")
+    pr = spec.get("patience_rule", {})
+    if not isinstance(pr, dict) or set(pr) - set(PATIENCE_RULE) or pr.get("rule", "positions") != "positions":
+        sys.exit('spec: patience_rule must be {"positions": P, "floor_cycles": K} (rule 6; "rule": "positions" is '
+                 'the only rule)')
+    if not is_count(pr.get("positions", 1), 1) or not is_count(pr.get("floor_cycles", 0), 0):
+        sys.exit("spec: patience_rule: positions must be a whole number from 1 and floor_cycles one from 0")
+    cfg["global_design"] = GLOBAL_DESIGN
+    cfg["patience_cycles"] = None
+    cfg["patience_rule"] = dict(PATIENCE_RULE, **pr)
+    cfg["anchors"] = None
+    cfg["ply1_entries"] = False
+    cfg["train"] = dict(cfg["train"], margin=m, qualify="both players rated at or above the model's current Elo "
+                                                         "minus the margin (unrated players count)")
+    if "games_per_entry" in spec:  # variable-length cycles (2026-11-11 ~20:30); kept out of the config without it
+        if not is_count(spec["games_per_entry"], 1):
+            sys.exit("spec: games_per_entry must be a whole number from 1 (the games each entry plays a cycle)")
+        cfg["games_per_entry"] = spec["games_per_entry"]
+
+
+def entry_ply_option(spec, cfg, lines):
+    """"entry_ply": P (added 2026-11-10 ~22:30 with P 1 or 2; the user: experiments screen at ply 1, winners are
+    upgraded to ply 2 later; P 3 added 2026-11-11, the ply ladder's next rung: theory-2 6.11's deeper games; any P
+    from 1 since 2026-11-11 ~03:40, for theory-2 6.17's ply-4 field), kept out of DEFAULTS so that a spec without it
+    gives the same config.json and the same league as before, at ply 2. Each line's current version and its champion
+    play at ply P (entries <line>@<v>-P); the rating zero, the champion test, the plateau rule and the training rule (a
+    game counts if a model at ply P plays in it) are at P. Experiments only: the global league's entries and anchors
+    are at plies 1 and 2. With P other than 2 there are no ply-1 entries besides the main ones (ply1_entries false,
+    set when the spec doesn't say; true is refused) and no global option (it copies the global league's games with a
+    model at ply 2). A self-play line whose depth neither the spec nor its recipe sets (the binary's default, 0)
+    self-plays at depth P, the depth the tournament gives a ply-P entry (create sets it; lines.csv and the line's
+    selfplay_args show it, and selfplay_depth_default records it); a --depth the spec or the recipe sets stays
+    (F-L-d2jit self-plays at depth 2 whatever the entry ply). The games are priced at their ply: create refuses a
+    prices version without the lines' kinds at ply P (P2 has tournament constants at ply 3 and at ply 4 from
+    2026-11-11, at ply 4 lr's measured and the other kinds' estimated, and self-play constants to depth 4; P0 and P1
+    have none above ply 2)."""
+    if "entry_ply" not in spec:
+        return
+    p = spec["entry_ply"]
+    if isinstance(p, bool) or not is_count(p, 1):
+        sys.exit("spec: entry_ply must be a whole number from 1")
+    if cfg["kind"] != "experiment":
+        sys.exit('spec: entry_ply is for experiments (each global-league model has its own ply: models '
+                 '[{"recipe": R, "ply": P}])')
+    if p != 2:
+        if spec.get("ply1_entries"):
+            sys.exit(f"spec: with entry_ply {p} the main entries are at ply {p}: ply1_entries must be false")
+        if any(lc["option"] == "global" for lc in lines):
+            sys.exit("spec: the global option trains on the global league's games with a model at ply 2; it needs "
+                     "entry_ply 2")
+        cfg["ply1_entries"] = False
+    for lc in lines:
+        if (lc["option"] == "self-play" and not any(f == "--depth" for f, _ in lc["selfplay_overrides"])
+                and "--depth" not in dict(parse_flags(lc["selfplay_args"])) and selfplay_depth(lc) != p):
+            lc["selfplay_args"] = apply_overrides(lc["selfplay_args"], [("--depth", str(p))])
+            lc["selfplay_depth_default"] = p
+    cfg["entry_ply"] = p
+    cfg["train"] = dict(cfg["train"], qualify=f"a model at ply {p}")
+
+
+def warm_start_option(cfg, lines):
+    """"start" and "start_forget" in a spec's model entry (added 2026-11-11 ~03:40 for theory-2 6.17's warm-started
+    twins), kept out of the config's lines without them, so that a spec without them gives the same config.json and
+    the same league as before. {"model": M, "start": {"experiment": E, "version": V}, "start_forget": F}: each line of
+    the entry starts from version V of the line of its own name (the same model, replicate and option) in experiment
+    E (a name under the root's experiments/, or a league dir's absolute path). Its version 0 is a byte copy of that
+    model (checked against the md5 recorded here when the copy is made), so cycle 1's tournament plays it; its first
+    training runs `train --start <version 0> --init-forget F` (F default 1: no forget, and no flag), the later ones
+    train as every line does (--start the previous version, no forget); the line keeps its own seeds. The line's
+    "start" in config.json records experiment, dir, line, version, path, md5 and forget; its "entered" event gives
+    the path and md5. Refused: a self-play line (its versions come from self-play), a missing league, line or model,
+    a start line of another kind, --init-forget among the line's train arguments, and with F not 1 a train binary
+    without --init-forget.
+    Tree kinds (TREE_KINDS; added 2026-11-12 ~16:40 for the ply-4 mixed field, refused before): a tree trains on from
+    its training state, so its version 0 copies both the model and the state of version V ({kind}V.state; a run keeps
+    its current version's state only, so a live run's older states are gone: frozen copies live under
+    leagues/starts/), and its first training is `train --start <version 0's state>`, as every later one is from the
+    previous version's state. "start" also records state and state_md5, and the "entered" event both copies. A state
+    continues a tree under its own options, so the start line must have the same recipe and the same train arguments.
+    Refused besides: a missing state, another recipe, other train arguments.
+    Leaf forget and warm reset (added 2026-11-12 for the ply-2 rung of training standard v1, analyst 6.95; before, a
+    tree's F had to be 1): for bdt and bdd, F not 1 runs the first training with `--start-leaf-forget F` (every leaf
+    forgotten once, routers untouched), and "start_reset": true with `--warm-reset` (a growing tree or DAG closes its
+    trials in flight on their statistics so far and restarts its windows, snapshots and router shadows, keeping its
+    structure and growth state), both after --start; "start" records reset (only when true). Refused: either for
+    another kind, F not 1 or a reset with a train binary without the flag (chessai-grow7 has both: "train_binary" in
+    the entry), a reset without --split-rule grow, F not 1 under the growth rule without the reset (the binary's
+    rule: the reset closes the trials and drops the snapshots first), and a reset of a flat model."""
+    for lc in lines:
+        ws = lc.get("start")
+        if not ws:
+            continue
+        line, kind = lc["line"], lc["kind"]
+        tree = kind in TREE_KINDS
+        if lc["option"] == "self-play":
+            sys.exit(f"spec: start: {line} is a self-play line; a warm start is for lines that train on games "
+                     f"(local, global)")
+        name = ws["experiment"]
+        src = os.path.abspath(name if os.path.isabs(name) else os.path.join(cfg["root"], "experiments", name))
+        sc = read_json(os.path.join(src, "config.json"))
+        if not isinstance(sc, dict) or not isinstance(sc.get("lines"), list):
+            sys.exit(f"spec: start: no league in {src}")
+        sl = {x.get("line"): x for x in sc["lines"]}.get(line)
+        if sl is None:
+            sys.exit(f"spec: start: {src} has no line {line} (a line starts from the line of its own name: the same "
+                     f"model, replicate and option)")
+        if sl.get("kind") != kind:
+            sys.exit(f"spec: start: {line} is {kind}; its start line in {src} is {sl.get('kind')}")
+        path = os.path.join(src, "runs", line, f"{kind}{ws['version']}.model")
+        if not os.path.isfile(path):
+            sys.exit(f"spec: start: no model {path}")
+        f = ws["forget"]
+        reset = bool(ws.get("reset"))
+        if reset and not tree:
+            sys.exit(f"spec: start: {line} is {kind}: start_reset is for growing trees and DAGs (bdt, bdd)")
+        if tree:
+            if sl.get("recipe") != lc["recipe"]:
+                sys.exit(f"spec: start: {line} is recipe {lc['recipe']}; its start line in {src} is "
+                         f"{sl.get('recipe')} (a tree's state continues its own recipe)")
+            if list(sl.get("train_args") or []) != list(lc["train_args"]):
+                sys.exit(f"spec: start: {line}'s train arguments {lc['train_args']} differ from its start line's in "
+                         f"{src}, {sl.get('train_args')} (a tree's state continues under its own options)")
+            grow = dict(parse_flags(lc["train_args"])).get("--split-rule") == "grow"
+            have = binary_flags(lc["train_binary"], "train")[0]
+            tb = os.path.basename(lc["train_binary"])
+            if (f != 1 or reset) and kind not in ("bdt", "bdd"):
+                sys.exit(f"spec: start: {line} is {kind}: start_forget and start_reset are for bdt and bdd")
+            if reset and not grow:
+                sys.exit(f"spec: start: {line}: start_reset is the growth rule's (--split-rule grow), whose trials "
+                         f"and windows it resets")
+            if reset and "--warm-reset" not in have:
+                sys.exit(f"spec: start: {line}: {tb} train has no --warm-reset (chessai-grow7 has: train_binary)")
+            if f != 1 and "--start-leaf-forget" not in have:
+                sys.exit(f"spec: start: {line} is a tree ({kind}): start_forget {num_arg(f)} needs a train binary "
+                         f"with --start-leaf-forget; {tb} has none (chessai-grow7 has: train_binary)")
+            if f != 1 and grow and not reset:
+                sys.exit(f"spec: start: {line}: start_forget under the growth rule needs start_reset (the reset "
+                         f"closes the trials and drops the snapshots first)")
+            state = os.path.join(src, "runs", line, f"{kind}{ws['version']}.state")
+            if not os.path.isfile(state):
+                sys.exit(f"spec: start: no training state {state} (a run keeps its current version's state only; "
+                         f"freeze a copy under leagues/starts/)")
+        if f != 1 and not tree:
+            if "--init-forget" in dict(parse_flags(lc["train_args"])):
+                sys.exit(f"spec: start: {line}'s train arguments set --init-forget (every training); start_forget "
+                         f"is the first training's")
+            if "--init-forget" not in binary_flags(lc["train_binary"], "train")[0]:
+                sys.exit(f"spec: start: {lc['train_binary']} train has no --init-forget")
+        lc["start"] = dict(experiment=name, dir=src, line=line, version=ws["version"], path=path, md5=file_md5(path),
+                           forget=f)
+        if tree:
+            lc["start"].update(state=state, state_md5=file_md5(state))
+        if reset:
+            lc["start"]["reset"] = True
+
+
+def scaled_plateau_cycles(k2, lines):
+    """A scaled plateau's K: round(k2 x sqrt(2 / lines)), at least 1 (k2 is K for 2 lines; halves rounded up). The
+    user's rule of 2026-11-10 ~22:15: with more lines some line crowns more often by chance, so the wait is shorter."""
+    return max(1, int(math.floor(k2 * math.sqrt(2.0 / lines) + 0.5)))
+
+
+def batch4_options(spec, cfg):
+    """The experiment options added on 2026-11-10 (batch 4), kept out of DEFAULTS so that a spec without them gives
+    the same config.json and the same league as before:
+    - "ply1_entries": false: no current@1 entries (a line's entries are its current version and its champion at ply
+      2, one entry when they are the same version);
+    - "plateau": {"cycles": K, "min_cycles": M}: the experiment ends after the first cycle from M on in which no line
+      has crowned a champion for K cycles; "cycles" stays the cap;
+    - "plateau": {"scaled": true or {"k2": K2}, "min_cycles": M} (added 2026-11-10 ~22:15): the same rule with K
+      computed here from the number of lines n, K = round(K2 x sqrt(2 / n)) (K2 default 50); config.json keeps K as
+      plateau.cycles and the inputs as plateau.scaled {"k2", "lines"}, so the driver runs the same rule (with
+      rate_every above 1 the spec's plateau also gives "rate_scale" and K is scaled again: rate_every_option);
+    - references without "random" (the tournament's anchor): config.json gets "rating_zero", the first line's version
+      0 at ply 2 (in every experiment's first field). The tournament then runs without --anchor (ratings relative to
+      the rated players' mean), and the driver re-centres the ratings on rating_zero and pins it in the champion
+      test's SE (a contrast's SE doesn't depend on which rated player is pinned).
+    Experiments only: the global league keeps its references (random pins its Elo at 0), has no ply-1 entries
+    besides its ply-1 models' (ply1_entries false; true is refused) and has patience instead of a plateau."""
+    kind = cfg["kind"]
+    if "ply1_entries" in spec:
+        if not isinstance(spec["ply1_entries"], bool):
+            sys.exit("spec: ply1_entries must be true or false")
+        if kind != "experiment" and spec["ply1_entries"]:
+            sys.exit("spec: each global-league model plays at its own ply only: ply1_entries true is for experiments")
+        cfg["ply1_entries"] = spec["ply1_entries"]
+    if spec.get("plateau") is not None:
+        pl = spec["plateau"]
+        if kind != "experiment":
+            sys.exit("spec: plateau is for experiments (the global league has patience)")
+        if isinstance(pl, dict) and "scaled" in pl:
+            sc = pl["scaled"]
+            k2 = sc.get("k2", PLATEAU_K2_DEFAULT) if isinstance(sc, dict) else PLATEAU_K2_DEFAULT
+            if (set(pl) - {"scaled", "min_cycles", "rate_scale", "guard_z"}
+                    or not (sc is True or (isinstance(sc, dict) and not set(sc) - {"k2"}))
+                    or not isinstance(k2, (int, float)) or isinstance(k2, bool) or not 0 < k2 < float("inf")
+                    or not is_count(pl.get("min_cycles", 0), 0)):
+                sys.exit('spec: a scaled plateau must be {"scaled": true or {"k2": K2 (above 0; default '
+                         f'{PLATEAU_K2_DEFAULT})}}, "min_cycles": M (from 0)}}')
+            n = len(cfg["lines"])
+            cfg["plateau"] = dict(cycles=scaled_plateau_cycles(k2, n), min_cycles=pl.get("min_cycles", 0),
+                                  scaled=dict(k2=k2, lines=n))
+        else:
+            if (not isinstance(pl, dict) or set(pl) - {"cycles", "min_cycles", "rate_scale", "guard_z"}
+                    or not is_count(pl.get("cycles"), 1)
+                    or not is_count(pl.get("min_cycles", 0), 0)):
+                sys.exit('spec: plateau must be {"cycles": K (from 1), "min_cycles": M (from 0)}, or {"scaled": true '
+                         'or {"k2": K2}, "min_cycles": M}')
+            cfg["plateau"] = dict(cycles=pl["cycles"], min_cycles=pl.get("min_cycles", 0))
+    if ANCHOR not in cfg["references"]:
+        if kind != "experiment":
+            sys.exit(f"spec: the global league needs the {ANCHOR} reference (its anchors' Elo is relative to it)")
+        cfg["rating_zero"] = entry_name(cfg["lines"][0]["line"], 0, entry_ply(cfg))
+
+
+def self_games_option(spec, cfg):
+    """"self_games": true (added 2026-11-10 ~22:15, the user's default for experiments with local play; the global
+    league may have it too), kept out of DEFAULTS so that a spec without it gives the same config.json and the same
+    league as before. Each round every entry whose game against itself is a training game (a model at the entry ply)
+    plays one, in the self-games phase (phase_selfgames): training games for the local lines only. Needs a line that
+    trains on the league's own games (local, or the global league's lines) and a tournament binary with
+    `replay-games`, which plays them as the tournament plays its games."""
+    if "self_games" not in spec and cfg["kind"] != "global":
+        return
+    sg = spec.get("self_games", True)  # the global league: on unless the spec says false (NEW-DESIGN "Self-games")
+    if not isinstance(sg, bool):
+        sys.exit("spec: self_games must be true or false")
+    if sg:
+        if not any(lc["option"] in ("league", "local") for lc in cfg["lines"]):
+            sys.exit("spec: self_games are training games for local lines, and this experiment has none")
+        binary = cfg["tournament"]["binary"]
+        r = subprocess.run([binary, "replay-games", "--help"], capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.exit(f"spec: self_games need a tournament binary with replay-games; {binary} has none")
+        flags, _ = binary_flags(binary, "replay-games")
+        need = {"--seed", "--use-probs"} | {f for f, _ in parse_flags(cfg["tournament"].get("flags", []))
+                                            if f in ("--policy", "--temperature")}
+        if need - flags:
+            sys.exit(f"spec: {binary} replay-games lacks {', '.join(sorted(need - flags))}")
+    cfg["self_games"] = sg
+
+
+def replay_option(spec, cfg):
+    """"replay": {"share": S, "window": W} (added 2026-11-11 ~22:00 for the replay-p2 test, analyst 6.46 (i): the
+    probit and LR learners follow their most recent data, so a pure ply-2 field ends on its newest, narrowest games),
+    kept out of DEFAULTS so that a spec without it gives the same config.json and the same league as before.
+    Experiments with local lines only. Each cycle c's local set is the cycle's own games, as without it (the
+    round-robins' qualifying games and the self-games), plus games replayed from the local sets of cycles
+    max(1, c - W) to c - 1 (replaypool/, phase_train): round(S / (1 - S) x the own games), fewer when fewer were kept,
+    sampled uniformly without replacement and deterministically from the league's seed and c (replay_sample). The
+    replayed games are the same kinds the local set holds: round-robin games and self-games. S above 0 and below 1,
+    W a whole number from 1."""
+    if spec.get("replay") is None:
+        return
+    cfg["replay"] = spec["replay"]
+    try:
+        replay_of(cfg)
+    except ValueError as e:
+        sys.exit(f"spec: {e}")
+
+
+def replay_of(cfg):
+    """(share, window) of an experiment's "replay" (replay_option), None without it; ValueError when it is malformed
+    or the league can't have it (create refuses it; run checks it each cycle, as config.json may be edited)."""
+    r = cfg.get("replay")
+    if r is None:
+        return None
+    if cfg.get("kind") != "experiment":
+        raise ValueError("replay is for experiments (the global league's lines train on their Elo window)")
+    if not any(lc["option"] == "local" for lc in cfg["lines"]):
+        raise ValueError("replay replays the local lines' games, and this experiment has none")
+    if not isinstance(r, dict) or set(r) != {"share", "window"}:
+        raise ValueError('replay must be {"share": S, "window": W}')
+    s, w = r["share"], r["window"]
+    if isinstance(s, bool) or not isinstance(s, (int, float)) or not 0 < s < 1:
+        raise ValueError("replay.share must be a number above 0 and below 1 (the replayed games' share of the local "
+                         "set)")
+    if not is_count(w, 1):
+        raise ValueError("replay.window must be a whole number from 1 (the cycles replayed from)")
+    return float(s), w
+
+
+FROZEN_REF_KEYS = ("name", "version", "experiment", "dir", "line", "v", "kind", "source_model", "md5", "heldout",
+                   "calibration", "owncal_binary", "expected_result", "expected_calibration")
+
+
+def frozen_references_option(spec, cfg):
+    """"frozen_references": [{"name": N, "version": "<experiment>:<line>@<v>"}, ...] (added 2026-11-12 for
+    diversity-p2, theory-2 6.45 (2) and 6.53: the training data's coverage from other players, at a quality floor),
+    kept out of DEFAULTS so that a spec without it gives the same config.json and the same league as before.
+    Experiments only, without the global option or replay. Each is a fixed model of another experiment: version v of
+    its line <line> (the experiment a name under the root's experiments/, or a league dir's absolute path). Every
+    cycle it plays the round-robins as an entry at the league's entry ply, <N>@<v>F-<ply> (role frozen-reference,
+    after the random references); it never trains, is never crowned or retired, plays no self-games, and the champion
+    test and the plateau rule don't see it. A game with it is a game with a model at the entry ply (qualifies): the
+    local lines train on line-line, line-reference and reference-reference games, and the round-robins' prices (the
+    data price) include them at the reference's kind (player_kinds). Its own calibration is made once, as its
+    experiment made it (make_frozen_own): its experiment's calibration settings, held-out calibration and tournament
+    binary, into frozenref/<N>/, the result line checked against its experiment's owncal record; each tournament's
+    fit on it is checked against the one its experiment's tournament log printed (check_frozen_calibrations). The
+    model is copied into frozenref/<N>.<kind>.model at create (frozen_model; md5 recorded here and checked each
+    cycle). config.json keeps each reference resolved (frozen_ref_of). totals.csv's local_* columns and the cycle
+    report give the local set's games by kind (local_mix). Refused: a name that isn't a plain name (NAME_RE), a
+    random reference's or a line's name, a name twice; a source that isn't an experiment, a missing line or model, a
+    model changed since its own games, a version without its own-calibration record (one result) or its calibration
+    line (one value) in its experiment (a version that never played there); a missing binary or price."""
+    if spec.get("frozen_references") is None:
+        return
+    refs = spec["frozen_references"]
+    form = 'a list of {"name": N, "version": "<experiment>:<line>@<v>"} (at least one; leave the key out for none)'
+    if not isinstance(refs, list) or not refs:
+        sys.exit(f"spec: frozen_references must be {form}")
+    lines = {lc["line"] for lc in cfg["lines"]}
+    seen = set()
+    for x in refs:
+        if (not isinstance(x, dict) or set(x) != {"name", "version"} or not isinstance(x["name"], str)
+                or not isinstance(x["version"], str)):
+            sys.exit(f"spec: frozen_references must be {form}; not {x!r}")
+        n = x["name"]
+        why = ("isn't a plain name (letters, digits and _.+-, from a letter or digit)" if not NAME_RE.fullmatch(n)
+               else "is a random reference's name" if n in REFERENCE_PLY else "is a line's name" if n in lines
+               else "is given twice" if n in seen else "")
+        if why:
+            sys.exit(f"spec: frozen reference {n!r} {why}")
+        seen.add(n)
+    out = []
+    for x in refs:
+        try:
+            out.append(frozen_ref_of(x, cfg["root"]))
+        except ValueError as e:
+            sys.exit(f"spec: frozen reference {e}")
+    cfg["frozen_references"] = out
+    try:
+        frozen_refs_check(cfg)
+    except ValueError as e:
+        sys.exit(f"spec: {e}")
+    check_prices(cfg)
+    missing = sorted({x["owncal_binary"] for x in out if not os.access(x["owncal_binary"], os.X_OK)})
+    if missing:
+        sys.exit("missing binaries: " + ", ".join(missing))
+
+
+def frozen_ref_of(x, root):
+    """A frozen reference resolved from its spec entry {"name": N, "version": "<experiment>:<line>@<v>"} as arena.py
+    resolves an experiment version (resolve_entry): the experiment's dir (`experiment` as given: a name under root's
+    experiments/, or an absolute league dir), the line's kind, the model and its md5, the held-out calibration, the
+    calibration settings and tournament binary its own games were made with, and what its experiment recorded of
+    them: the own games' result line (owncal/<line>@<v>.arena, "A: +W -L =D, score S%") and the calibration its
+    tournament fitted on them (tour/tournament.log, "params (N positions)"). ValueError when it can't be."""
+    name = x["name"]
+    m = FROZEN_VERSION_RE.match(x["version"])
+    if not m:
+        raise ValueError(f"{name}: version must be <experiment>:<line>@<version>, not {x['version']!r}")
+    exp, line, v = m["exp"], m["line"], int(m["v"])
+    src = os.path.abspath(exp if os.path.isabs(exp) else os.path.join(root, "experiments", exp))
+    sc = read_json(os.path.join(src, "config.json"))
+    if not isinstance(sc, dict) or sc.get("kind") != "experiment" or not isinstance(sc.get("lines"), list):
+        raise ValueError(f"{name}: no experiment in {src}")
+    lc = {y.get("line"): y for y in sc["lines"]}.get(line)
+    if lc is None:
+        raise ValueError(f"{name}: {src} has no line {line}")
+    kind = lc["kind"]
+    model = os.path.join(src, "runs", line, f"{kind}{v}.model")
+    if not os.path.isfile(model):
+        raise ValueError(f"{name}: no model {model}")
+    md5 = file_md5(model)
+    key = own_key(line, v)
+    rec = read_json(os.path.join(src, "owncal", key + ".json"))
+    log = os.path.join(src, "owncal", key + ".arena")
+    if not isinstance(rec, dict) or not os.path.exists(log):
+        raise ValueError(f"{name}: {src} has no own-calibration record of {key} (owncal/{key}.json and .arena): a "
+                         f"frozen reference is a version that played in its experiment")
+    if rec.get("md5") != md5:
+        raise ValueError(f"{name}: {model} has md5 {md5}; its own games were made from md5 {rec.get('md5')}")
+    cal = sc["calibration"]
+    held = (cal.get("heldout") or {}).get(lc.get("heldout")) if lc.get("heldout") else None
+    if lc.get("heldout") and not held:
+        raise ValueError(f"{name}: {src}'s calibration settings have no held-out games {lc['heldout']!r}")
+    if held and not os.path.isdir(held):
+        raise ValueError(f"{name}: no held-out games {held}")
+    recorded = rec.get("model") or ""
+    if (rec.get("play") != (f"cal:{held}:{kind}:{recorded}" if held else f"{kind}:{recorded}")
+            or os.path.realpath(recorded) != os.path.realpath(model)):
+        raise ValueError(f"{name}: its own games in {src} were made with {rec.get('play')!r}, not with this model, "
+                         f"kind and held-out calibration")
+    with open(log, errors="replace") as f:
+        results = sorted(set(arena_results(f.read())))
+    if len(results) != 1:
+        raise ValueError(f"{name}: owncal/{key}.arena in {src} has {len(results)} different results, not one")
+    want = os.path.realpath(os.path.join(src, "owncal", key))
+    cals = set()
+    tlog = os.path.join(src, "tour", "tournament.log")
+    if os.path.exists(tlog):
+        with open(tlog, errors="replace") as f:
+            for s in f:
+                if s.startswith("calibration on ") and f"/owncal/{key}: " in s:
+                    mc = CAL_LINE_RE.match(s.rstrip("\n"))
+                    if mc and os.path.realpath(mc["path"]) == want:
+                        cals.add(f"{mc['params']} ({mc['n']} positions)")
+    if len(cals) != 1:
+        raise ValueError(f"{name}: {src}'s tournament log has {len(cals)} different calibrations of {key}, not one")
+    binary = sc["tournament"]["binary"]
+    return dict(name=name, version=x["version"], experiment=exp, dir=src, line=line, v=v, kind=kind,
+                source_model=model, md5=md5, heldout=held,
+                calibration={k: cal[k] for k in ("games", "depth", "seed", "policy", "temperature")},
+                owncal_binary=binary, expected_result=results[0], expected_calibration=cals.pop())
+
+
+def frozen_refs_check(cfg):
+    """ValueError when config.json's frozen_references are malformed or the league can't have them (create refuses
+    them; run checks them, as config.json may be edited)."""
+    refs = cfg.get("frozen_references")
+    if refs is None:
+        return
+    if cfg.get("kind") != "experiment":
+        raise ValueError("frozen_references are for experiments (the global league's field is its own models)")
+    if any(lc["option"] == "global" for lc in cfg["lines"]):
+        raise ValueError("frozen_references with the global option: not built (global lines train on the global "
+                         "league's copied games, and an experiment round's estimate prices its lines' entries only)")
+    if cfg.get("replay") is not None:
+        raise ValueError("frozen_references with replay: not built")
+    if not isinstance(refs, list) or not refs:
+        raise ValueError("frozen_references must be a non-empty list")
+    lines = {lc["line"] for lc in cfg["lines"]}
+    seen = set()
+    for x in refs:
+        if not isinstance(x, dict) or set(FROZEN_REF_KEYS) - set(x):
+            raise ValueError(f"frozen reference {x!r}: not resolved (create resolves them: frozen_ref_of)")
+        n = x["name"]
+        if (not isinstance(n, str) or not NAME_RE.fullmatch(n) or n in REFERENCE_PLY or n in lines or n in seen
+                or not is_count(x["v"], 0)):
+            raise ValueError(f"frozen reference {n!r}: a bad, random reference's, line's or repeated name, or a bad "
+                             f"version")
+        seen.add(n)
+
+
+def reference_window_option(spec, cfg):
+    """"reference_window": {"margin": M} (2026-11-12, for diversity-p2c: analyst 6.57, scope (a)), kept out of DEFAULTS
+    so that a spec without it gives the same config.json and the same league as before. Experiments with
+    frozen_references only (so not with the global option or replay). The global league's Elo window (window_ok) on the
+    frozen references' games alone: in cycle c a line's floor is its current version's Elo in the cycle's fit minus M
+    (decide's ref_floor; none while it is unrated), and a round-robin game with a frozen reference trains the line only
+    if every frozen reference in it is rated at or above the floor (an unrated one counts, as in window_ok): line-
+    reference games and reference-reference games alike. Line-line games and self-games always train. A line the window
+    cuts nothing from trains on the cycle's shared local set, as without the key (a margin no reference falls below
+    gives the league it would have without it); a line it cuts games from trains on its own set, trainsets/<line>,
+    priced and costed without the cut games (ref_window_sets). Each cut is logged (driver.log), kept in
+    state.json's current.ref_window and recorded in totals.csv (REFWIN_TOTALS_FIELDS) and the cycle report. M is a
+    number from 0 (Elo)."""
+    if spec.get("reference_window") is None:
+        return
+    cfg["reference_window"] = spec["reference_window"]
+    try:
+        reference_window_of(cfg)
+    except ValueError as e:
+        sys.exit(f"spec: {e}")
+
+
+def reference_window_of(cfg):
+    """An experiment's reference window margin M (reference_window_option), None without it; ValueError when it is
+    malformed or the league can't have it (create refuses it; run checks it, as config.json may be edited)."""
+    rw = cfg.get("reference_window")
+    if rw is None:
+        return None
+    if cfg.get("kind") != "experiment" or not frozen_refs(cfg):
+        raise ValueError("reference_window is for experiments with frozen_references (it cuts their games from the "
+                         "lines' local sets)")
+    if any(lc["option"] == "global" for lc in cfg["lines"]):
+        raise ValueError("reference_window with the global option: not built")
+    if cfg.get("replay") is not None:
+        raise ValueError("reference_window with replay: not built")
+    if not isinstance(rw, dict) or set(rw) != {"margin"}:
+        raise ValueError('reference_window must be {"margin": M}')
+    m = rw["margin"]
+    if isinstance(m, bool) or not isinstance(m, (int, float)) or not math.isfinite(m) or m < 0:
+        raise ValueError("reference_window.margin must be a number from 0 (Elo below a line's current version)")
+    return m
+
+
+def ref_window_cut(cfg, games, floors, ratings):
+    """reference_window's cut for each line with a floor: ({line: the games cut from its local set}, {line: the frozen
+    references below its floor, [(entry, Elo)] by entry}), only for the lines with a cut. games: the local set's
+    saved_games tuples (t, white, black, dir); floors: {line: floor, or None (unrated: nothing cut)}; ratings: the
+    cycle's fit (league_ratings). A game is cut when a frozen reference in it is below the floor (window_ok)."""
+    fz = frozen_by_entry(cfg)
+    cut, below = {}, {}
+    for line, floor in floors.items():
+        if floor is None:
+            continue
+        low = {e for e in fz if not window_ok(e, floor, ratings)}
+        drop = [g for g in games if g[1] in low or g[2] in low]
+        if drop:
+            cut[line] = drop
+            below[line] = sorted((e, ratings[e][0]) for e in low)
+    return cut, below
+
+
+def ref_window_sets(L, cur, games, lines):
+    """phase_train's sets under reference_window: {line: (set dir, games, data CPU s, data price s)} for the lines it
+    cuts games from (the others train on the shared local set). The cut is decided once a cycle, from decide's floors
+    and the cycle's fit, and kept in cur["ref_window"] ({"margin", "floors": {line: floor}, "lines": {line:
+    {"excluded", "below": [[entry, Elo]], "price_s", "cpu_s"}}}; a resumed cycle reuses it): a line's set is the local
+    set without the games with a reference below its floor, trainsets/<line>, its data price and CPU the local set's
+    less the cut games' (game_rows; the cut games are round-robin games, so their CPU is measured)."""
+    c, m = cur["cycle"], reference_window_of(L.cfg)
+    rec = cur.get("ref_window")
+    if rec is None:
+        floors = {lc["line"]: cur["decisions"][lc["line"]].get("ref_floor") for lc in lines}
+        cut, below = ref_window_cut(L.cfg, games, floors, league_ratings(L))
+        cost = {}
+        if cut:
+            rows = game_rows(L.p("tour"), cur["t0"], cur["t0"] + len(cur["rounds"]), L.price, data_ply(L.cfg))
+            cost = {(r["t"], r["white"], r["black"]): (r["price_s"], r["cpu_s"] or 0.0) for r in rows}
+        rec = dict(margin=m, floors=floors, lines={})
+        for line in sorted(cut):
+            drop = cut[line]
+            rec["lines"][line] = dict(excluded=len(drop), below=[[e, r] for e, r in below[line]],
+                                      price_s=sum(cost.get(g[:3], (0.0, 0.0))[0] for g in drop),
+                                      cpu_s=sum(cost.get(g[:3], (0.0, 0.0))[1] for g in drop))
+        with L.mutex:
+            cur["ref_window"] = rec
+        L.save()
+        if rec["lines"]:
+            L.log(f"cycle {c}: reference window (margin {m:g}): "
+                  + "; ".join(f"{line} (floor {rec['floors'][line]:.1f}) {plural(r['excluded'], 'game')} cut, "
+                              + ", ".join(f"{e} {x:.1f}" for e, x in r["below"]) + " below"
+                              for line, r in rec["lines"].items()))
+    out = {}
+    for line, r in rec["lines"].items():
+        low = {e for e, _ in r["below"]}
+        keep = [g for g in games if g[1] not in low and g[2] not in low]
+        out[line] = (build_set(L, line, keep), len(keep), cur["data_cpu_target_s"] - r["cpu_s"],
+                     cur["data_price_target_s"] - r["price_s"])
+    return out
+
+
+def ref_window_report_line(cfg, cur):
+    """The cycle report's line on reference_window's cut."""
+    m = reference_window_of(cfg)
+    rw = cur.get("ref_window")
+    head = (f"- Reference window (margin {m:g}: a line trains on a game with a frozen reference only while every "
+            f"reference in it is rated at or above the line's floor, its current version's Elo minus {m:g})")
+    if rw is None:
+        return f"{head}: no local set this cycle."
+    if not rw["lines"]:
+        return (f"{head}: inert, every frozen reference at or above every line's floor; every line trained on the "
+                f"whole local set.")
+    rest = len(rw["floors"]) - len(rw["lines"])
+    return (f"{head}: " + "; ".join(f"{line} (floor {rw['floors'][line]:.1f}): {plural(r['excluded'], 'game')} cut, "
+                                    + ", ".join(f"{e} {x:.1f}" for e, x in r["below"]) + " below"
+                                    for line, r in sorted(rw["lines"].items()))
+            + (f"; {plural(rest, 'other line')} trained on the whole local set." if rest else "."))
+
+
+def arena_results(text):
+    """The result lines of `arena` runs in an output or log ("A: +W -L =D, score S%"), without their timings."""
+    return [s.split(" (")[0] for s in re.findall(r"^A: .*$", text, re.M)]
 
 
 def check_binaries(cfg):
@@ -1034,8 +2658,9 @@ def check_binaries(cfg):
         sys.exit("missing binaries: " + ", ".join(missing))
 
 
-def new_line_state():
-    return dict(status="active", version=0, major=0, champion=0, patience=0, crowned=[0], retired_cycle=None,
+def new_line_state(lc=None):
+    """A new line's state; an observer's status is OBSERVER_STATUS (observers_option)."""
+    return dict(status=OBSERVER_STATUS if lc and lc.get("observer") else "active", version=0, major=0, champion=0, patience=0, crowned=[0], retired_cycle=None,
                 sp_version=0, carry_s=0.0, sp_round_price_s=None)
 
 
@@ -1048,20 +2673,39 @@ def cmd_create(spec_path):
     os.makedirs(ldir, exist_ok=True)
     write_json(os.path.join(ldir, "config.json"), cfg)
     state = dict(cycle=0, phase="idle", status="created", pid=None, updated=now(), current=None,
-                 lines={lc["line"]: new_line_state() for lc in cfg["lines"]}, anchors={}, anchor_entries=[],
+                 lines={lc["line"]: new_line_state(lc) for lc in cfg["lines"]}, anchors={}, anchor_entries=[],
                  used_global_rounds=[], global_wait=None, last_round_ply2_cpu_s=None, global_carry_s=0.0)
     write_json(os.path.join(ldir, "state.json"), state)
     L = League(ldir)
     write_lines_csv(L)
-    L.log(f"created {cfg['kind']} league {cfg['name']}: {len(cfg['lines'])} lines")
+    nobs = len(observer_lines(cfg))
+    L.log(f"created {cfg['kind']} league {cfg['name']}: {len(cfg['lines']) - nobs} lines"
+          + (f" and {plural(nobs, 'observer')}" if nobs else ""))
+    for x in frozen_refs(cfg):  # their models' copies, made once (frozen_model)
+        frozen_model(L, x)
+        L.log(f"frozen reference {frozen_entry_name(cfg, x)}: {x['version']} ({x['kind']}, md5 {x['md5']}), copied "
+              f"into frozenref/")
     write_index(cfg["root"])
     print(ldir)
 
 
-def cmd_add(ldir, recipes_named):
+def refuse_global_1109(L, what):
+    """run and add refuse a global league made before the 11-10 design (no global_design in config.json)."""
+    if L.cfg["kind"] == "global" and not is_global11(L.cfg):
+        sys.exit(f"{what}: {L.dir} is a global league of the 11-09 design (ply-1 and ply-2 entries, anchors); the "
+                 f"engine runs the 11-10 design only (each model at its own ply): create it again")
+
+
+def cmd_add(ldir, recipes_named, ply=None):
+    """New global-league models: each recipe at ply `ply` (add's --ply) enters untrained in the next cycle, as line
+    <recipe>.p<ply>. A line that is in the league, retired ones included (no revivals), can't be added again."""
     L = League(ldir)
     if L.cfg["kind"] != "global":
         sys.exit("add: global league only (an experiment's field is fixed)")
+    refuse_global_1109(L, "add")
+    if ply is None:
+        sys.exit("add: give the models' ply (--ply P): each global-league model plays at its own ply")
+    models = global_models(recipes_named, default_ply=ply)
     lk = FileLock(L.p(".lock"), block=False)
     try:
         lk.__enter__()
@@ -1072,18 +2716,22 @@ def cmd_add(ldir, recipes_named):
             sys.exit("add: a cycle is under way; add between cycles")
         have = {lc["line"] for lc in L.cfg["lines"]}
         entered = L.state["cycle"] + 1
-        for row in recipe_rows(load_recipes(), recipes_named):
-            if row["recipe"] in have:
-                sys.exit(f"{row['recipe']} is already in the league")
-            lc = global_line(row, entered)
+        for row, (_, p) in zip(recipe_rows(load_recipes(), [r for r, _ in models]), models):
+            name = global_line_name(row["recipe"], p)
+            if name in have:
+                sys.exit(f"{name} ({row['recipe']} at ply {p}) is already in the league"
+                         + (" (retired: no revivals)" if L.state["lines"][name]["status"] == "retired" else ""))
+            lc = global_line(row, entered, p)
             L.cfg["lines"].append(lc)
+            L.lines[lc["line"]] = lc
             L.state["lines"][lc["line"]] = new_line_state()
         check_prices(L.cfg)
         check_binaries(L.cfg)
         write_json(L.p("config.json"), L.cfg)
         L.save()
         write_lines_csv(L)
-        L.log(f"added {', '.join(recipes_named)}: they enter untrained in cycle {entered}")
+        L.log(f"added {', '.join(global_line_name(r, p) for r, p in models)}: they enter untrained in cycle "
+              f"{entered}")
     finally:
         lk.__exit__(None, None, None)
 
@@ -1101,7 +2749,7 @@ class League:
         self.lines = {lc["line"]: lc for lc in self.cfg["lines"]}
         pr = self.cfg.get("prices")  # None in a league made before prices: it can be read, not run
         self.us = prices_of_config(pr) if pr else None
-        self.price = pricer(self.us, {lc["line"]: lc["kind"] for lc in self.cfg["lines"]}) if pr else None
+        self.price = pricer(self.us, player_kinds(self.cfg)) if pr else None
 
     def p(self, *parts):
         return os.path.join(self.dir, *parts)
@@ -1182,7 +2830,10 @@ def league_summary(root, d):
     if status not in ("running", "waiting"):
         pid = None
     models, labels, options = [], [], []
+    obs = [lc for lc in cfg.get("lines", []) if lc.get("observer")]  # observers: counted apart (observers_option)
     for lc in cfg.get("lines", []):
+        if lc.get("observer"):
+            continue
         if lc["model"] not in models:
             models.append(lc["model"])
             labels.append(lc.get("label", lc["model"]))
@@ -1190,9 +2841,17 @@ def league_summary(root, d):
             options.append(lc["option"])
     return dict(name=cfg["name"], kind=cfg["kind"], dir=os.path.relpath(d, root), status=status,
                 cycle=st.get("cycle", 0), cycles_planned=cfg.get("cycles"), models=models, options=options,
-                lines=len(cfg.get("lines", [])), created=cfg.get("created"), updated=st.get("updated"), pid=pid,
-                phase=st.get("phase"), labels=labels, prices_version=(cfg.get("prices") or {}).get("version"),
-                selfplay_budget_s=cfg.get("selfplay_budget_s"))
+                lines=len(cfg.get("lines", [])) - len(obs), created=cfg.get("created"), updated=st.get("updated"),
+                pid=pid, phase=st.get("phase"), labels=labels,
+                prices_version=(cfg.get("prices") or {}).get("version"),
+                selfplay_budget_s=cfg.get("selfplay_budget_s"),
+                **({"observers": len(obs), "observer_models": [lc["model"] for lc in obs]} if obs else {}),
+                **({"cold_games": cfg["cold_games"]} if cfg.get("cold_games") is not None else {}),
+                **({"train_filter": cfg["train_filter"]} if cfg.get("train_filter") is not None else {}),
+                **({"self_games_topup": True} if cfg.get("self_games_topup") else {}),
+                **({"openings": cfg["openings"]} if cfg.get("openings") is not None else {}),
+                **({"rate_every": cfg["rate_every"]} if cfg.get("rate_every") else {}),
+                **({"champion_se_kind": cfg["champion_se_kind"]} if cfg.get("champion_se_kind") else {}))
 
 
 def write_index(root):
@@ -1205,23 +2864,32 @@ def write_index(root):
 # ---------------------------------------------------------------- the field
 
 def field_of(L, st, c):
-    """Cycle c's field from state st, in a fixed order: the references, each active line's current version at ply 1
-    and 2 and its champion at ply 2 (one entry when the current version is the champion), then the anchors by
-    interval. [dict(entry, ply, role, line, version, frozen, spec)]."""
+    """Cycle c's field from state st, in a fixed order: the references, the frozen references (an experiment's
+    frozen_references, at the entry ply; line "", their version v), each active line's current version at ply 1
+    (unless the config's ply1_entries is false) and at the entry ply (2 unless the config's entry_ply says otherwise;
+    a global-league line: its own ply) and its champion at that ply (one entry when the current version is the
+    champion), then the anchors by interval (11-09 global leagues only). [dict(entry, ply, role, line, version,
+    frozen, spec)]."""
     out = [dict(entry=r, ply=REFERENCE_PLY[r], role="reference", line="", version=None, frozen=False, spec="rand")
            for r in L.cfg["references"]]
+    for x in frozen_refs(L.cfg):
+        out.append(dict(entry=frozen_entry_name(L.cfg, x), ply=entry_ply(L.cfg), role=FROZEN_ROLE, line="",
+                        version=x["v"], frozen=True, spec=frozen_spec(L, x)))
+    ply1 = L.cfg.get("ply1_entries", True)
     for lc in L.cfg["lines"]:
         line = lc["line"]
         ls = st["lines"][line]
         if ls["status"] != "active" or lc["entered_cycle"] > c:
             continue
+        p = line_ply(L.cfg, lc)  # the league's entry ply, or a global-league model's own
         v, ch = ls["version"], ls["champion"]
-        out.append(dict(entry=entry_name(line, v, 1), ply=1, role="current", line=line, version=v, frozen=False,
-                        spec=L.spec(line, v)))
-        out.append(dict(entry=entry_name(line, v, 2), ply=2, role="current+champion" if v == ch else "current",
+        if ply1:
+            out.append(dict(entry=entry_name(line, v, 1), ply=1, role="current", line=line, version=v, frozen=False,
+                            spec=L.spec(line, v)))
+        out.append(dict(entry=entry_name(line, v, p), ply=p, role="current+champion" if v == ch else "current",
                         line=line, version=v, frozen=False, spec=L.spec(line, v)))
         if ch != v:
-            out.append(dict(entry=entry_name(line, ch, 2), ply=2, role="champion", line=line, version=ch,
+            out.append(dict(entry=entry_name(line, ch, p), ply=p, role="champion", line=line, version=ch,
                             frozen=False, spec=L.spec(line, ch)))
     for lo in sorted(st["anchors"], key=int):
         a = st["anchors"][lo]
@@ -1233,6 +2901,13 @@ def field_of(L, st, c):
 def lines_in_cycle(L, st, c):
     return [lc for lc in L.cfg["lines"]
             if st["lines"][lc["line"]]["status"] == "active" and lc["entered_cycle"] <= c]
+
+
+def observers_in_cycle(L, st, c):
+    """The observers of cycle c (observers_option): never in the field or in lines_in_cycle; they train on the
+    participants' local set."""
+    return [lc for lc in L.cfg["lines"] if lc.get("observer")
+            and st["lines"][lc["line"]]["status"] == OBSERVER_STATUS and lc["entered_cycle"] <= c]
 
 
 # ---------------------------------------------------------------- untrained versions and own calibration
@@ -1264,12 +2939,30 @@ def make_version0(train_binary, kind, train_args, seed, target, nogames, work, l
 
 
 def make_untrained(L, lc):
-    """Version 0 of a line (make_version0)."""
+    """Version 0 of a line (make_version0), or for a line with a warm start a byte copy of its start model (and for a
+    tree, first, of its start state), each checked against the md5 create recorded (warm_start_option)."""
     line, kind = lc["line"], lc["kind"]
     target = L.model_path(line, 0)
     if os.path.exists(target):
         return 0.0
     os.makedirs(L.p("runs", line), exist_ok=True)
+    ws = lc.get("start")
+    if ws:
+        copies = (([(ws["state"], ws["state_md5"], L.state_path(line, 0))] if ws.get("state") else [])
+                  + [(ws["path"], ws["md5"], target)])  # the model last: it marks version 0 made
+        for path, md5, dst in copies:
+            tmp = dst + ".tmp"
+            shutil.copyfile(path, tmp)
+            got = file_md5(tmp)
+            if got != md5:
+                os.remove(tmp)
+                raise RuntimeError(f"{line}: its warm start {path} changed since create (md5 {got}, not {md5})")
+            os.replace(tmp, dst)
+        with open(L.p("runs", line + ".log"), "a") as f:
+            f.write(f"== version 0 {now()}: a copy of {ws['path']} (md5 {ws['md5']})"
+                    + (f", its training state a copy of {ws['state']} (md5 {ws['state_md5']})" if ws.get("state")
+                       else "") + "\n")
+        return 0.0
     return make_version0(lc["train_binary"], kind, lc["train_args"], train_seed(L, lc, 0), target, L.p(".nogames"),
                          L.p("runs", f".v0-{line}"), L.p("runs", line + ".log"), L.nice())
 
@@ -1322,6 +3015,166 @@ def own_gc(L, keep_keys):
             shutil.rmtree(p, ignore_errors=True)
 
 
+# ---------------------------------------------------------------- frozen references (an experiment's frozen_references)
+
+def frozen_refs(cfg):
+    """An experiment's frozen external references, resolved (frozen_references_option); [] without them."""
+    return cfg.get("frozen_references") or []
+
+
+def frozen_entry_name(cfg, x):
+    """A frozen reference's entry: <name>@<v>F-<entry ply> (a model at the entry ply: qualifies counts its games)."""
+    return entry_name(x["name"], x["v"], entry_ply(cfg), True)
+
+
+def frozen_by_entry(cfg):
+    return {frozen_entry_name(cfg, x): x for x in frozen_refs(cfg)}
+
+
+def frozen_model_path(L, x):
+    return L.p("frozenref", f"{x['name']}.{x['kind']}.model")
+
+
+def frozen_own_dir(L, x):
+    return L.p("frozenref", x["name"])
+
+
+def frozen_spec(L, x):
+    return f"cal:{frozen_own_dir(L, x)}:{x['kind']}:{frozen_model_path(L, x)}"
+
+
+def frozen_model(L, x):
+    """The league's copy of a frozen reference's model, frozenref/<name>.<kind>.model: made from its experiment's
+    model when missing (create makes it), and checked against the md5 create recorded each time it is asked for."""
+    target = frozen_model_path(L, x)
+    if not os.path.exists(target):
+        os.makedirs(L.p("frozenref"), exist_ok=True)
+        tmp = target + ".tmp"
+        shutil.copyfile(x["source_model"], tmp)
+        os.replace(tmp, target)
+    got = file_md5(target)
+    if got != x["md5"]:
+        raise RuntimeError(f"frozen reference {x['name']}: {target} has md5 {got}, not {x['md5']} ({x['version']}, "
+                           f"as create recorded it)")
+    return target
+
+
+def frozen_own_done(L, x):
+    d = frozen_own_dir(L, x)
+    return os.path.isdir(d) and all(os.path.exists(os.path.join(d, f)) for f in GAME_FILES)
+
+
+def make_frozen_own(L, x, threads):
+    """A frozen reference's own calibration games, made once as its experiment made them (make_own there): the model
+    plays itself with its experiment's calibration settings (games, depth, policy, temperature, seed) and held-out
+    calibration, on its experiment's tournament binary (as arena.py makes an experiment version's), into
+    frozenref/<name>/; the result line must be the one its experiment recorded (else nothing is kept and the cycle
+    stops). Records frozenref/<name>.json and .arena. Returns the CPU s."""
+    if frozen_own_done(L, x):
+        return 0.0
+    model = frozen_model(L, x)
+    root, name = L.p("frozenref"), x["name"]
+    final, tmp = frozen_own_dir(L, x), os.path.join(root, f".tmp-{name}")
+    o = x["calibration"]
+    play = f"cal:{x['heldout']}:{x['kind']}:{model}" if x["heldout"] else f"{x['kind']}:{model}"
+    write_json(os.path.join(root, name + ".json"), dict(play=play, model=model, md5=x["md5"], source=x["version"],
+                                                        binary=x["owncal_binary"], settings=o,
+                                                        expected_result=x["expected_result"]))
+    shutil.rmtree(tmp, ignore_errors=True)
+    shutil.rmtree(final, ignore_errors=True)
+    cmd = L.nice() + [x["owncal_binary"], "arena", play, play, "--use-probs", "--games", str(o["games"]),
+                      "--a-policy", o["policy"], "--b-policy", o["policy"], "--temperature", str(o["temperature"]),
+                      "--a-depth", str(o["depth"]), "--b-depth", str(o["depth"]), "--seed", str(o["seed"]),
+                      "--out", tmp]
+    code, cpu, _, out = run_measured(cmd, os.path.join(root, name + ".arena"), f"own games of {name} ({x['version']})",
+                                     env=threads_env(threads))
+    check_interrupted()
+    if code != 0 or not all(os.path.exists(os.path.join(tmp, f)) for f in GAME_FILES):
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise RuntimeError(f"own games of frozen reference {name} failed (exit {code}); see frozenref/{name}.arena")
+    got = arena_results(out)
+    if got != [x["expected_result"]]:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise RuntimeError(f"own games of frozen reference {name}: {got}, not its experiment's "
+                           f"{x['expected_result']!r} ({x['version']})")
+    os.rename(tmp, final)
+    return cpu
+
+
+def check_frozen_calibrations(L, cur, out):
+    """After a tournament: the calibration it fitted on each frozen reference's own games (its output's "calibration
+    on <frozenref/name>: params (N positions)" line) must be the one its experiment's tournament fitted (create
+    recorded it), else the cycle stops. A reference without the line in the output (a resumed tournament may play
+    nothing) is looked up in tour/tournament.log (its last line). Records cur["frozen_cal"]: {name: the calibration}."""
+    want = {frozen_own_dir(L, x): x["name"] for x in frozen_refs(L.cfg)}
+    got = {}
+    for m in CAL_LINE_RE.finditer(out):
+        if m["path"] in want:
+            got[want[m["path"]]] = f"{m['params']} ({m['n']} positions)"
+    if len(got) < len(want):
+        last = {}
+        with open(L.p("tour", "tournament.log"), errors="replace") as f:
+            for m in CAL_LINE_RE.finditer(f.read()):
+                if m["path"] in want:
+                    last[want[m["path"]]] = f"{m['params']} ({m['n']} positions)"
+        for n, v in last.items():
+            got.setdefault(n, v)
+    bad =[f"{x['name']}: {got.get(x['name'], 'none')}, its experiment's {x['expected_calibration']}"
+           for x in frozen_refs(L.cfg) if got.get(x["name"]) != x["expected_calibration"]]
+    if bad:
+        raise RuntimeError("frozen references' calibrations differ from their experiments': " + "; ".join(bad))
+    cur["frozen_cal"] = {x["name"]: got[x["name"]] for x in frozen_refs(L.cfg)}
+
+
+def local_mix(cfg, games):
+    """The local set's games by kind (an experiment with frozen_references): line_line (a round-robin game between
+    two of the league's line entries), self_games (an entry against itself), line_ref (a line entry against a frozen
+    reference), ref_ref (two frozen references) and random (a game with a random reference). games: saved_games
+    tuples (t, white, black, dir)."""
+    fr = {x["name"] for x in frozen_refs(cfg)}
+
+    def cls(n):
+        if n in REFERENCE_PLY:
+            return "r"
+        p = parse_entry(n)
+        return "x" if p and p[0] in fr else "l"
+
+    out = dict.fromkeys(MIX_KINDS, 0)
+    for g in games:
+        a, b = cls(g[1]), cls(g[2])
+        k = ("self_games" if g[1] == g[2] else "random" if "r" in (a, b) else "line_line" if a == b == "l"
+             else "ref_ref" if a == b == "x" else "line_ref")
+        out[k] += 1
+    out["games"] = len(games)
+    return out
+
+
+def mix_text(mix):
+    """The cycle report's words for local_mix's counts."""
+    n = mix["games"]
+    words = {"line_line": "line-line", "self_games": "self-games", "line_ref": "line-reference",
+             "ref_ref": "reference-reference", "random": "with a random reference"}
+    return ", ".join(f"{words[k]} {mix[k]} ({100.0 * mix[k] / n:.1f}%)" if n else f"{words[k]} 0"
+                     for k in MIX_KINDS if k != "random" or mix[k])
+
+
+def frozen_report_lines(cfg, cur):
+    """The cycle report's lines on an experiment's frozen references: who they are, the check of the tournament's
+    calibrations against their experiments', and the local set's games by kind."""
+    fx = frozen_refs(cfg)
+    cal = cur.get("frozen_cal") or {}
+    same = sum(1 for x in fx if cal.get(x["name"]) == x["expected_calibration"])
+    mix = cur.get("local_mix")
+    return [f"- Frozen references at ply {entry_ply(cfg)} (they play the round-robins; never trained, crowned or "
+            f"retired; no self-games): " + ", ".join(f"{frozen_entry_name(cfg, x)} = {x['version']} ({x['kind']})"
+                                                    for x in fx)
+            + f". Own calibration as their experiments made it; the tournament's fit the same as there for {same} "
+              f"of {len(fx)}.",
+            f"- Local set: {plural(mix['games'], 'game')}: {mix_text(mix)}." if mix
+            else "- Local set: none built this cycle."] + ([ref_window_report_line(cfg, cur)]
+                                                         if reference_window_of(cfg) is not None else [])
+
+
 # ---------------------------------------------------------------- the tournament
 
 def read_entries(path):
@@ -1336,8 +3189,301 @@ def read_entries(path):
     return out
 
 
+# ---------------------------------------------------------------- exact fast scans of tour/games.csv and game_cpu.csv
+
+# done_round_robins (twice), clean_partial, game_rows and contrast_ses read tour/games.csv or tour/game_cpu.csv whole,
+# every cycle, and both files grow by every cycle's games. A cache beside tour/ (scan-cache/<file>.json) summarizes a
+# file's complete lines before byte L, with the original code's own expressions. It is trusted only when the file is
+# unchanged since the cache was saved (same device, inode, size, mtime and ctime) or when the SHA-256 of the file's
+# bytes [0, L) is the saved one; then only the lines after L, or the lines of the rounds asked for, are read, by the
+# original code. Each function runs its original code instead whenever the summary can't prove the same result: no
+# cache possible (not a league's tour/ file, a locale encoding other than UTF-8, a "\r" in the file, bytes that don't
+# decode), lines the original code would reject, or rounds out of order in the file.
+
+SCAN_CACHE = "scan-cache"
+SCAN_VERSION = 1
+_SCAN_MEMO = {}  # (path, kind) -> (entry, pairs) as last verified or saved by this process
+
+
+def _scan_stat(st):
+    return [st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns]
+
+
+def _scan_cache_path(path):
+    """<league>/scan-cache/<file>.json for a league's tour/<file>; None for any other path (no cache)."""
+    tour = os.path.dirname(os.path.abspath(path))
+    league = os.path.dirname(tour)
+    if os.path.basename(tour) != "tour" or not os.path.isfile(os.path.join(league, "config.json")):
+        return None
+    return os.path.join(league, SCAN_CACHE, os.path.basename(path) + ".json")
+
+
+def _scan_new(kind):
+    s = dict(max_t=-1, last_t=None, sorted=True, starts=[])
+    if kind == "games":
+        s.update(t_ok=True, pairs_ok=True)
+    else:
+        s.update(int_ok=True, all_valid=True)
+    return s
+
+
+def _scan_line(kind, s, pairs, line, off):
+    """Adds one complete text line (with its "\\n") at byte offset off to the summary s. games.csv: the round as
+    done_round_robins reads it (game_rows' rows are the lines with 5 or more fields, the same first field) and the
+    pair as contrast_ses reads it; game_cpu.csv: the rows clean_partial keeps and game_rows reads. starts: the offset
+    of the first line of each round, while the rounds never go down (sorted)."""
+    t = None
+    if kind == "games":
+        if line.strip():
+            try:
+                t = int(line.split(",", 1)[0])
+            except ValueError:
+                s["t_ok"] = False
+        if s["pairs_ok"]:
+            parts = line.split(",", 3)
+            if len(parts) != 4:
+                s["pairs_ok"] = False
+            elif parts[1] != parts[2]:
+                white, black = parts[1], parts[2]
+                key = (white, black) if white < black else (black, white)
+                pairs[key] = pairs.get(key, 0) + 1
+    else:
+        parts = line.rstrip("\n").split(",")
+        if len(parts) == 4 and parts[0].isdigit():
+            try:
+                t = int(parts[0])
+            except ValueError:
+                s["int_ok"] = False
+        else:
+            s["all_valid"] = False
+    if t is not None:
+        if t > s["max_t"]:
+            s["max_t"] = t
+        if s["last_t"] is None or t > s["last_t"]:
+            s["starts"].append([t, off])
+            s["last_t"] = t
+        elif t < s["last_t"]:
+            s["sorted"] = False
+
+
+def _scan_load(cp, key):
+    """The saved (entry, pairs) for this file, or None."""
+    try:
+        with open(cp) as f:
+            entry = json.load(f)
+        if (entry.get("version") != SCAN_VERSION or [entry.get("path"), entry.get("kind")] != list(key)
+                or not isinstance(entry.get("L"), int) or not isinstance(entry.get("s"), dict)):
+            return None
+        pairs = None
+        if key[1] == "games":
+            with open(cp[:-len(".json")] + ".pairs.json") as f:
+                d = json.load(f)
+            if d.get("L") != entry["L"] or d.get("sha256") != entry["sha256"]:
+                return None
+            names, flat = d["names"], d["flat"]
+            pairs = {(names[flat[k]], names[flat[k + 1]]): flat[k + 2] for k in range(0, len(flat), 3)}
+        return entry, pairs
+    except (OSError, ValueError, KeyError, TypeError, IndexError):
+        return None
+
+
+def _scan_save(cp, entry, pairs):
+    try:
+        os.makedirs(os.path.dirname(cp), exist_ok=True)
+        if pairs is not None:
+            index, names, flat = {}, [], []
+            for (a, b), n in pairs.items():
+                for x in (a, b):
+                    if x not in index:
+                        index[x] = len(names)
+                        names.append(x)
+                flat += (index[a], index[b], n)
+            atomic_write(cp[:-len(".json")] + ".pairs.json",
+                         json.dumps(dict(L=entry["L"], sha256=entry["sha256"], names=names, flat=flat),
+                                    separators=(",", ":")))
+        atomic_write(cp, json.dumps(entry, separators=(",", ":")))
+    except OSError:
+        pass
+
+
+class _ScanView:
+    """A file's summary s of its complete lines before byte L (verified), the mapped file and `tail`: the text lines
+    after L as the original code reads them (the final line without "\\n", if any, unless it is the header)."""
+
+    def __init__(self, entry, pairs, mm, tail):
+        self.s, self.L, self.pairs, self.mm, self.tail = entry["s"], entry["L"], pairs, mm, tail
+
+    def lines(self, t_from, t_to):
+        """With s["sorted"]: the lines of rounds t_from <= t < t_to among the complete lines, then the tail. In file
+        order they hold every line the original code takes for that range (and lines it skips anyway)."""
+        ts = [t for t, _ in self.s["starts"]]
+
+        def at(t):
+            i = bisect.bisect_left(ts, t)
+            return self.s["starts"][i][1] if i < len(ts) else self.L
+
+        a, b = at(t_from), at(t_to)
+        out = [x + "\n" for x in self.mm[a:b].decode("utf-8").split("\n")[:-1]] if b > a else []
+        return out + self.tail
+
+
+def _scan_view(path, kind, f, mm, st):
+    """A _ScanView of the binary file f at path (mapped as mm, its stat st), the cache verified and extended to
+    every complete line (and saved); None when no cache can be used."""
+    cp = _scan_cache_path(path)
+    if cp is None:
+        return None
+    with open(path) as tf:  # the original code's text mode decodes with this encoding
+        if codecs.lookup(tf.encoding).name != "utf-8":
+            return None
+    size = st.st_size
+    key = (os.path.abspath(path), kind)
+    got = _SCAN_MEMO.get(key) or _scan_load(cp, key)
+    entry, pairs = got if got else (None, None)
+    h = None
+    if entry is not None and entry["stat"] != _scan_stat(st):
+        h = hashlib.sha256()
+        if entry["L"] <= size:
+            with memoryview(mm) as mv, mv[:entry["L"]] as part:
+                h.update(part)
+        if entry["L"] > size or h.hexdigest() != entry["sha256"]:
+            entry, h = None, None
+    end = mm.rfind(b"\n") + 1  # every complete line
+    if entry is not None and h is None and end != entry["L"]:  # unchanged since saved, so this can't be
+        entry = None
+    changed = False
+    if entry is None:
+        entry = dict(version=SCAN_VERSION, path=key[0], kind=kind, L=0, sha256=hashlib.sha256().hexdigest(),
+                     stat=None, s=_scan_new(kind))
+        pairs = {} if kind == "games" else None
+        h = hashlib.sha256()
+        changed = True
+    a = entry["L"]
+    if mm.find(b"\r", a) != -1:
+        return None
+    if end > a:
+        s = copy.deepcopy(entry["s"])
+        pairs = dict(pairs) if pairs is not None else None
+        f.seek(a)
+        off = a
+        for bline in f:
+            if off >= end:
+                break
+            if off > 0:  # the file's first line is the header, which the original code skips
+                _scan_line(kind, s, pairs, bline.decode("utf-8"), off)
+            off += len(bline)
+        if off != end:
+            return None
+        with memoryview(mm) as mv, mv[a:end] as part:
+            h.update(part)
+        entry = dict(entry, L=end, sha256=h.hexdigest(), s=s)
+        changed = True
+    if _scan_stat(os.fstat(f.fileno())) != _scan_stat(st) or _scan_stat(os.stat(path)) != _scan_stat(st):
+        return None  # written or replaced while we read it
+    if changed or entry["stat"] != _scan_stat(st):
+        entry = dict(entry, stat=_scan_stat(st))
+        _scan_save(cp, entry, pairs if changed else None)  # an unchanged L and SHA-256 keep their pairs file
+    _SCAN_MEMO[key] = (entry, pairs)
+    tail = []
+    if size > end and end > 0:
+        tail = [mm[end:size].decode("utf-8")]
+    return _ScanView(entry, pairs, mm, tail)
+
+
+@contextlib.contextmanager
+def _scan_open(path, kind):
+    """A _ScanView of the file, or None (then the caller runs its original code)."""
+    f = mm = view = None
+    try:
+        try:
+            f = open(path, "rb")
+            st = os.fstat(f.fileno())
+            if st.st_size > 0:
+                mm = mmap.mmap(f.fileno(), st.st_size, access=mmap.ACCESS_READ)
+                view = _scan_view(path, kind, f, mm, st)
+        except (OSError, ValueError, KeyError, TypeError, IndexError):  # a damaged cache, an odd file: no cache
+            view = None
+        yield view
+    finally:
+        if mm is not None:
+            mm.close()
+        if f is not None:
+            f.close()
+
+
+def _done_round_robins_fast(p):
+    if not os.path.exists(p):
+        return None
+    with _scan_open(p, "games") as v:
+        if v is None or not v.s["t_ok"]:
+            return None
+        t = v.s["max_t"]
+        for line in v.tail:
+            if line.strip():
+                t = max(t, int(line.split(",", 1)[0]))
+        return t + 1
+
+
+def _cpu_all_kept(p, done):
+    """True when clean_partial's original code would keep every line of game_cpu.csv (and so not write it)."""
+    with _scan_open(p, "game_cpu") as v:
+        return (v is not None and v.s["int_ok"] and v.s["all_valid"] and v.s["max_t"] < done and not v.tail)
+
+
+def _game_rows_fast(tour, t_from, t_to, price, ply=2):
+    pc, pg = os.path.join(tour, "game_cpu.csv"), os.path.join(tour, "games.csv")
+    if not os.path.exists(pg):
+        return None
+    cpu = {}
+    if os.path.exists(pc):
+        with _scan_open(pc, "game_cpu") as v:
+            if v is None or not (v.s["int_ok"] and v.s["sorted"]):
+                return None
+            for line in v.lines(t_from, t_to):
+                parts = line.rstrip("\n").split(",")
+                if len(parts) == 4 and parts[0].isdigit() and t_from <= int(parts[0]) < t_to:
+                    try:
+                        cpu[(int(parts[0]), parts[1], parts[2])] = float(parts[3])
+                    except ValueError:
+                        pass
+    rows = []
+    with _scan_open(pg, "games") as v:
+        if v is None or not (v.s["t_ok"] and v.s["sorted"]):
+            return None
+        for line in v.lines(t_from, t_to):
+            parts = line.rstrip("\n").split(",")
+            if len(parts) < 5:
+                continue
+            t = int(parts[0])
+            if t_from <= t < t_to:
+                rows.append(dict(t=t, white=parts[1], black=parts[2], result=parts[3], plies=parts[4],
+                                 cpu_s=cpu.get((t, parts[1], parts[2])), ply2=qualifies(parts[1], parts[2], ply),
+                                 price_s=price(parts[1], parts[2], parts[4]) if price else None))
+    return rows
+
+
+def _pair_counts_fast(tour, ratings):
+    """contrast_ses' pair counts (same keys, order and counts), or None."""
+    p = os.path.join(tour, "games.csv")
+    if not os.path.exists(p):
+        return None
+    with _scan_open(p, "games") as v:
+        if v is None or not v.s["pairs_ok"] or v.pairs is None:
+            return None
+        count = {k: n for k, n in v.pairs.items() if k[0] in ratings and k[1] in ratings}
+        for line in v.tail:
+            _, white, black, _ = line.split(",", 3)
+            if white != black and white in ratings and black in ratings:
+                key = (white, black) if white < black else (black, white)
+                count[key] = count.get(key, 0) + 1
+        return count
+
+
 def done_round_robins(tour):
     p = os.path.join(tour, "games.csv")
+    fast = _done_round_robins_fast(p)
+    if fast is not None:
+        return fast
     t = -1
     if os.path.exists(p):
         with open(p) as f:
@@ -1348,9 +3494,10 @@ def done_round_robins(tour):
     return t + 1
 
 
-def write_players(L, field):
-    """players.txt is the field; every earlier player not in it is in retired.txt (its games stay in the fit)."""
-    tour = L.p("tour")
+def write_players(L, field, tour=None):
+    """players.txt is the field; every earlier player not in it is in retired.txt (its games stay in the fit). tour:
+    tour/ by default (cold_games: cold/)."""
+    tour = tour or L.p("tour")
     os.makedirs(tour, exist_ok=True)
     names = {e["entry"] for e in field}
     old_players = read_entries(os.path.join(tour, "players.txt"))
@@ -1365,17 +3512,17 @@ def write_players(L, field):
                  head + "".join(f"{e['entry']} {e['ply']} {e['spec']}\n" for e in field))
 
 
-def clean_partial(L, done):
+def clean_partial(L, done, tour=None, pool=None):
     """Before (re)running the tournament: saved rounds and CPU rows of rounds not in games.csv go (a run cut short
-    replays them, the same games)."""
-    pool = L.p("pool")
+    replays them, the same games). tour and pool: tour/ and pool/ by default (cold_games: cold/ and coldpool/)."""
+    pool = pool or L.p("pool")
     if os.path.isdir(pool):
         for r in os.listdir(pool):
             m = re.fullmatch(r"round(\d+)", r)
             if m and int(m.group(1)) >= done:
                 shutil.rmtree(os.path.join(pool, r), ignore_errors=True)
-    p = L.p("tour", "game_cpu.csv")
-    if os.path.exists(p):
+    p = os.path.join(tour or L.p("tour"), "game_cpu.csv")
+    if os.path.exists(p) and not _cpu_all_kept(p, done):
         with open(p) as f:
             lines = f.readlines()
         keep = lines[:1]
@@ -1409,15 +3556,22 @@ def league_busy(L):
 def wait_not_busy(L):
     while True:
         pid = league_busy(L)
+        if pid:  # a sibling thread's child can be seen a moment before run_measured registers it: look again 1 s later
+            time.sleep(1)
+            pid = league_busy(L)
         if not pid:
             return
         L.log(f"waiting for pid {pid}, still working in this league")
         time.sleep(30)
 
 
-def game_rows(tour, t_from, t_to, price=None):
+def game_rows(tour, t_from, t_to, price=None, ply=2):
     """games.csv rows of tournaments t_from <= t < t_to, with their measured CPU (game_cpu.csv; cpu_s None if
-    missing) and, given price(white, black, plies), their price_s."""
+    missing) and, given price(white, black, plies), their price_s. ply2: the game qualifies for training (a model at
+    the entry ply `ply`)."""
+    fast = _game_rows_fast(tour, t_from, t_to, price, ply)
+    if fast is not None:
+        return fast
     cpu = {}
     p = os.path.join(tour, "game_cpu.csv")
     if os.path.exists(p):
@@ -1440,7 +3594,7 @@ def game_rows(tour, t_from, t_to, price=None):
             t = int(parts[0])
             if t_from <= t < t_to:
                 rows.append(dict(t=t, white=parts[1], black=parts[2], result=parts[3], plies=parts[4],
-                                 cpu_s=cpu.get((t, parts[1], parts[2])), ply2=qualifies(parts[1], parts[2]),
+                                 cpu_s=cpu.get((t, parts[1], parts[2])), ply2=qualifies(parts[1], parts[2], ply),
                                  price_s=price(parts[1], parts[2], parts[4]) if price else None))
     return rows
 
@@ -1499,7 +3653,7 @@ def publish_batch(L, cur):
         src = L.p("pool", f"round{r['t']}")
         if os.path.isdir(src):
             link_tree(src, os.path.join(new, f"round{r['t']}"))
-    rows = game_rows(L.p("tour"), cur["t0"], cur["t0"] + cur["rounds_planned"], L.price)
+    rows = game_rows(L.p("tour"), cur["t0"], cur["t0"] + cur["rounds_planned"], L.price, data_ply(L.cfg))
     write_csv(os.path.join(new, "games.csv"), BATCH_GAMES_FIELDS,
               [dict(r, cpu_s=f"{r['cpu_s']:.6f}" if r["cpu_s"] is not None else "", ply2=r["ply2"],
                     price_s=f"{r['price_s']:.6f}") for r in rows])
@@ -1519,18 +3673,28 @@ def publish_batch(L, cur):
 def experiment_round_estimate(L, cur, batch_rows):
     """The qualifying price of one experiment round: this cycle's field, each qualifying pair at the mean moves of
     its pair of classes (model or random, ply; white's and black's) in last cycle's games, times its sides' prices
-    (so a field that grew or shrank is priced right); in the first cycle, at the global batch's mean moves."""
+    (so a field that grew or shrank is priced right); in the first cycle, at the global batch's mean moves. With
+    self_games, the round's self-games are added, each at its class's mean moves against itself."""
     field = field_of(L, L.state, cur["cycle"])
     names = [e["entry"] for e in field]
     kinds = {lc["line"]: lc["kind"] for lc in L.cfg["lines"]}
     sides = {n: side_of(n, kinds) for n in names}
+
+    p = entry_ply(L.cfg)
+
+    def est(moves, fallback):
+        e = estimate_round_ply2_price(names, sides, L.us, moves, fallback, p)
+        if L.cfg.get("self_games"):
+            e += estimate_self_games_price(names, sides, L.us, moves, fallback, p)
+        return e
+
     last = L.state.get("last_rounds")
     if last:
         moves, fallback = class_moves(game_rows(L.p("tour"), last[0], last[0] + last[1]))
         if moves:
-            return estimate_round_ply2_price(names, sides, L.us, moves, fallback), "last cycle's moves by class"
+            return est(moves, fallback), "last cycle's moves by class"
     moves, fallback = class_moves(batch_rows)
-    return estimate_round_ply2_price(names, sides, L.us, moves, fallback), "global batch's moves by class"
+    return est(moves, fallback), "global batch's moves by class"
 
 
 def priced_batch(L, src, batch):
@@ -1558,6 +3722,8 @@ def try_copy(L, cur):
     if cur.get("copied"):
         return True
     src = L.cfg["global_source"]
+    if is_global11(read_json(os.path.join(src, "config.json")) or {}):  # create refuses it; a league made since
+        raise RuntimeError(f"{src} is a global league of the 11-10 design: the global option isn't built for it")
     lock = os.path.join(src, "batch.lock")
     if not os.path.exists(os.path.join(batch_dir(src), "batch.json")):
         return False
@@ -1569,7 +3735,9 @@ def try_copy(L, cur):
         est, how = experiment_round_estimate(L, cur, rows)
         used = {tuple(x) for x in L.state["used_global_rounds"]}
         carry = L.state.get("global_carry_s", 0.0)
-        plan = plan_copy(dict(batch, rounds=rounds), used, est, L.cfg["min_rounds"], carry)
+        gpc = games_per_cycle(L.cfg)  # games_per_cycle: its R for this cycle's field in place of min_rounds
+        g = gpc_plan(gpc, field_of(L, L.state, cur["cycle"])) if gpc is not None else None
+        plan = plan_copy(dict(batch, rounds=rounds), used, est, g["rounds"] if g else L.cfg["min_rounds"], carry)
         if plan is None:
             return False
         chosen, n, total = plan
@@ -1587,6 +3755,8 @@ def try_copy(L, cur):
                              price_s=sum(r["price_s"] for r in chosen), ply2_price_s=total,
                              est_round_ply2_price_s=est, estimate=how, carry_before_s=carry, copied_at=now())
         cur["rounds_planned"] = n
+        if g:
+            cur["games_per_cycle"] = g
         L.state["used_global_rounds"] += [[batch["cycle"], r["t"]] for r in chosen]
         cur["events"].append(dict(date=now(), line="", event="copied", entry="", version_name="", value=len(chosen),
                                   detail=f"global cycle {batch['cycle']} rounds "
@@ -1607,14 +3777,94 @@ def copied_games(L):
 # ---------------------------------------------------------------- training
 
 def build_set(L, name, games):
-    """A training set: round0/ with a link per game, named <t>~<white>~<black> (train reads them in name order)."""
+    """A training set: round0/ with a link per game, named <t>~<white>~<black> (train reads them in name order), or
+    <t>~<white>~<black>~<j> for a game given with a fifth element j (a top-up game: train_filter_sets)."""
     d = L.p("trainsets", name)
     shutil.rmtree(d, ignore_errors=True)
     r0 = os.path.join(d, "round0")
     os.makedirs(r0)
-    for t, white, black, path in games:
-        os.symlink(path, os.path.join(r0, f"{t:06d}~{white}~{black}"))
+    for g in games:
+        t, white, black, path = g[:4]
+        os.symlink(path, os.path.join(r0, f"{t:06d}~{white}~{black}" + (f"~{g[4]:06d}" if len(g) > 4 else "")))
     return d
+
+
+def num_arg(x):
+    """A number as a command-line argument: an int as is, a float by repr (8 -> "8", 2.5 -> "2.5")."""
+    return str(x) if isinstance(x, int) else repr(float(x))
+
+
+def start_detail(ws):
+    """The "entered" event's detail for a line with a warm start."""
+    f = ws.get("forget", 1)
+    if ws.get("state"):  # a tree (2026-11-12: its first training may reset and forget its leaves)
+        first = (["--warm-reset"] if ws.get("reset") else []) + ([f"--start-leaf-forget {num_arg(f)}"] if f != 1 else [])
+    else:
+        first = [f"--init-forget {num_arg(f)}"] if f != 1 else []
+    return (f"warm start: {ws['path']} (md5 {ws['md5']}"
+            + (f"; the first training {' '.join(first)}" if first else "")
+            + (f"; training state {ws['state']} (md5 {ws['state_md5']})" if ws.get("state") else "") + ")")
+
+
+def train_start(L, lc, v):
+    """train's --start for training version v of a line: the version's model (a tree's state file) from version 1 on;
+    for version 0 none (untrained), or for a line with a warm start version 0, its start model's copy, with
+    --init-forget F when its start_forget F is not 1 (a tree: version 0's copied state, then --warm-reset with
+    start_reset and --start-leaf-forget F with F not 1, 2026-11-12)."""
+    line, kind = lc["line"], lc["kind"]
+    if v >= 1:
+        return ["--start", L.state_path(line, v) if kind in TREE_KINDS else L.model_path(line, v)]
+    ws = lc.get("start")
+    if not ws:
+        return []
+    f = ws.get("forget", 1)
+    if kind in TREE_KINDS:
+        return (["--start", L.state_path(line, 0)] + (["--warm-reset"] if ws.get("reset") else [])
+                + ([] if f == 1 else ["--start-leaf-forget", num_arg(f)]))
+    return ["--start", L.model_path(line, 0)] + ([] if f == 1 else ["--init-forget", num_arg(f)])
+
+
+def label_model_refs(args):
+    """The (index of the value's token, value) of each --label-model in train arguments whose value names a line
+    (has no ":", so is no model spec; label_lines_option)."""
+    out = []
+    for i, a in enumerate(args):
+        if a == "--label-model" and i + 1 < len(args) and ":" not in args[i + 1]:
+            out.append((i + 1, args[i + 1]))
+        elif a.startswith("--label-model=") and ":" not in a.split("=", 1)[1]:
+            out.append((i, a.split("=", 1)[1]))
+    return out
+
+
+def label_lines_option(cfg, lines):
+    """A line's --label-model may name another line of the experiment by its model id (a spec entry's id without
+    "=", e.g. "F-P-lab", a recipe row; 2026-11-13, analyst 6.113's moving labeller): training then labels with that
+    line's current version (label_line_args). Each such value must name exactly one other trained line."""
+    for lc in lines:
+        for _, val in label_model_refs(lc["train_args"]):
+            hits = [x for x in lines if x["model"] == val and x["option"] in ("league", "local")]
+            if len(hits) != 1 or hits[0]["line"] == lc["line"]:
+                sys.exit(f"spec: {lc['line']}: --label-model {val} must name one other trained line of the experiment "
+                         f"(its model id); it names {len(hits)}")
+
+
+def label_line_args(L, args):
+    """train's arguments with each --label-model that names a line (label_lines_option) replaced by that line's
+    current version as KIND:PATH: the version that played this cycle's games, as the trainee's own search labels with
+    the trainee as it starts the round (versions advance after training, in the records phase). Arguments without
+    such a --label-model are returned as they are (every experiment before 2026-11-13)."""
+    refs = label_model_refs(args)
+    if not refs:
+        return args
+    out = list(args)
+    for j, val in refs:
+        hits = [x for x in L.cfg["lines"] if x["model"] == val and x["option"] in ("league", "local")]
+        if len(hits) != 1:
+            raise RuntimeError(f"--label-model {val}: names {len(hits)} trained lines of this experiment, not one")
+        x = hits[0]
+        spec = f"{x['kind']}:{L.model_path(x['line'], L.state['lines'][x['line']]['version'])}"
+        out[j] = spec if out[j] == val else f"--label-model={spec}"
+    return out
 
 
 def train_line(L, lc, setdir, ngames, cycle, v):
@@ -1623,11 +3873,8 @@ def train_line(L, lc, setdir, ngames, cycle, v):
     work = L.p("runs", f".train-{line}")
     shutil.rmtree(work, ignore_errors=True)
     out = os.path.join(work, "out")
-    start = []
-    if v >= 1:
-        start = ["--start", L.state_path(line, v) if kind in TREE_KINDS else L.model_path(line, v)]
     cmd = L.nice() + [lc["train_binary"], "train", setdir, out, "--model", kind, "--rounds", "1", "--seed",
-                      str(train_seed(L, lc, cycle)), *start, *lc["train_args"]]
+                      str(train_seed(L, lc, cycle)), *train_start(L, lc, v), *label_line_args(L, lc["train_args"])]
     code, cpu, wall, text = run_measured(cmd, L.p("runs", line + ".log"), f"cycle {cycle} train",
                                          env=threads_env(L.per_job_threads()))
     m = re.search(r"^round 0: (\d+) positions", text, re.M)
@@ -1893,7 +4140,8 @@ def phase_copy(L, cur):
 
 def phase_calibration(L, cur):
     c = cur["cycle"]
-    if cur["rounds_planned"] is None:
+    gpe, gpc = games_per_entry(L.cfg), games_per_cycle(L.cfg)
+    if cur["rounds_planned"] is None and gpe is None and gpc is None:
         cur["rounds_planned"] = L.cfg["rounds_per_cycle"]
     for lc in lines_in_cycle(L, L.state, c):
         line = lc["line"]
@@ -1902,11 +4150,27 @@ def phase_calibration(L, cur):
                 raise RuntimeError(f"{line}: version {L.state['lines'][line]['version']}'s model is missing")
             make_untrained(L, lc)
         if lc["entered_cycle"] == c and not any(e["event"] == "entered" and e["line"] == line for e in cur["events"]):
-            cur["events"].append(dict(date=now(), line=line, event="entered", entry=entry_name(line, 0, 2),
-                                      version_name=L.vname(line, 0), value="", detail="untrained"))
+            cur["events"].append(dict(date=now(), line=line, event="entered",
+                                      entry=entry_name(line, 0, line_ply(L.cfg, lc)), version_name=L.vname(line, 0),
+                                      value="", detail=start_detail(lc["start"]) if lc.get("start") else "untrained"))
+    for lc in observers_in_cycle(L, L.state, c):  # an observer's version 0, as a line's (it never plays)
+        line, v = lc["line"], L.state["lines"][lc["line"]]["version"]
+        if not os.path.exists(L.model_path(line, v)):
+            if v != 0:
+                raise RuntimeError(f"{line}: version {v}'s model is missing")
+            make_untrained(L, lc)
     field = field_of(L, L.state, c)
     cur["field"] = field
-    keys = sorted({(e["line"], e["version"]) for e in field if e["role"] != "reference"})
+    if cur["rounds_planned"] is None and gpc is not None:  # games_per_cycle: the rounds from the field's size
+        g = cur["games_per_cycle"] = gpc_plan(gpc, field)
+        cur["rounds_planned"] = g["rounds"]
+        L.log(f"cycle {c}: games_per_cycle {gpc} over {plural(g['n'], 'entry', 'entries')}: "
+              f"{plural(g['rounds'], 'round')}, {g['rounds'] * g['n'] * (g['n'] - 1)} games"
+              + (f" ({g['bound']})" if g["bound"] else ""))
+    if cur["rounds_planned"] is None:  # games_per_entry: the rounds from the field's size (variable-length cycles)
+        cur["rounds_planned"] = rounds_for_games(gpe, len(field))
+        cur["games_per_entry"] = gpe
+    keys = sorted({(e["line"], e["version"]) for e in field if e["role"] not in ("reference", FROZEN_ROLE)})
     todo = [k for k in keys if not own_done(L, *k)]
     L.save()
     if todo:
@@ -1924,6 +4188,19 @@ def phase_calibration(L, cur):
         with ThreadPoolExecutor(workers) as ex:
             list(ex.map(one, todo))
         L.save()
+    fx = frozen_refs(L.cfg)
+    for x in fx:  # the copies are still create's
+        frozen_model(L, x)
+    fx = [x for x in fx if not frozen_own_done(L, x)]
+    if fx:  # made once: the league keeps them (frozenref/, outside owncal/ and own_gc)
+        wait_not_busy(L)
+        L.log(f"cycle {c}: own calibration games of {plural(len(fx), 'frozen reference')}, as their experiments made "
+              f"them")
+        for x in fx:
+            cpu = make_frozen_own(L, x, L.per_job_threads())
+            cur["cal"][x["name"]] = round(cur["cal"].get(x["name"], 0.0) + cpu, 2)
+            cur["cal_made"] += 1
+            L.save()
 
 
 def phase_tournament(L, cur):
@@ -1941,10 +4218,12 @@ def phase_tournament(L, cur):
     clean_partial(L, done)
     partial = fail_hook(c, "tournament-partial")
     t = L.cfg["tournament"]
+    anchor = [] if L.cfg.get("rating_zero") else ["--anchor", ANCHOR]  # no random: relative to the rated players' mean
     cmd = L.nice() + [t["binary"], "tournament", "players.txt", ".", "--tournaments",
-                      str(min(target, t0 + 1) if partial else target), "--use-probs", "--anchor", ANCHOR, "--seed",
+                      str(min(target, t0 + 1) if partial else target), "--use-probs", *anchor, "--seed",
                       str(L.cfg["seed"]), "--no-catch-up", "--retired", "retired.txt", "--prior-draws", "0",
-                      *t.get("flags", []), "--save-games", L.p("pool")] + (["--game-cpu"] if t.get("game_cpu") else [])
+                      *t.get("flags", []), *openings_flags(L.cfg), "--save-games", L.p("pool")] \
+        + (["--game-cpu"] if t.get("game_cpu") else [])
     wait_not_busy(L)
     L.log(f"cycle {c}: tournament, {len(cur['field'])} players, rounds {t0}-{target - 1}"
           + (f" (from {done})" if done > t0 else ""))
@@ -1959,27 +4238,103 @@ def phase_tournament(L, cur):
     L.save()
     if code != 0:
         raise RuntimeError(f"tournament failed (exit {code}); see {tour}/tournament.log")
+    if frozen_refs(L.cfg):
+        check_frozen_calibrations(L, cur, out)
+        L.save()
     if partial:
         inject(c, "tournament-partial")
     if done_round_robins(tour) != target:
         raise RuntimeError(f"tournament stopped at {done_round_robins(tour)} round-robins, not {target}")
-    rows = game_rows(tour, t0, target, L.price)
+    rows = game_rows(tour, t0, target, L.price, data_ply(L.cfg))
     cur["rounds"] = round_stats(rows, t0, n, len(cur["field"]), walls)
     cur["data_cpu_target_s"] = round(sum(r["ply2_cpu_s"] for r in cur["rounds"]), 3)
     cur["data_price_target_s"] = sum(r["ply2_price_s"] for r in cur["rounds"])
     L.save()
 
 
+def phase_cold(L, cur):
+    """cold_games' round-robins (cold_games_option), after the cycle's round-robins: the field (cur["field"]) in
+    cold/, R rounds (cold_rounds_for, planned once a cycle and kept in cur["cold"]), the tournament's command with
+    cold_flags and the cold seed; saved to coldpool/ with train. A cycle cut short replays its rounds, the same games
+    (as the tournament phase). cur["cold"]: t0, rounds (round_stats rows), the plan (n, rule), the process's CPU and
+    wall time, done; in_local is set by the training phase."""
+    c, cg = cur["cycle"], cold_games_of(L.cfg)
+    if not rated_cycle(L.cfg, c):  # rate_every: an unrated cycle plays no cold games (cur["cold"] stays unset)
+        L.log(f"cycle {c}: no cold games ({unrated_text(L.cfg, c)})")
+        return
+    rec = cur.get("cold")
+    if rec and rec.get("done"):
+        return
+    tour, pool = L.p(COLD_DIR), L.p(COLD_POOL)
+    field = cur["field"]
+    write_players(L, field, tour)
+    done = done_round_robins(tour)
+    if rec is None:
+        t = games_per_cycle(L.cfg)
+        r, bound = cold_rounds_for(cg, t, len(field))
+        rec = dict(t0=done, planned=r, n=len(field), bound=bound, games_target=f"{cg['share']:g} x {t}",
+                   proc_cpu_s=0.0, wall_s=0.0, round_walls={}, in_local=0, done=False)
+        with L.mutex:
+            cur["cold"] = rec
+        L.save()
+    t0, n = rec["t0"], rec["planned"]
+    target = t0 + n
+    if done < t0:
+        raise RuntimeError(f"cold/games.csv has {done} round-robins; the cycle's cold games started at {t0}")
+    clean_partial(L, done, tour, pool)
+    partial = fail_hook(c, "cold-games-partial")
+    tc = L.cfg["tournament"]
+    anchor = [] if L.cfg.get("rating_zero") else ["--anchor", ANCHOR]
+    cmd = L.nice() + [tc["binary"], "tournament", "players.txt", ".", "--tournaments",
+                      str(min(target, t0 + 1) if partial else target), "--use-probs", *anchor, "--seed",
+                      str(L.cfg["seed"] + COLD_GAMES_SEED_OFFSET), "--no-catch-up", "--retired", "retired.txt",
+                      "--prior-draws", "0", *cold_flags(L.cfg)] + (["--save-games", pool] if cg["train"] else []) \
+        + (["--game-cpu"] if tc.get("game_cpu") else [])
+    wait_not_busy(L)
+    per = len(field) * (len(field) - 1)
+    L.log(f"cycle {c}: cold games at temperature {cg['temperature']:g}, {len(field)} players, "
+          f"{plural(n, 'round')} ({n * per} games; share {cg['share']:g} of {games_per_cycle(L.cfg)}"
+          + (f", {rec['bound']}" if rec["bound"] else "") + f"), rounds {t0}-{target - 1}"
+          + (f" (from {done})" if done > t0 else "") + ("; they train too" if cg["train"] else "; rating only"))
+    code, cpu, wall, out = run_measured(cmd, os.path.join(tour, "tournament.log"), f"cycle {c} cold games",
+                                        env=threads_env(L.cfg["threads"]), cwd=tour)
+    check_interrupted()
+    for m in re.finditer(r"^tournament (\d+)/\d+: \d+ games in (\d+)s", out, re.M):
+        rec["round_walls"][str(int(m.group(1)) - 1)] = float(m.group(2))
+    rec["proc_cpu_s"] = round(rec["proc_cpu_s"] + cpu, 2)
+    rec["wall_s"] = round(rec["wall_s"] + wall, 2)
+    L.save()
+    if code != 0:
+        raise RuntimeError(f"cold games failed (exit {code}); see {tour}/tournament.log")
+    if partial:
+        inject(c, "cold-games-partial")
+    if done_round_robins(tour) != target:
+        raise RuntimeError(f"cold games stopped at {done_round_robins(tour)} round-robins, not {target}")
+    rows = game_rows(tour, t0, target, L.price, data_ply(L.cfg))
+    with L.mutex:
+        rec["rounds"] = round_stats(rows, t0, n, len(field), rec["round_walls"])
+        rec["done"] = True
+    L.save()
+
+
 def phase_decide(L, cur):
     c, cfg, st = cur["cycle"], L.cfg, L.state
-    ratings = read_ratings(L.p("tour"))
+    if not rated_cycle(cfg, c):  # rate_every: no fit, no champion test (decide_unrated)
+        decide_unrated(L, cur)
+        return
+    ratings = league_ratings(L)
+    ply1 = cfg.get("ply1_entries", True)
+    g11 = is_global11(cfg)
+    rwm = reference_window_of(cfg)
+    tfm = train_filter_of(cfg)
     dec, tests, pairs = {}, [], []
     for lc in lines_in_cycle(L, st, c):
         line = lc["line"]
         ls = st["lines"][line]
+        p = line_ply(cfg, lc)
         v, ch = ls["version"], ls["champion"]
-        d = dict(version=v, champion=ch, entry1=entry_name(line, v, 1), entry2=entry_name(line, v, 2),
-                 champion_entry=entry_name(line, ch, 2), diff=None, se=None, z=None, note="")
+        d = dict(version=v, champion=ch, entry1=entry_name(line, v, 1) if ply1 else "", entry2=entry_name(line, v, p),
+                 champion_entry=entry_name(line, ch, p), diff=None, se=None, z=None, note="")
         d["r1"], d["r2"], d["rc"] = (ratings.get(d["entry1"]), ratings.get(d["entry2"]),
                                      ratings.get(d["champion_entry"]))
         if lc["entered_cycle"] == c and v == 0:
@@ -1993,17 +4348,34 @@ def phase_decide(L, cur):
             tests.append(line)
             pairs.append(([d["entry2"]], [d["champion_entry"]]))
         dec[line] = d
-    ses = contrast_ses(L.p("tour"), ratings, pairs) if pairs else []
+    ses = contrast_ses(rating_tour(L), ratings, pairs, anchor=fit_pin(L, ratings)) if pairs else []
+    drawse = cfg.get("champion_se_kind") == "draw-aware"
+    if drawse:  # champion_se_kind: the draw-aware SE decides; the nominal one is kept beside it
+        dses = contrast_ses_draws(rating_tour(L), ratings, pairs, anchor=fit_pin(L, ratings)) if pairs else []
     for i, line in enumerate(tests):
         d = dec[line]
         se = ses[i] if ses else None
+        if drawse:
+            d["se_nominal"] = se
+            d["z_nominal"] = (d["r2"][0] - d["rc"][0]) / se if se is not None and se > 0 else None
+            se = dses[i] if dses else None
         d["decision"], d["diff"], d["z"] = champion_decision(d["r2"][0], d["rc"][0], se, cfg["champion_se"])
         d["se"] = se
         if se is None:
             d["note"] = "no SE: the fit's matrix is not positive definite"
     for line, d in dec.items():
         ls = st["lines"][line]
-        if L.is_global:
+        if g11:  # rule 6, and the training window's floor (the current version's Elo minus the margin)
+            rule = cfg["patience_rule"]
+            crowned = d["decision"] in ("first-champion", "new-champion")
+            d["patience_positions"], d["patience_total"], d["patience_from"] = patience_step(ls, L.lines[line],
+                                                                                             crowned, c)
+            d["patience"] = patience_level(d["patience_total"], rule)
+            d["retire"] = patience_retires(d["patience_total"], c - d["patience_from"], rule)
+            if d["retire"]:
+                d["decision"] = "retired"
+            d["train_floor"] = d["r2"][0] - cfg["train"]["margin"] if d["r2"] else None
+        elif L.is_global:
             p = 0 if d["decision"] in ("first-champion", "new-champion") else ls["patience"] + 1
             d["patience"] = p
             d["retire"] = p >= cfg["patience_cycles"]
@@ -2011,8 +4383,24 @@ def phase_decide(L, cur):
                 d["decision"] = "retired"
         else:
             d["patience"], d["retire"] = None, False
+        if rwm is not None:  # reference_window: the line's floor (its current version's Elo minus the margin)
+            d["ref_floor"] = d["r2"][0] - rwm if d["r2"] else None
     cur["decisions"] = dec
-    if L.is_global:
+    if tfm is not None:  # train_filter: each line's rating, SE and floor, the field's ratings (the user 11-12 13:24)
+        train_filter_ratings(L, cur, ratings)
+    pl = cfg.get("plateau")
+    if pl and not L.is_global:
+        crowned_now = any(d["decision"] in ("first-champion", "new-champion") for d in dec.values())
+        cur["last_crown_cycle"] = c if crowned_now else st.get("last_crown_cycle", 0)
+        cur["plateau_stop"] = plateau_stop(c, cur["last_crown_cycle"], pl)
+        cur.pop("plateau_held", None)
+        if cur["plateau_stop"] and pl.get("guard_z") is not None:  # plateau.guard_z: a line still ahead holds it
+            held = [[line, round(d["z"], 2)] for line, d in dec.items()
+                    if d.get("z") is not None and d["z"] > pl["guard_z"]]
+            if held:
+                cur["plateau_stop"] = False
+                cur["plateau_held"] = held
+    if L.is_global and not g11:
         current1 = [(d["entry1"], line, d["version"], d["r1"][0]) for line, d in dec.items() if d["r1"]]
         aratings = {a["entry"]: (ratings[a["entry"]][:2] if a["entry"] in ratings else None)
                     for a in st["anchors"].values()}
@@ -2021,11 +4409,704 @@ def phase_decide(L, cur):
         cur["anchors_after"], cur["anchor_events"], cur["anchors_leaving"] = anchors, events, leaving
     L.save()
     crowned = [line for line, d in dec.items() if d["decision"] == "new-champion"]
-    L.log(f"cycle {c}: decided; new champions: {', '.join(crowned) or 'none'}")
+    retiring = [line for line, d in dec.items() if d["retire"]]
+    L.log(f"cycle {c}: decided; new champions: {', '.join(crowned) or 'none'}"
+          + (f"; the last crowning was in cycle {cur['last_crown_cycle']}" if "last_crown_cycle" in cur else "")
+          + (f"; retiring: {', '.join(retiring)}" if retiring else ""))
+    if cur.get("plateau_stop"):
+        L.log(f"cycle {c}: plateau: no new champion for {c - cur['last_crown_cycle']} cycles (rule: "
+              f"{pl['cycles']} cycles, from cycle {pl['min_cycles']}); this is the experiment's last cycle")
+    if cur.get("plateau_held"):
+        L.log(f"cycle {c}: plateau: no new champion for {c - cur['last_crown_cycle']} cycles (rule: "
+              f"{pl['cycles']} cycles, from cycle {pl['min_cycles']}), held by plateau.guard_z {pl['guard_z']:g}: "
+              + ", ".join(f"{line} z {z:.2f}" for line, z in cur["plateau_held"]))
+
+
+def decide_unrated(L, cur):
+    """phase_decide in a cycle that doesn't rate (rate_every_option): no fit, no champion test and no crowning (each
+    line's decision UNRATED_DECISION, an entering line's first champion aside), no plateau stop (the last crowning
+    carried on); with train_filter the last rated cycle's floors and ratings (train_filter_carry)."""
+    c, cfg, st = cur["cycle"], L.cfg, L.state
+    ply1 = cfg.get("ply1_entries", True)
+    dec = {}
+    for lc in lines_in_cycle(L, st, c):
+        line = lc["line"]
+        ls = st["lines"][line]
+        p = line_ply(cfg, lc)
+        v, ch = ls["version"], ls["champion"]
+        d = dict(version=v, champion=ch, entry1=entry_name(line, v, 1) if ply1 else "", entry2=entry_name(line, v, p),
+                 champion_entry=entry_name(line, ch, p), diff=None, se=None, z=None, note="", r1=None, r2=None,
+                 rc=None)
+        d["decision"] = "first-champion" if lc["entered_cycle"] == c and v == 0 else UNRATED_DECISION
+        d["patience"], d["retire"] = None, False
+        dec[line] = d
+    cur["decisions"] = dec
+    if train_filter_of(cfg) is not None:
+        train_filter_carry(L, cur)
+    pl = cfg.get("plateau")
+    if pl:
+        crowned_now = any(d["decision"] == "first-champion" for d in dec.values())
+        cur["last_crown_cycle"] = c if crowned_now else st.get("last_crown_cycle", 0)
+        cur["plateau_stop"] = False
+    L.save()
+    L.log(f"cycle {c}: not rated ({unrated_text(cfg, c)}): no champion test, no crowning"
+          + (f"; the train filter keeps cycle {cur['filter_carry_cycle']}'s floors"
+             if cur.get("filter_carry_cycle") is not None else "")
+          + (f"; the last crowning was in cycle {cur['last_crown_cycle']}" if "last_crown_cycle" in cur else ""))
+
+
+def train_filter_carry(L, cur):
+    """decide_unrated's part of train_filter: each line's rating, SE and floor (its decision's filter_rating, filter_se
+    and filter_floor) and the field's ratings (current.filter_ratings) as the last rated cycle had them (state.json's
+    rate_carry, kept by apply_decisions; current.filter_carry_cycle: that cycle). An entry rated then keeps its rating;
+    a line's version made since then (its current version) takes the rating of its line's version rated then, at the
+    same ply; any other entry is unrated (never below a floor); a line unrated then has no floor (nothing cut)."""
+    carry = L.state.get("rate_carry") or {}
+    lines, rt = carry.get("lines") or {}, carry.get("ratings") or {}
+    for line, d in cur["decisions"].items():
+        x = lines.get(line) or {}
+        d["filter_rating"], d["filter_se"], d["filter_floor"] = x.get("rating"), x.get("se"), x.get("floor")
+    out = {}
+    for e in cur["field"]:
+        x = lines.get(e["line"]) if e["line"] else None
+        if e["entry"] in rt:
+            out[e["entry"]] = rt[e["entry"]]
+        elif x is not None and e["version"] == L.state["lines"][e["line"]]["version"]:
+            out[e["entry"]] = rt.get(entry_name(e["line"], x["version"], e["ply"]))
+        else:
+            out[e["entry"]] = None
+    cur["filter_ratings"] = out
+    cur["filter_carry_cycle"] = carry.get("cycle")
+
+
+def plateau_stop(c, last_crown, rules):
+    """The plateau rule (an experiment's "plateau": {"cycles": K, "min_cycles": M}): cycle c is the last when no
+    line has crowned a champion in the K cycles since the last crowning (cycle last_crown; the first champions count,
+    in the first cycle), and c is at least M."""
+    return c >= rules.get("min_cycles", 0) and c - last_crown >= rules["cycles"]
 
 
 def last_cycle(L, c):
-    return not L.is_global and c >= L.cfg["cycles"]
+    """An experiment's last cycle (it trains nothing): its cycles are used up, or its decisions found the plateau."""
+    if L.is_global:
+        return False
+    if c >= L.cfg["cycles"]:
+        return True
+    cur = (L.state or {}).get("current")
+    return bool(cur and cur.get("cycle") == c and cur.get("plateau_stop"))
+
+
+# ---------------------------------------------------------------- self-games (a league with "self_games": true)
+
+def self_game_entries(L, field):
+    """The field's entries that play a self-game each round: those whose game against itself is a training game (a
+    model at the league's entry ply; in the global league every model entry, at its own ply), in field order. A
+    frozen reference plays none (frozen_references: the lines' entries only)."""
+    p = data_ply(L.cfg)
+    return [e for e in field if qualifies(e["entry"], e["entry"], p) and e["role"] != FROZEN_ROLE]
+
+
+def self_games_wanted(L, cur):
+    """Whether this cycle plays self-games: some line trains on the league's own games after it (not an experiment's
+    last cycle; not every local line retiring)."""
+    if last_cycle(L, cur["cycle"]):
+        return False
+    dec = cur["decisions"]
+    return any(lc["line"] in dec and not dec[lc["line"]]["retire"] and lc["option"] in ("league", "local")
+               for lc in L.cfg["lines"])
+
+
+def self_games_pool(L):
+    return L.p("selfpool")
+
+
+def phase_selfgames(L, cur):
+    """Each round of the cycle, every entry whose game against itself qualifies for training (a model at the entry
+    ply) plays one game against itself: the same version at the same ply. The tournament binary's `replay-games`
+    plays them as the tournament plays its games (the same players, policy, temperature and move choice), each entry
+    paired with a twin (its spec and depth under the name <entry>.twin), round t's game of entry i seeded
+    derive_seed(seed + SELF_GAMES_SEED_OFFSET, t, g), g the pairing's index in replay-games' players list (the
+    self-game entries, then their twins); so they replay exactly and share no seed stream with the round-robins.
+    They are training games only: saved to selfpool/round{t}/{entry}~{entry}/, never in tour/games.csv, so outside
+    the rating fit, the champion test, the head-to-head tables and the plateau rule. Priced like tournament games
+    (tournament prices of the entry's kind at its ply), their price is added to the cycle's local data price
+    (data_price_target_s), which sets the self-play lines' budget and the global carry; their measured CPU (the
+    replay-games process) is added to data_cpu_target_s. Recorded in self_games.csv and totals.csv (records)."""
+    c = cur["cycle"]
+    sg = cur.get("self_games")
+    if sg and sg.get("done"):
+        return
+    pool = self_games_pool(L)
+    shutil.rmtree(pool, ignore_errors=True)
+    entries = self_game_entries(L, cur["field"]) if self_games_wanted(L, cur) else []
+    ts = [r["t"] for r in cur["rounds"]]
+    rec = dict(entries=len(entries), rounds=len(ts), games=0, plies=0, price_s=0.0, proc_cpu_s=0.0, wall_s=0.0)
+    rows = []
+    if entries and ts:
+        os.makedirs(pool)
+        twins = [e["entry"] + SELF_GAMES_TWIN for e in entries]
+        players = os.path.join(pool, "players.txt")
+        atomic_write(players, "# NAME DEPTH SPEC: written by leagues/leagues.py (self-games: the entries, then "
+                              "their twins)\n" + "".join(f"{e['entry']} {e['ply']} {e['spec']}\n" for e in entries)
+                     + "".join(f"{tw} {e['ply']} {e['spec']}\n" for tw, e in zip(twins, entries)))
+        want = [(t, e["entry"], tw) for t in ts for e, tw in zip(entries, twins)]
+        games = os.path.join(pool, "games.txt")
+        atomic_write(games, "".join(f"{t} {w} {b}\n" for t, w, b in want))
+        tc = L.cfg["tournament"]
+        passed = [x for f, v in parse_flags(tc.get("flags", [])) if f in ("--policy", "--temperature") for x in (f, v)]
+        cmd = L.nice() + [tc["binary"], "replay-games", players, games, os.path.join(pool, "out"), "--use-probs",
+                          "--seed", str(L.cfg["seed"] + SELF_GAMES_SEED_OFFSET), *passed, *openings_flags(L.cfg)]
+        wait_not_busy(L)
+        L.log(f"cycle {c}: self-games, {plural(len(entries), 'entry', 'entries')} x {plural(len(ts), 'round')}")
+        code, cpu, wall, out = run_measured(cmd, L.p("self_games.log"), f"cycle {c} self-games",
+                                            env=threads_env(L.cfg["threads"]))
+        check_interrupted()
+        if code != 0:
+            raise RuntimeError(f"self-games failed (exit {code}); see {L.p('self_games.log')}")
+        got = {}
+        for m in re.finditer(r"^(\d+),(\S+?),(\S+?),(1-0|0-1|1/2-1/2),(\d+)$", out, re.M):
+            got[(int(m.group(1)), m.group(2), m.group(3))] = (m.group(4), int(m.group(5)))
+        if set(got) != set(want):
+            raise RuntimeError(f"self-games: replay-games reported {len(got)} games, not the {len(want)} asked for")
+        total = 0.0
+        for t, w, b in want:
+            result, plies = got[(t, w, b)]
+            os.makedirs(os.path.join(pool, f"round{t}"), exist_ok=True)
+            os.rename(os.path.join(pool, "out", f"round{t}", f"{w}~{b}"), os.path.join(pool, f"round{t}", f"{w}~{w}"))
+            price = L.price(w, w, plies)
+            total += price
+            rows.append(dict(cycle=c, t=t, entry=w, white=w, black=w, result=result, plies=plies,
+                             price_s=f"{price:.6f}"))
+        shutil.rmtree(os.path.join(pool, "out"), ignore_errors=True)
+        inject(c, "self-games-partial")  # the resume test: games saved, the phase not done (it replays them)
+        rec.update(games=len(rows), plies=sum(r["plies"] for r in rows), price_s=total, proc_cpu_s=round(cpu, 2),
+                   wall_s=round(wall, 2))
+    else:
+        L.log(f"cycle {c}: no self-games (" + ("no round" if entries else "nothing trains on them this cycle") + ")")
+    if rows or os.path.isdir(pool):
+        write_csv(os.path.join(pool, "games.csv"), SELF_GAMES_FIELDS, rows)
+    rec["done"] = True
+    with L.mutex:
+        cur["self_games"] = rec
+        cur["data_cpu_target_s"] = round(sum(r["ply2_cpu_s"] for r in cur["rounds"]) + rec["proc_cpu_s"], 3)
+        cur["data_price_target_s"] = sum(r["ply2_price_s"] for r in cur["rounds"]) + rec["price_s"]
+    L.save()
+
+
+def self_games_rows(L):
+    """This cycle's self_games.csv rows (selfpool/games.csv; none when it played none)."""
+    return read_csv(os.path.join(self_games_pool(L), "games.csv"))
+
+
+# ---------------------------------------------------------------- train_filter and self_games_topup (experiments)
+
+def filter_keeps(g, low):
+    """train_filter's rule for one game (t, white, black, ...) of the local set (the user 11-12 13:22-13:24: the global
+    league's qualify rule), for a line whose floor the entries in low are rated below: kept when no player in it is in
+    low (an unrated player never is, as in window_ok), whoever plays it: the line's own games too, its champion's
+    self-games included (its current version is never below its own floor)."""
+    return g[1] not in low and g[2] not in low
+
+
+def filter_floor(m, rating, se):
+    """train_filter's floor for a line rated `rating` (None while unrated: nothing is cut): the rating minus the margin
+    m, or with m "se" (TRAIN_FILTER_SE) minus se, that rating's standard error (None without one)."""
+    if rating is None:
+        return None
+    if m == TRAIN_FILTER_SE:
+        return None if se is None else rating - se
+    return rating - m
+
+
+def filter_rule_text(m, k):
+    """train_filter's floor in words, for the log and the report: "floor: each line's current cold Elo minus its
+    standard error", "margin 50 below each line's current cold Elo", or with smoothing "margin 50 below ratings
+    smoothed over 5 cycles"."""
+    if m == TRAIN_FILTER_SE:
+        return "floor: each line's current cold Elo minus its standard error"
+    return f"margin {m:g} below " + ("each line's current cold Elo" if k == 1 else
+                                     f"ratings smoothed over {plural(k, 'cycle')}")
+
+
+def share_text(a, b):
+    return f"{100 * a / b:.1f}%" if b else "-"
+
+
+def smoothed_ratings(c, k, now, mains, line_hist, entry_hist):
+    """train_filter's ratings in cycle c over the k cycles c - k + 1 to c (k 1: this cycle's fit alone; analyst 6.87
+    (ii) for k > 1, the smooth option): ({line: R},
+    {entry: smoothed Elo}). now: {entry: Elo or None}, this cycle's field in its fit (rounded as history.csv keeps
+    it); mains: {line: its current version's main entry}; line_hist: {line: {cycle: Elo or None}}, each earlier
+    cycle's current version as rated in that cycle's fit (cycles.csv's elo2); entry_hist: {entry: {cycle: Elo or
+    None}}, the entries' earlier ratings (history.csv). A line's R is the mean of its last k current versions' Elo,
+    this cycle's included (the rated ones; None when none is); a line's current version rates as its line's R; any
+    other entry (a champion) as the mean of its own Elo in those k cycles. Means in cycle order."""
+    lo = c - k + 1
+
+    def mean(by_cycle):
+        xs = [v for x, v in sorted(by_cycle.items()) if lo <= x <= c and v is not None]
+        return sum(xs) / len(xs) if xs else None
+
+    lines = {line: mean({**line_hist.get(line, {}), c: now.get(e)}) for line, e in mains.items()}
+    main_line = {e: line for line, e in mains.items()}
+    entries = {e: lines[main_line[e]] if e in main_line else mean({**entry_hist.get(e, {}), c: v})
+               for e, v in now.items()}
+    return lines, entries
+
+
+def train_filter_ratings(L, cur, ratings):
+    """phase_decide's part of train_filter: each line's rating, its current version's standard error and its floor (its
+    decision's filter_rating, filter_se and filter_floor: filter_floor; the rating None while unrated) and the field's
+    ratings (current.filter_ratings), from this cycle's fit (ratings: the Elo rounded to the records' 0.1, the SE its
+    95% interval over 1.96, as history.csv keeps them) and with smooth > 1 the earlier cycles' records (cycles.csv's
+    elo2, history.csv's elo): smoothed_ratings."""
+    c, m, k = cur["cycle"], train_filter_of(L.cfg), train_filter_smooth(L.cfg)
+    dec = cur["decisions"]
+    now = {e["entry"]: float(e1(ratings[e["entry"]][0])) if e["entry"] in ratings else None for e in cur["field"]}
+    mains = {line: d["entry2"] for line, d in dec.items()}
+    line_hist, entry_hist = {}, {}
+    if k > 1:
+        lo = c - k + 1
+        for r in read_csv(L.p("cycles.csv")):
+            if lo <= int(r["cycle"]) < c and r["line"] in mains:
+                line_hist.setdefault(r["line"], {})[int(r["cycle"])] = float(r["elo2"]) if r["elo2"] != "" else None
+        for r in read_csv(L.p("history.csv")):
+            if lo <= int(r["cycle"]) < c and r["entry"] in now:
+                entry_hist.setdefault(r["entry"], {})[int(r["cycle"])] = float(r["elo"]) if r["elo"] != "" else None
+    lines, entries = smoothed_ratings(c, k, now, mains, line_hist, entry_hist)
+    for line, d in dec.items():
+        se = ratings[d["entry2"]][1] / 1.96 if d["entry2"] in ratings else None
+        d["filter_rating"], d["filter_se"] = lines[line], se
+        d["filter_floor"] = filter_floor(m, lines[line], se)
+    cur["filter_ratings"] = entries
+
+
+def local_set_games(L, cur):
+    """The local set's games as phase_train builds them in an experiment with cold_games (no replay, no frozen
+    references): the cycle's qualifying round-robin games and self-games, ordered by round and names, then with
+    cold_games' train its cold games (t = COLD_T_BASE + the cold round). [(t, white, black, dir)]."""
+    ts = {r["t"] for r in cur["rounds"]}
+    p = entry_ply(L.cfg)
+    games = [g for g in saved_games(L.p("pool"), ts) if qualifies(g[1], g[2], p)]
+    if L.cfg.get("self_games"):
+        games = sorted(games + [g for g in saved_games(self_games_pool(L), ts) if qualifies(g[1], g[2], p)])
+    cg = cold_games_of(L.cfg)
+    if cg is not None and cg["train"]:
+        cts = {r["t"] for r in cur["cold"]["rounds"]}
+        games = games + [(COLD_T_BASE + t, w, b, d) for t, w, b, d in saved_games(L.p(COLD_POOL), cts)
+                         if qualifies(w, b, p)]
+    return games
+
+
+def train_filter_costs(L, cur):
+    """{(t, white, black): (plies, price s, CPU s)} of the games the cycle's local set can hold: the round-robins'
+    (tour/games.csv and game_cpu.csv), the self-games' (selfpool/games.csv, priced as phase_selfgames prices them, each
+    with its share by price of the replay-games process's CPU) and with cold_games' train the cold games' (cold/; t =
+    COLD_T_BASE + the cold round)."""
+    p = data_ply(L.cfg)
+    out = {}
+    for r in game_rows(L.p("tour"), cur["t0"], cur["t0"] + len(cur["rounds"]), L.price, p):
+        out[(r["t"], r["white"], r["black"])] = (int(r["plies"]), r["price_s"], r["cpu_s"] or 0.0)
+    rows = self_games_rows(L)
+    proc = (cur.get("self_games") or {}).get("proc_cpu_s", 0.0)
+    prices = [L.price(r["white"], r["black"], int(r["plies"])) for r in rows]
+    total = sum(prices)
+    for r, price in zip(rows, prices):
+        out[(int(r["t"]), r["white"], r["black"])] = (int(r["plies"]), price, proc * price / total if total else 0.0)
+    cg = cold_games_of(L.cfg)
+    if cg is not None and cg["train"]:
+        k = cur["cold"]
+        for r in game_rows(L.p(COLD_DIR), k["t0"], k["t0"] + k["planned"], L.price, p):
+            out[(COLD_T_BASE + r["t"], r["white"], r["black"])] = (int(r["plies"]), r["price_s"], r["cpu_s"] or 0.0)
+    return out
+
+
+def train_filter_plan(L, cur, games):
+    """train_filter's cut, decided once a cycle and kept in cur["train_filter"] (a resumed cycle reuses it): {"margin",
+    "smooth", "set": {"games", "positions"} of the local set (games: its (t, white, black, dir) tuples, as
+    local_set_games and phase_train build them), "lines": {line: {"rating", "se" and "floor" (decide's filter_rating,
+    filter_se and filter_floor: train_filter_ratings), "own" (the line's entries this cycle), "own_games" and
+    "own_kept" (the local set's games one of them plays, and how many of those it keeps), "below" ([[entry, Elo]]: the
+    set's players rated below the floor, its own champion included), "kept", "kept_positions", "cut_price_s",
+    "cut_cpu_s" (the cut games' price and CPU: train_filter_costs), "topup" (self_games_topup's games:
+    min(games_per_cycle, the set's games less the kept ones); 0 without it), "opponent" (the top-up games' opponent:
+    the champion's entry, or "self" for the current version's twin when the champion is the current version or is
+    rated below the floor; "" without top-up games)} for each line that trains, in config order}. Logged once
+    (driver.log)."""
+    rec = cur.get("train_filter")
+    if rec is not None:
+        return rec
+    c, m, k = cur["cycle"], train_filter_of(L.cfg), train_filter_smooth(L.cfg)
+    rt = cur.get("filter_ratings") or {}
+    cost = train_filter_costs(L, cur)
+    dec = cur["decisions"]
+    cap = games_per_cycle(L.cfg) if topup_of(L.cfg) and cur["rounds"] else 0
+    players = sorted({x for g in games for x in g[1:3]})
+    n = len(games)
+    rec = dict(margin=m, smooth=k, set=dict(games=n, positions=sum(cost[g[:3]][0] for g in games)), lines={})
+    for lc in L.cfg["lines"]:
+        line = lc["line"]
+        if line not in dec or dec[line]["retire"]:
+            continue
+        d = dec[line]
+        floor = d.get("filter_floor")
+        own = sorted(e["entry"] for e in cur["field"] if e["line"] == line)
+        mine = set(own)
+        below = [] if floor is None else [e for e in players if rt.get(e) is not None and rt[e] < floor]
+        low = set(below)
+        keep = [filter_keeps(g, low) for g in games]
+        cut = [g for g, kp in zip(games, keep) if not kp]
+        ours = [kp for g, kp in zip(games, keep) if g[1] in mine or g[2] in mine]
+        top = min(cap, len(cut))
+        opp = ""
+        if top:
+            ch = d["champion_entry"]
+            ch_low = floor is not None and rt.get(ch) is not None and rt[ch] < floor
+            opp = "self" if d["decision"] in ("first-champion", "new-champion") or ch == d["entry2"] or ch_low else ch
+        rec["lines"][line] = dict(rating=d.get("filter_rating"), se=d.get("filter_se"), floor=floor, own=own,
+                                  own_games=len(ours), own_kept=sum(ours), below=[[e, rt[e]] for e in below],
+                                  kept=n - len(cut),
+                                  kept_positions=sum(cost[g[:3]][0] for g, kp in zip(games, keep) if kp),
+                                  cut_price_s=sum(cost[g[:3]][1] for g in cut),
+                                  cut_cpu_s=sum(cost[g[:3]][2] for g in cut), topup=top, opponent=opp)
+    with L.mutex:
+        cur["train_filter"] = rec
+    L.save()
+    pos = rec["set"]["positions"]
+
+    def text(line, r):
+        if r["floor"] is None:
+            return f"{line} unrated, kept all"
+        return (f"{line} (rating {r['rating']:.1f}" + (f", SE {r['se']:.1f}" if r["se"] is not None else "")
+                + f", floor {r['floor']:.1f}) kept {r['kept']:,} ({share_text(r['kept'], n)}; "
+                f"{share_text(r['kept_positions'], pos)} of the positions; {r['own_kept']:,} of its {r['own_games']:,} "
+                f"own)"
+                + (f", top-up {r['topup']:,} against " + ("itself" if r["opponent"] == "self" else r["opponent"])
+                   if r["topup"] else ""))
+
+    L.log(f"cycle {c}: train filter ({filter_rule_text(m, k)}) on the local set of {plural(n, 'game')} ({pos:,} "
+          f"positions): " + "; ".join(text(line, r) for line, r in rec["lines"].items()))
+    return rec
+
+
+def phase_topup(L, cur):
+    """self_games_topup's games (self_games_topup_option), after the self-games, in a cycle that trains: each line's
+    top-up games of train_filter_plan, k of them, its current version against the plan's opponent (its champion,
+    colours alternating with the current version white first; or itself as a self-game, against its twin
+    <entry>.twin). One replay-games run plays every line's games (config order, then game j), game i of cycle c with t
+    = c x TOPUP_T_STRIDE + i and the seed of the league plus TOPUP_SEED_OFFSET (derive_seed(seed, t, its pairing)), so
+    each game has its own seed stream, none the round-robins' or the self-games', and a cycle cut short replays them
+    exactly. Line L's game j belongs to round t0 + floor(j R / k) of the cycle's R rounds: saved to
+    topuppool/round<t>/<white>~<black>~<j> (a twin named as its entry) and listed in topuppool/games.csv
+    (TOPUP_GAMES_FIELDS), for train_filter_sets. Priced as tournament games (the price of the entries' kind at their
+    ply). cur["topup"]: {"lines": {line: {"games", "plies", "price_s", "opponent"}}, "games", "plies", "price_s",
+    "proc_cpu_s", "wall_s", "done"}."""
+    c = cur["cycle"]
+    rec = cur.get("topup")
+    if rec and rec.get("done"):
+        return
+    pool = L.p(TOPUP_POOL)
+    shutil.rmtree(pool, ignore_errors=True)
+    rec = dict(lines={}, games=0, plies=0, price_s=0.0, proc_cpu_s=0.0, wall_s=0.0)
+    wanted = self_games_wanted(L, cur)
+    want, players = [], []
+    if wanted:
+        plan = train_filter_plan(L, cur, local_set_games(L, cur))
+        field = {e["entry"]: e for e in cur["field"]}
+        ts = [r["t"] for r in cur["rounds"]]
+        for line, r in plan["lines"].items():
+            k = r["topup"]
+            if not k:
+                continue
+            me = field[cur["decisions"][line]["entry2"]]
+            twin = r["opponent"] == "self"
+            opp = me["entry"] + SELF_GAMES_TWIN if twin else r["opponent"]
+            oe = me if twin else field[opp]
+            players += [(me["entry"], me["ply"], me["spec"]), (opp, oe["ply"], oe["spec"])]
+            for j in range(k):
+                w, b = (me["entry"], opp) if twin or j % 2 == 0 else (opp, me["entry"])
+                want.append((c * TOPUP_T_STRIDE + len(want), line, j, ts[j * len(ts) // k], w, b))
+        if len(want) >= TOPUP_T_STRIDE:
+            raise RuntimeError(f"cycle {c}: {len(want)} top-up games; TOPUP_T_STRIDE is {TOPUP_T_STRIDE}")
+    rows = []
+    if want:
+        os.makedirs(pool)
+        pf, gf = os.path.join(pool, "players.txt"), os.path.join(pool, "games.txt")
+        atomic_write(pf, "# NAME DEPTH SPEC: written by leagues/leagues.py (top-up games: each line's current version, "
+                         "then its opponent)\n" + "".join(f"{nm} {p} {s}\n" for nm, p, s in players))
+        atomic_write(gf, "".join(f"{x[0]} {x[4]} {x[5]}\n" for x in want))
+        tc = L.cfg["tournament"]
+        passed = [x for f, v in parse_flags(tc.get("flags", [])) if f in ("--policy", "--temperature") for x in (f, v)]
+        cmd = L.nice() + [tc["binary"], "replay-games", pf, gf, os.path.join(pool, "out"), "--use-probs", "--seed",
+                          str(L.cfg["seed"] + TOPUP_SEED_OFFSET), *passed, *openings_flags(L.cfg)]
+        wait_not_busy(L)
+        L.log(f"cycle {c}: top-up games, {plural(len(want), 'game')} for "
+              + ", ".join(f"{line} {plural(r['topup'], 'game')}" for line, r in plan["lines"].items() if r["topup"]))
+        code, cpu, wall, out = run_measured(cmd, L.p("topup_games.log"), f"cycle {c} top-up games",
+                                            env=threads_env(L.cfg["threads"]))
+        check_interrupted()
+        if code != 0:
+            raise RuntimeError(f"top-up games failed (exit {code}); see {L.p('topup_games.log')}")
+        got = {}
+        for m in re.finditer(r"^(\d+),(\S+?),(\S+?),(1-0|0-1|1/2-1/2),(\d+)$", out, re.M):
+            got[(int(m.group(1)), m.group(2), m.group(3))] = (m.group(4), int(m.group(5)))
+        if set(got) != {(x[0], x[4], x[5]) for x in want}:
+            raise RuntimeError(f"top-up games: replay-games reported {len(got)} games, not the {len(want)} asked for")
+
+        def named(x):  # a twin is its entry
+            return x[:-len(SELF_GAMES_TWIN)] if x.endswith(SELF_GAMES_TWIN) else x
+
+        for rt, line, j, t, w, b in want:
+            result, plies = got[(rt, w, b)]
+            wn, bn = named(w), named(b)
+            os.makedirs(os.path.join(pool, f"round{t}"), exist_ok=True)
+            os.rename(os.path.join(pool, "out", f"round{rt}", f"{w}~{b}"),
+                      os.path.join(pool, f"round{t}", f"{wn}~{bn}~{j:06d}"))
+            price = L.price(wn, bn, plies)
+            rows.append(dict(t=t, j=j, line=line, white=wn, black=bn, result=result, plies=plies,
+                             price_s=f"{price:.6f}", replay_t=rt))
+            x = rec["lines"].setdefault(line, dict(games=0, plies=0, price_s=0.0,
+                                                   opponent=plan["lines"][line]["opponent"]))
+            x["games"] += 1
+            x["plies"] += plies
+            x["price_s"] += price
+        shutil.rmtree(os.path.join(pool, "out"), ignore_errors=True)
+        write_csv(os.path.join(pool, "games.csv"), TOPUP_GAMES_FIELDS, rows)
+        inject(c, "topup-partial")  # the resume test: games saved, the phase not done (it replays them)
+        rec.update(games=len(rows), plies=sum(r["plies"] for r in rows),
+                   price_s=sum(x["price_s"] for x in rec["lines"].values()), proc_cpu_s=round(cpu, 2),
+                   wall_s=round(wall, 2))
+    else:
+        L.log(f"cycle {c}: no top-up games (" + ("the filter cut nothing" if wanted
+                                                 else "nothing trains on them this cycle") + ")")
+    rec["done"] = True
+    with L.mutex:
+        cur["topup"] = rec
+    L.save()
+
+
+def train_filter_sets(L, cur, games, data_cpu, data_price, lines):
+    """phase_train's sets under train_filter: {line: (set dir, games, data CPU s, data price s)} for the lines it cut
+    games from or tops up (the others train on the shared local set): the local set's games the line keeps
+    (train_filter_plan) and with self_games_topup its top-up games (topuppool/games.csv, linked
+    <t>~<white>~<black>~<j>, so each sits in its round after the round's game of the same players), in
+    trainsets/<line>; its data CPU and price are the local set's (data_cpu, data_price) less the cut games' plus its
+    top-up games' (their price; the replay-games process's CPU shared by price)."""
+    plan = train_filter_plan(L, cur, games)
+    n = len(games)
+    if plan["set"]["games"] != n:
+        raise RuntimeError(f"cycle {cur['cycle']}: the train filter's plan counts {plan['set']['games']} games in the "
+                           f"local set, which has {n}")
+    tu = cur.get("topup") or {}
+    extra = {}
+    if tu.get("games"):
+        for r in read_csv(os.path.join(L.p(TOPUP_POOL), "games.csv")):
+            t, j = int(r["t"]), int(r["j"])
+            extra.setdefault(r["line"], []).append(
+                (t, r["white"], r["black"],
+                 os.path.join(L.p(TOPUP_POOL), f"round{t}", f"{r['white']}~{r['black']}~{j:06d}"), j))
+    out = {}
+    for lc in lines:
+        line = lc["line"]
+        r = plan["lines"].get(line)
+        if r is None or (r["kept"] == n and not r["topup"]):
+            continue
+        low = {e for e, _ in r["below"]}
+        kept = [g for g in games if filter_keeps(g, low)]
+        mine = extra.get(line, [])
+        if len(kept) != r["kept"] or len(mine) != r["topup"]:
+            raise RuntimeError(f"cycle {cur['cycle']}: {line}: {len(kept)} kept and {len(mine)} top-up games, not the "
+                               f"plan's {r['kept']} and {r['topup']}")
+        price = ((tu.get("lines") or {}).get(line) or {}).get("price_s", 0.0)
+        cpu = tu["proc_cpu_s"] * price / tu["price_s"] if mine and tu.get("price_s") else 0.0
+        out[line] = (build_set(L, line, kept + mine), len(kept) + len(mine), data_cpu - r["cut_cpu_s"] + cpu,
+                     data_price - r["cut_price_s"] + price)
+    return out
+
+
+def filter_cycle_columns(cur, rows):
+    """cycles.csv's FILTER_CYCLES_FIELDS on each line's row (train_filter): blank where the cycle trained nothing."""
+    tf = cur.get("train_filter") or {}
+    s = tf.get("set") or {}
+    n, pos = s.get("games"), s.get("positions")
+    tu = (cur.get("topup") or {}).get("lines") or {}
+    for row in rows:
+        r = (tf.get("lines") or {}).get(row["line"])
+        if r is None:
+            row.update(dict.fromkeys(FILTER_CYCLES_FIELDS, ""))
+            continue
+        u = tu.get(row["line"]) or {}
+        row.update(filter_rating=e1(r["rating"]), filter_se=e1(r["se"]), filter_floor=e1(r["floor"]),
+                   filter_own_games=r["own_games"], filter_own_kept=r["own_kept"], filter_kept_games=r["kept"],
+                   filter_kept_positions=r["kept_positions"],
+                   filter_kept_share=f"{r['kept'] / n:.4f}" if n else "",
+                   filter_kept_positions_share=f"{r['kept_positions'] / pos:.4f}" if pos else "",
+                   topup_games=u.get("games", 0), topup_positions=u.get("plies", 0), topup_opponent=r["opponent"])
+
+
+def train_filter_report_line(cfg, cur):
+    """The cycle report's line on train_filter's cut and self_games_topup's games."""
+    m, k = train_filter_of(cfg), train_filter_smooth(cfg)
+    tf = cur.get("train_filter")
+    head = (f"- Train filter ({filter_rule_text(m, k)}: a line trains on a game only while every player in it is rated "
+            f"at or above its floor, its own games too"
+            + ("; topped up with games of its own to the local set's size, at most games_per_cycle more"
+               if cfg.get("self_games_topup") else "") + ")")
+    if cur.get("filter_carry_cycle") is not None:  # rate_every: an unrated cycle keeps the last rated cycle's
+        head += f" (cycle {cur['filter_carry_cycle']}'s floors and ratings: the last rated cycle)"
+    if tf is None:
+        return f"{head}: no training this cycle."
+    n, pos = tf["set"]["games"], tf["set"]["positions"]
+    tu = (cur.get("topup") or {}).get("lines") or {}
+    parts = []
+    for line, r in tf["lines"].items():
+        if r["floor"] is None:
+            parts.append(f"{line} unrated, the whole set")
+            continue
+        u = tu.get(line)
+        parts.append(f"{line} (rating {e1(r['rating'])}" + (f", SE {e1(r['se'])}" if r["se"] is not None else "")
+                     + f", floor {e1(r['floor'])}) kept {r['kept']:,} ({share_text(r['kept'], n)}; "
+                     f"{share_text(r['kept_positions'], pos)} of the positions; {r['own_kept']:,} of its "
+                     f"{r['own_games']:,} own)"
+                     + (f" and {plural(u['games'], 'top-up game')} against "
+                        + ("itself" if r["opponent"] == "self" else r["opponent"]) if u else ""))
+    return f"{head}: of the local set's {plural(n, 'game')} ({pos:,} positions), " + "; ".join(parts) + "."
+
+
+# ---------------------------------------------------------------- replay (experiments with "replay")
+
+def replay_dir(L, cycle=None):
+    """replaypool/, or the kept local games of a cycle: replaypool/c<cycle>/ (round<t>/<white>~<black>/, as pool/)."""
+    return L.p("replaypool") if cycle is None else L.p("replaypool", f"c{cycle:06d}")
+
+
+def replay_target(share, own):
+    """The replayed games a cycle wants: S / (1 - S) x its own games, rounded half up (S 0.5: as many as its own)."""
+    return math.floor(share / (1 - share) * own + 0.5)
+
+
+def replay_key(seed, c, game):
+    return hashlib.sha256(f"replay {seed} {c} {' '.join(map(str, game))}".encode()).hexdigest()
+
+
+def replay_sample(seed, c, candidates, n):
+    """n of the candidates [(cycle, t, white, black), ...] (all when fewer), uniformly without replacement and
+    deterministically from the league's seed and the cycle c: the first n in the order of a hash of (seed, c, game);
+    the order of the candidates doesn't matter. Returned sorted."""
+    return sorted(sorted(candidates, key=lambda g: replay_key(seed, c, g))[:n])
+
+
+def replay_costs(L, cur):
+    """{(t, white, black): (price s, CPU s)} of the cycle's games and self-games: a game's price and measured CPU
+    (games.csv and game_cpu.csv; a game without a CPU row gets the cycle's mean, as round_stats); a self-game's CPU
+    isn't measured per game: the self-games process's CPU shared by price."""
+    rows = game_rows(L.p("tour"), cur["t0"], cur["t0"] + len(cur["rounds"]), L.price, data_ply(L.cfg))
+    known = [r["cpu_s"] for r in rows if r["cpu_s"] is not None]
+    mean = sum(known) / len(known) if known else 0.0
+    out = {(r["t"], r["white"], r["black"]): (r["price_s"], mean if r["cpu_s"] is None else r["cpu_s"]) for r in rows}
+    if L.cfg.get("self_games"):
+        sg = self_games_rows(L)
+        total = sum(float(r["price_s"]) for r in sg)
+        proc = (cur.get("self_games") or {}).get("proc_cpu_s", 0.0)
+        for r in sg:
+            p = float(r["price_s"])
+            out[(int(r["t"]), r["white"], r["black"])] = (p, proc * p / total if total > 0 else 0.0)
+    return out
+
+
+def replay_keep(L, cur, games):
+    """Keeps the cycle's own local games [(t, white, black, dir)] for the cycles after it: hard links in
+    replaypool/c<cycle>/round<t>/<white>~<black>/ and their price and CPU in its games.csv, written last (the cycle is
+    kept when games.csv exists; an interrupted keep is redone)."""
+    d = replay_dir(L, cur["cycle"])
+    if os.path.exists(os.path.join(d, "games.csv")):
+        return
+    shutil.rmtree(d, ignore_errors=True)
+    os.makedirs(d)
+    cost = replay_costs(L, cur)
+    rows = []
+    for i, (t, white, black, path) in enumerate(games):
+        link_tree(path, os.path.join(d, f"round{t}", f"{white}~{black}"))
+        price, cpu = cost.get((t, white, black), (0.0, 0.0))
+        rows.append(dict(t=t, white=white, black=black, price_s=f"{price:.6f}", cpu_s=f"{cpu:.6f}"))
+        if i == len(games) // 2:
+            inject(cur["cycle"], "replay-keep-partial")  # the resume test: some games linked, games.csv not written
+    write_csv(os.path.join(d, "games.csv"), REPLAY_GAMES_FIELDS, rows)
+
+
+def replay_kept(L, c, window):
+    """[(cycle, t, white, black, price s, CPU s)] of the kept local games of cycles max(1, c - window) to c - 1."""
+    out = []
+    for k in range(max(1, c - window), c):
+        for r in read_csv(os.path.join(replay_dir(L, k), "games.csv")):
+            out.append((k, int(r["t"]), r["white"], r["black"], float(r["price_s"]), float(r["cpu_s"])))
+    return out
+
+
+def replay_games(L, cur, own, rp):
+    """The games replayed into cycle c's local set [(t, white, black, dir)], their CPU and their price; keeps the
+    cycle's own games first (replay_keep). The sample (replay_sample from the kept games of the window) is recorded
+    in the cycle's state (current.replay) before training, so a resumed cycle trains on the same set. Their link
+    names in the set are <t>~<white>~<black> as the own games' (t is unique across cycles); `train` shuffles a
+    round's positions (train_rounds: data.shuffle with the round's seed), so the replayed games interleave with the
+    cycle's own games whatever their names."""
+    share, window = rp
+    c = cur["cycle"]
+    replay_keep(L, cur, own)
+    rec = cur.get("replay")
+    if rec is None:
+        kept = replay_kept(L, c, window)
+        want = replay_target(share, len(own))
+        chosen = replay_sample(L.cfg["seed"], c, [g[:4] for g in kept], want)
+        cost = {g[:4]: g[4:] for g in kept}
+        per = {}
+        for g in chosen:
+            per[g[0]] = per.get(g[0], 0) + 1
+        rec = dict(share=share, window=window, own=len(own), target=want, available=len(kept),
+                   window_from=max(1, c - window), window_to=c - 1, games=[list(g) for g in chosen],
+                   per_cycle=[[k, n] for k, n in sorted(per.items())],
+                   price_s=sum(cost[g][0] for g in chosen), cpu_s=sum(cost[g][1] for g in chosen))
+        with L.mutex:
+            cur["replay"] = rec
+        L.save()
+    out = []
+    for k, t, white, black in rec["games"]:
+        path = os.path.join(replay_dir(L, k), f"round{t}", f"{white}~{black}")
+        if not os.path.isfile(os.path.join(path, OUTCOMES[0])):
+            raise RuntimeError(f"replay: {path}, in cycle {c}'s recorded sample, is missing")
+        out.append((t, white, black, path))
+    return out, rec["cpu_s"], rec["price_s"]
+
+
+def replay_report_line(rp, rr):
+    """The cycle report's replay line: the replayed games' count and the cycles they came from."""
+    head = f"- Replay (share {rp[0]:g}, window {rp[1]})"
+    if not rr:
+        return f"{head}: no local set this cycle (no training), nothing replayed."
+    got = len(rr["games"])
+    sg = sum(1 for g in rr["games"] if g[2] == g[3])
+    if rr["window_to"] < rr["window_from"]:
+        src = "no earlier cycle to replay from"
+    elif not got:
+        src = f"no games kept from cycles {rr['window_from']}-{rr['window_to']}"
+    else:
+        src = (f"from cycles {rr['per_cycle'][0][0]}-{rr['per_cycle'][-1][0]} of the window "
+               f"{rr['window_from']}-{rr['window_to']} (per cycle " + ", ".join(f"{k}: {n}" for k, n in rr["per_cycle"])
+               + ")")
+    return (f"{head}: {plural(got, 'game')} replayed ({plural(sg, 'self-game')}) of {rr['target']} wanted, "
+            f"{rr['available']} kept; {src}. Priced {rr['price_s']:.2f} s in their cycles. The local set: {rr['own']} "
+            f"own + {got} replayed = {rr['own'] + got} games; the local lines' data price and CPU cover both.")
+
+
+def replay_prune(L, keep_from):
+    """Drops the kept games of cycles before keep_from (the next cycle's window starts there)."""
+    d = replay_dir(L)
+    if not os.path.isdir(d):
+        return
+    for n in sorted(os.listdir(d)):
+        m = re.fullmatch(r"c(\d+)", n)
+        if m and int(m.group(1)) < keep_from:
+            shutil.rmtree(os.path.join(d, n), ignore_errors=True)
 
 
 def phase_train(L, cur):
@@ -2038,24 +5119,70 @@ def phase_train(L, cur):
             and lc["option"] in ("league", "local", "global")]
     if not todo:
         return
-    sets = {}
+    if is_global11(L.cfg):
+        train_global11(L, cur, todo)
+        return
+    sets, own_sets = {}, {}
     ts = {r["t"] for r in cur["rounds"]}
     if any(lc["option"] in ("league", "local") for lc in todo):
-        games = [g for g in saved_games(L.p("pool"), ts) if qualifies(g[1], g[2])]
-        sets["local"] = (build_set(L, "local", games), len(games), cur["data_cpu_target_s"],
-                         cur["data_price_target_s"])
+        p = entry_ply(L.cfg)
+        games = [g for g in saved_games(L.p("pool"), ts) if qualifies(g[1], g[2], p)]
+        if L.cfg.get("self_games"):  # the self-games join the round-robins' games, ordered by round and names
+            games = sorted(games + [g for g in saved_games(self_games_pool(L), ts) if qualifies(g[1], g[2], p)])
+        if frozen_refs(L.cfg):  # the local set's games by kind (totals.csv's local_* columns, the report)
+            cur["local_mix"] = local_mix(L.cfg, games)
+            L.save()
+        data_cpu, data_price = cur["data_cpu_target_s"], cur["data_price_target_s"]
+        cg = cold_games_of(L.cfg)
+        if cg is not None and cg["train"]:  # the cycle's cold games, after the round-robins' and self-games
+            k = cur["cold"]
+            cts = {r["t"] for r in k["rounds"]}
+            cold = [(COLD_T_BASE + t, w, b, d) for t, w, b, d in saved_games(L.p(COLD_POOL), cts) if qualifies(w, b, p)]
+            games = games + cold
+            data_cpu += sum(r["ply2_cpu_s"] for r in k["rounds"])
+            data_price += sum(r["ply2_price_s"] for r in k["rounds"])
+            with L.mutex:
+                k["in_local"] = len(cold)
+            L.save()
+        rp = replay_of(L.cfg)
+        if rp is None:
+            sets["local"] = (build_set(L, "local", games), len(games), data_cpu, data_price)
+        else:  # replay: the own games plus games replayed from earlier cycles' local sets; the lines' data CPU and
+            # price cover both (the cycle's data budget, data_price_target_s, stays its own games')
+            extra, cpu, price = replay_games(L, cur, games, rp)
+            sets["local"] = (build_set(L, "local", sorted(games + extra)), len(games) + len(extra),
+                             cur["data_cpu_target_s"] + cpu, cur["data_price_target_s"] + price)
+        if reference_window_of(L.cfg) is not None:  # the lines it cuts reference games from: their own sets
+            own_sets = ref_window_sets(L, cur, games, [lc for lc in todo if lc["option"] in ("league", "local")])
+        if train_filter_of(L.cfg) is not None:  # train_filter: each line its kept games (and its top-up games)
+            own_sets = train_filter_sets(L, cur, games, data_cpu, data_price,
+                                         [lc for lc in todo if lc["option"] in ("league", "local")])
     if any(lc["option"] == "global" for lc in todo):
         games = copied_games(L)
         sets["global"] = (build_set(L, "global", games), len(games), cur["copied"]["ply2_cpu_s"],
                           cur["copied"]["ply2_price_s"])
     left = [lc for lc in todo if lc["line"] not in cur["trained"]]
     if left:
+        rr = cur.get("replay") if "local" in sets else None
         L.log(f"cycle {c}: training {len(left)} lines"
-              + "".join(f"; {k} set {v[1]} games" for k, v in sets.items()))
+              + "".join(f"; {k} set {v[1]} games"
+                        + (f" ({rr['own']} own, {len(rr['games'])} replayed from cycles {rr['window_from']}-"
+                           f"{rr['window_to']})" if rr and k == "local" else "") for k, v in sets.items())
+              + (f" ({mix_text(cur['local_mix'])})" if frozen_refs(L.cfg) and "local" in sets else "")
+              + (f" ({cur['cold']['in_local']} of them cold)" if "local" in sets and (cold_games_of(L.cfg) or {})
+                 .get("train") else ""))
+    obs_left = []
+    obs = observers_in_cycle(L, L.state, c) if "local" in sets else []
+    if obs:  # observers (observers_option): after the participants, on the shared local set
+        done_obs = cur.setdefault("observed", {})
+        obs_left = [lc for lc in obs if lc["line"] not in done_obs]
+        if obs_left:
+            L.log(f"cycle {c}: training {plural(len(obs_left), 'observer')} on the local set ({sets['local'][1]} "
+                  f"games; observers don't play)")
 
     def one(lc):
         key = "global" if lc["option"] == "global" else "local"
-        setdir, ngames, data_cpu, data_price = sets[key]
+        setdir, ngames, data_cpu, data_price = own_sets.get(lc["line"]) or sets[key]
         v = L.state["lines"][lc["line"]]["version"]
         if ngames == 0:
             rec = dict(ok=False, games=0, positions=0, cpu_s=0.0, note="no games to train on")
@@ -2074,13 +5201,105 @@ def phase_train(L, cur):
             os._exit(EXIT_INJECTED)
         return rec
 
+    def one_obs(lc):
+        setdir, ngames, data_cpu, data_price = sets["local"]
+        line = lc["line"]
+        v = L.state["lines"][line]["version"]
+        if not os.path.exists(L.model_path(line, v)):
+            if v != 0:
+                raise RuntimeError(f"{line}: version {v}'s model is missing")
+            make_untrained(L, lc)
+        if ngames == 0:
+            rec = dict(ok=False, games=0, positions=0, cpu_s=0.0, note="no games to train on")
+        else:
+            wait_not_busy(L)
+            rec = train_line(L, lc, setdir, ngames, c, v)
+            check_interrupted()
+        rec["data_cpu_s"] = round(data_cpu, 3)
+        rec["data_price_s"] = data_price
+        with L.mutex:
+            cur["observed"][line] = rec
+        L.save()
+        if fail_hook(c, "train-observer"):  # the observers test: the cycle resumes with the others
+            os.environ.pop("LEAGUES_FAIL_AT", None)
+            kill_children()
+            os._exit(EXIT_INJECTED)
+        return rec
+
+    with ThreadPoolExecutor(max(1, L.cfg["jobs"])) as ex:
+        list(ex.map(one, left))
+        if obs_left:
+            list(ex.map(one_obs, obs_left))
+
+
+def global_sets(L, cur, lines):
+    """The global league's training sets (NEW-DESIGN rule 4): {line: (games, floor, self-games, price s, measured CPU
+    s)}. A line's games are the cycle's round-robin games and self-games (ordered by round and names) whose players
+    are all rated at or above its floor, decide's train_floor (window_ok), in this cycle's fit. The price and CPU are
+    its games' (a self-game's CPU isn't measured per game: 0)."""
+    ratings = league_ratings(L)
+    ts = {r["t"] for r in cur["rounds"]}
+    games = saved_games(L.p("pool"), ts)
+    if L.cfg.get("self_games"):
+        games += saved_games(self_games_pool(L), ts)
+    games = sorted(games)
+    rows = game_rows(L.p("tour"), cur["t0"], cur["t0"] + len(cur["rounds"]), L.price, None)
+    cost = {(r["t"], r["white"], r["black"]): (r["price_s"], r["cpu_s"] or 0.0) for r in rows}
+    for r in self_games_rows(L):
+        cost[(int(r["t"]), r["white"], r["black"])] = (float(r["price_s"]), 0.0)
+    out = {}
+    for lc in lines:
+        floor = cur["decisions"][lc["line"]].get("train_floor")
+        chosen = [g for g in games if window_ok(g[1], floor, ratings) and window_ok(g[2], floor, ratings)]
+        out[lc["line"]] = (chosen, floor, sum(1 for g in chosen if g[1] == g[2]),
+                           sum(cost.get(g[:3], (0.0, 0.0))[0] for g in chosen),
+                           sum(cost.get(g[:3], (0.0, 0.0))[1] for g in chosen))
+    return out
+
+
+def train_global11(L, cur, todo):
+    """The global league's training: each line once on its own set (global_sets), with its own recipe; no self-play
+    top-up for anyone. The record (cycles.csv) keeps each version's training games and positions (rule 6 counts the
+    positions when the version fails to become champion), its floor and how many of its games are self-games."""
+    c = cur["cycle"]
+    left = [lc for lc in todo if lc["line"] not in cur["trained"]]
+    if not left:
+        return
+    sets = global_sets(L, cur, left)
+    dirs = {line: build_set(L, line, s[0]) for line, s in sets.items() if s[0]}
+    L.log(f"cycle {c}: training {plural(len(left), 'line')}; "
+          + ", ".join(f"{line} {plural(len(s[0]), 'game')}" for line, s in sets.items()))
+
+    def one(lc):
+        line = lc["line"]
+        games, floor, nsg, price, cpu = sets[line]
+        v = L.state["lines"][line]["version"]
+        if not games:
+            rec = dict(ok=False, games=0, positions=0, cpu_s=0.0, note="no games to train on")
+        else:
+            wait_not_busy(L)
+            rec = train_line(L, lc, dirs[line], len(games), c, v)
+            check_interrupted()
+            if rec.get("ok") and rec.get("positions") is None:  # rule 6 counts them
+                raise RuntimeError(f"cycle {c}: {line}: its training log gives no position count")
+        rec.update(data_cpu_s=round(cpu, 3), data_price_s=price, floor=floor, self_games=nsg)
+        with L.mutex:
+            cur["trained"][line] = rec
+        L.save()
+        if fail_hook(c, "train-one"):
+            os.environ.pop("LEAGUES_FAIL_AT", None)
+            kill_children()
+            os._exit(EXIT_INJECTED)
+        return rec
+
     with ThreadPoolExecutor(max(1, L.cfg["jobs"])) as ex:
         list(ex.map(one, left))
 
 
 def selfplay_target(L, cur):
     """A self-play line's budget this cycle before its carry, in priced s: a self-play-only experiment's fixed
-    selfplay_budget_s; otherwise the price of the cycle's local data (its games with a model at ply 2)."""
+    selfplay_budget_s; otherwise the price of the cycle's local data (its games with a model at the entry ply, 2
+    unless entry_ply says otherwise, and the self-games)."""
     fixed = L.cfg.get("selfplay_budget_s")
     return float(fixed) if fixed else cur["data_price_target_s"]
 
@@ -2116,6 +5335,8 @@ def apply_decisions(L, cur):
     anchors."""
     st = copy.deepcopy(L.state)
     c = cur["cycle"]
+    g11 = is_global11(L.cfg)
+    rte = L.cfg.get("rate_every")
     for line, d in cur["decisions"].items():
         ls = st["lines"][line]
         lc = L.lines[line]
@@ -2123,8 +5344,12 @@ def apply_decisions(L, cur):
             ls["crowned"].append(d["version"])
             ls["champion"] = d["version"]
             ls["major"] = len(ls["crowned"]) - 1
+        if rte and d["decision"] in ("first-champion", "new-champion"):  # rate_every: the champion's age from here
+            ls["champion_cycle"] = c
         if d["patience"] is not None:
             ls["patience"] = d["patience"]
+        if g11:  # rule 6's count and the floor's start
+            ls["patience_total"], ls["patience_from"] = d["patience_total"], d["patience_from"]
         if d["retire"]:
             ls["status"] = "retired"
             ls["retired_cycle"] = c
@@ -2144,9 +5369,16 @@ def apply_decisions(L, cur):
             rec = cur["trained"].get(line) or {}
             if rec.get("ok"):
                 ls["version"] += 1
-    if L.is_global:
+            if g11:  # the positions the next current version trained on (rule 6 counts them if it fails)
+                ls["trained_positions"] = rec["positions"] if rec.get("ok") else 0
+    for line, rec in (cur.get("observed") or {}).items():  # observers: a new version when they trained
+        if rec.get("ok"):
+            st["lines"][line]["version"] += 1
+    if L.is_global and not g11:
         st["anchors"] = cur["anchors_after"]
         st["anchor_entries"] = sorted(set(st.get("anchor_entries", [])) | {a["entry"] for a in st["anchors"].values()})
+    if "last_crown_cycle" in cur:
+        st["last_crown_cycle"] = cur["last_crown_cycle"]
     k = cur.get("copied")
     if k and not last_cycle(L, c):
         st["global_carry_s"] = round(st.get("global_carry_s", 0.0) + k["ply2_price_s"] - cur["data_price_target_s"], 6)
@@ -2154,6 +5386,11 @@ def apply_decisions(L, cur):
     if rounds:
         st["last_round_ply2_cpu_s"] = round(sum(r["ply2_cpu_s"] for r in rounds) / len(rounds), 3)
         st["last_rounds"] = [cur["t0"], len(rounds)]
+    if rte and rated_cycle(L.cfg, c) and train_filter_of(L.cfg) is not None:  # rate_every: the floors the unrated
+        st["rate_carry"] = dict(  # cycles after this one keep (train_filter_carry)
+            cycle=c, ratings=dict(cur.get("filter_ratings") or {}),
+            lines={line: dict(version=d["version"], rating=d.get("filter_rating"), se=d.get("filter_se"),
+                              floor=d.get("filter_floor")) for line, d in cur["decisions"].items()})
     return st
 
 
@@ -2170,10 +5407,12 @@ def link_selfplay_versions(L, cur, new_st):
 
 def phase_records(L, cur):
     c, cfg = cur["cycle"], L.cfg
+    g11 = is_global11(cfg)
     st0 = L.state
     new_st = apply_decisions(L, cur)
     link_selfplay_versions(L, cur, new_st)
-    ratings = read_ratings(L.p("tour"))
+    ratings = league_ratings(L) if rated_cycle(cfg, c) else {}  # rate_every: an unrated cycle has no fit
+    rte = cfg.get("rate_every")
     date = now()
     dec = cur["decisions"]
 
@@ -2215,7 +5454,25 @@ def phase_records(L, cur):
             note=note, selfplay_carry_s=c2(ls1.get("carry_s")) if lc["option"] == "self-play" else "",
             data_price_s=c2(data_price), selfplay_price_s=c2(sp.get("gen_price")),
             selfplay_plies=sp.get("plies") if sp else None, label=lc.get("label", lc["model"])))
-    append_cycle_rows(L.p("cycles.csv"), CYCLES_FIELDS, rows, c)
+        if g11:  # patience as a level in %, rule 6's positions (added this cycle; since the last crowning), the window
+            rows[-1].update(patience=e1(d["patience"] * 100), ply=line_ply(cfg, lc),
+                            patience_positions=d["patience_positions"], patience_total=d["patience_total"],
+                            train_floor=e1(tr.get("floor")), train_self_games=tr.get("self_games"))
+    tfm = train_filter_of(cfg)
+    if tfm is not None:  # train_filter: each line's training set (blank in a cycle that trains nothing)
+        filter_cycle_columns(cur, rows)
+    if rte:  # rate_every: whether the cycle rated, and the age of each line's champion in it
+        for row in rows:
+            row.update(rated=1 if rated_cycle(cfg, c) else 0,
+                       champion_age=c - st0["lines"][row["line"]].get("champion_cycle", c))
+    drawse = cfg.get("champion_se_kind") == "draw-aware"
+    if drawse:  # champion_se_kind: the nominal SE and its z beside the draw-aware ones (se_diff, z) that decide
+        for row in rows:
+            d = dec.get(row["line"]) or {}
+            row.update(se_nominal=e1(d.get("se_nominal")), z_nominal=c2(d.get("z_nominal")))
+    append_cycle_rows(L.p("cycles.csv"), CYCLES_FIELDS + (GLOBAL_CYCLES_EXTRA if g11 else [])
+                      + (FILTER_CYCLES_FIELDS if tfm is not None else []) + (RATE_CYCLES_FIELDS if rte else [])
+                      + (DRAWSE_CYCLES_FIELDS if drawse else []), rows, c)
 
     # rounds.csv
     append_cycle_rows(L.p("rounds.csv"), ROUNDS_FIELDS,
@@ -2232,12 +5489,20 @@ def phase_records(L, cur):
         if d["decision"] == "first-champion":
             events.append(dict(cycle=c, date=date, line=line, event="first-champion", entry=d["entry2"],
                                version_name=L.vname(line, d["version"], crowned=new_st["lines"][line]["crowned"]),
-                               value="", detail="the untrained version"))
+                               value="", detail="the warm start (version 0)" if L.lines[line].get("start")
+                               else "the untrained version"))
         elif d["decision"] == "new-champion":
             events.append(dict(cycle=c, date=date, line=line, event="new-champion", entry=d["entry2"],
                                version_name=L.vname(line, d["version"], crowned=new_st["lines"][line]["crowned"]),
                                value=c2(d["z"]), detail=f"diff {e1(d['diff'])} SE {e1(d['se'])}"))
-        if d["retire"]:
+        if d["retire"] and g11:
+            events.append(dict(cycle=c, date=date, line=line, event="retired", entry=d["entry2"],
+                               version_name=L.vname(line, d["version"], crowned=new_st["lines"][line]["crowned"]),
+                               value=e1(d["patience"] * 100),
+                               detail=f"patience reached 100% (rule 6: {d['patience_total']:,} positions without a new "
+                                      f"champion since cycle {d['patience_from']}, {d['patience_positions']:,} this "
+                                      f"cycle; {cfg['patience_rule']['positions']:,} retire)"))
+        elif d["retire"]:
             events.append(dict(cycle=c, date=date, line=line, event="retired", entry="",
                                version_name="", value=d["patience"], detail="no new champion in patience cycles"))
     for ev, lo, a in cur.get("anchor_events") or []:
@@ -2247,10 +5512,12 @@ def phase_records(L, cur):
                   "anchor-replaced": "left the field"}[ev]
         events.append(dict(cycle=c, date=date, line=a["line"], event=ev, entry=a["entry"],
                            version_name=L.vname(a["line"], a["version"], True, crowned), value=lo, detail=detail))
-    done = cfg["kind"] == "experiment" and c >= cfg["cycles"]
+    done = cfg["kind"] == "experiment" and last_cycle(L, c)
+    plateau = bool(done and cur.get("plateau_stop"))
     if done:
         events.append(dict(cycle=c, date=date, line="", event="done", entry="", version_name="", value=c,
-                           detail=f"{cfg['cycles']} cycles"))
+                           detail=(f"plateau: no new champion since cycle {cur['last_crown_cycle']} "
+                                   f"({c - cur['last_crown_cycle']} cycles)" if plateau else f"{cfg['cycles']} cycles")))
     append_cycle_rows(L.p("events.csv"), EVENTS_FIELDS, events, c)
 
     # history.csv
@@ -2304,13 +5571,86 @@ def phase_records(L, cur):
         data_price_target_s=c2(cur.get("data_price_target_s")),
         selfplay_price_s=c2(sum(p.get("gen_price", 0.0) for p in sp)) if cur["selfplay"] else "",
         prices_version=cfg["prices"]["version"])
-    append_cycle_rows(L.p("totals.csv"), TOTALS_FIELDS, [total], c)
+    totals_fields = TOTALS_FIELDS
+    if cfg.get("self_games"):  # the self-games' columns, and self_games.csv, only in a league with them
+        g = cur.get("self_games") or {}
+        total.update(self_games=g.get("games", 0), self_games_plies=g.get("plies", 0),
+                     self_games_price_s=c2(g.get("price_s", 0.0)), self_games_proc_cpu_s=c2(g.get("proc_cpu_s", 0.0)),
+                     self_games_wall_s=e1(g.get("wall_s", 0.0)))
+        totals_fields = TOTALS_FIELDS + SELF_GAMES_TOTALS_FIELDS
+        append_cycle_rows(L.p("self_games.csv"), SELF_GAMES_FIELDS, self_games_rows(L), c)
+    if replay_of(cfg) is not None:  # the replay columns, only in an experiment with replay (blank: no local set built)
+        rr = cur.get("replay")
+        if rr:
+            total.update(replay_games=len(rr["games"]), replay_target=rr["target"], replay_available=rr["available"],
+                         replay_from=rr["window_from"], replay_to=rr["window_to"], replay_price_s=c2(rr["price_s"]),
+                         replay_cpu_s=c2(rr["cpu_s"]))
+        totals_fields = totals_fields + REPLAY_TOTALS_FIELDS
+    if frozen_refs(cfg):  # the local set's games by kind, only in an experiment with frozen references (blank: no
+        mix = cur.get("local_mix")  # local set built)
+        if mix:
+            n = mix["games"]
+            total.update(local_games=n, **{f"local_{k}": mix[k] for k in MIX_KINDS},
+                         **{f"local_{k}_share": f"{mix[k] / n:.4f}" if n else "" for k in MIX_KINDS})
+        totals_fields = totals_fields + FROZEN_TOTALS_FIELDS
+    if reference_window_of(cfg) is not None:  # the reference window's cut (blank but the margin: no local set built)
+        rw = cur.get("ref_window")
+        total.update(ref_window_margin=f"{reference_window_of(cfg):g}")
+        if rw is not None:
+            total.update(ref_window_lines=len(rw["lines"]),
+                         ref_window_excluded=sum(r["excluded"] for r in rw["lines"].values()),
+                         ref_window_below=";".join(sorted({e for r in rw["lines"].values() for e, _ in r["below"]})))
+        totals_fields = totals_fields + REFWIN_TOTALS_FIELDS
+    if cfg.get("games_per_cycle") is not None:  # T, its bound and the training batch, only in a league with it
+        g, tb = cur.get("games_per_cycle") or {}, train_batch(cfg, cur)
+        total.update(games_per_cycle=g.get("t", ""), gpc_bound=g.get("bound", ""),
+                     train_games=mean_half_up([x[0] for x in tb]) if tb else "",
+                     train_positions=mean_half_up([x[1] for x in tb]) if tb else "")
+        totals_fields = totals_fields + GPC_TOTALS_FIELDS
+    if observer_lines(cfg):  # observers: their number and training CPU, and observers.csv (only with them)
+        ob = cur.get("observed") or {}
+        total.update(observers=len(observer_lines(cfg)),
+                     observer_train_cpu_s=c2(sum((r.get("cpu_s") or 0.0) for r in ob.values())))
+        totals_fields = totals_fields + OBSERVER_TOTALS_FIELDS
+        append_cycle_rows(L.p("observers.csv"), OBSERVERS_FIELDS, observer_rows(L, cur, st0, new_st, date), c)
+    cg = cold_games_of(cfg)
+    if cg is not None:  # cold_games: its columns and cold_rounds.csv (only with it)
+        k = cur.get("cold") or {}
+        cr = k.get("rounds") or []
+        total.update(cold_temperature=f"{cg['temperature']:g}", cold_share=f"{cg['share']:g}",
+                     cold_train=1 if cg["train"] else 0, cold_rounds=len(cr), cold_games=sum(r["games"] for r in cr),
+                     cold_cpu_s=c2(sum(r["cpu_s"] for r in cr)), cold_proc_cpu_s=c2(k.get("proc_cpu_s")),
+                     cold_wall_s=e1(k.get("wall_s")), cold_price_s=c2(sum(r["price_s"] for r in cr)),
+                     cold_in_local=k.get("in_local", 0))
+        totals_fields = totals_fields + COLD_TOTALS_FIELDS
+        append_cycle_rows(L.p("cold_rounds.csv"), ROUNDS_FIELDS,
+                          [dict(r, cycle=c, cpu_s=c2(r["cpu_s"]), ply2_cpu_s=c2(r["ply2_cpu_s"]),
+                                wall_s=e1(r["wall_s"]), price_s=c2(r["price_s"]), ply2_price_s=c2(r["ply2_price_s"]))
+                           for r in cr], c)
+    if tfm is not None:  # train_filter: the cut and the top-up games (blank but the margin: nothing trained)
+        tf, tu = cur.get("train_filter"), cur.get("topup") or {}
+        total.update(filter_margin=tfm if tfm == TRAIN_FILTER_SE else f"{tfm:g}",
+                     filter_smooth=train_filter_smooth(cfg))
+        if tf is not None:
+            n = tf["set"]["games"]
+            total.update(filter_set_games=n, filter_set_positions=tf["set"]["positions"],
+                         filter_lines_cut=sum(1 for r in tf["lines"].values() if r["kept"] < n),
+                         filter_cut_games=sum(n - r["kept"] for r in tf["lines"].values()),
+                         topup_games=tu.get("games", 0), topup_positions=tu.get("plies", 0),
+                         topup_price_s=c2(tu.get("price_s", 0.0)), topup_proc_cpu_s=c2(tu.get("proc_cpu_s", 0.0)),
+                         topup_wall_s=e1(tu.get("wall_s", 0.0)))
+        totals_fields = totals_fields + FILTER_TOTALS_FIELDS
+    if rte:  # rate_every: whether the cycle rated
+        total.update(rated=1 if rated_cycle(cfg, c) else 0)
+        totals_fields = totals_fields + RATE_TOTALS_FIELDS
+    append_cycle_rows(L.p("totals.csv"), totals_fields, [total], c)
 
     # entries.csv: every entry ever in the field, with its latest role
     next_field = [] if done else field_of(L, new_st, c + 1)
     nxt = {e["entry"]: e for e in next_field}
     reg = {r["entry"]: r for r in read_csv(L.p("entries.csv"))}
     now_names = {e["entry"] for e in cur["field"]}
+    fz = frozen_by_entry(cfg)
     for e in cur["field"] + next_field:
         r = reg.get(e["entry"])
         cont = e["entry"] in nxt
@@ -2322,7 +5662,9 @@ def phase_records(L, cur):
         if e["line"]:
             vn = L.vname(e["line"], e["version"], e["frozen"], new_st["lines"][e["line"]]["crowned"])
         r.update(line=e["line"], version=e["version"], version_name=vn, ply=e["ply"], role=src["role"],
-                 in_field=1 if cont else 0, model_file="" if not e["line"] else L.model_path(e["line"], e["version"]),
+                 in_field=1 if cont else 0,
+                 model_file=(L.model_path(e["line"], e["version"]) if e["line"]
+                             else frozen_model_path(L, fz[e["entry"]]) if e["entry"] in fz else ""),
                  spec=e["spec"])
         if not cont and not r.get("left_cycle"):
             r["left_cycle"] = c
@@ -2330,8 +5672,8 @@ def phase_records(L, cur):
             r["left_cycle"] = ""
     write_csv(L.p("entries.csv"), ENTRIES_FIELDS, list(reg.values()))
 
-    # anchors.csv
-    if L.is_global:
+    # anchors.csv (11-09 global leagues; the 11-10 design has no anchors)
+    if L.is_global and not g11:
         arows = []
         for lo in sorted(new_st["anchors"], key=int):
             a = new_st["anchors"][lo]
@@ -2355,11 +5697,17 @@ def phase_records(L, cur):
         L.state = new_st
     L.save(index=True)
     write_lines_csv(L)
-    L.log(f"cycle {c} done" + (" (experiment finished)" if done else ""))
+    L.log(f"cycle {c} done" + ((" (experiment finished: plateau)" if plateau else " (experiment finished)")
+                               if done else ""))
 
     # cleanup: the cycle's games (the global batch keeps its own links), sets, old training states, own games
-    for d in ("pool", "trainsets", "copied"):
+    for d in (("pool", "trainsets", "copied") + (("selfpool",) if cfg.get("self_games") else ())
+              + ((COLD_POOL,) if cfg.get("cold_games") is not None else ())
+              + ((TOPUP_POOL,) if cfg.get("self_games_topup") else ())):
         shutil.rmtree(L.p(d), ignore_errors=True)
+    rp = replay_of(cfg)
+    if rp is not None:  # replay: the kept games the next cycle's window no longer reaches
+        replay_prune(L, c + 1 - rp[1])
     for line, ls in new_st["lines"].items():
         rd = L.p("runs", line)
         kind = L.lines[line]["kind"]
@@ -2372,16 +5720,57 @@ def phase_records(L, cur):
     own_gc(L, {own_key(e["line"], e["version"]) for e in next_field if e["line"]})
 
 
+def observer_rows(L, cur, st0, new_st, date):
+    """observers.csv's rows of a cycle: each observer's version before and after it, and its training record."""
+    c = cur["cycle"]
+    ob = cur.get("observed") or {}
+    rows = []
+    for lc in observers_in_cycle(L, st0, c):
+        line = lc["line"]
+        v0, v1 = st0["lines"][line]["version"], new_st["lines"][line]["version"]
+        tr = ob.get(line) or {}
+        rows.append(dict(cycle=c, date=date, line=line, model=lc["model"], version=v0,
+                         version_name=version_name(L.prefix_of(line), st0["lines"][line]["crowned"], v0),
+                         train_games=tr.get("games"), train_positions=tr.get("positions"),
+                         train_cpu_s=c2(tr.get("cpu_s")), data_cpu_s=c2(tr.get("data_cpu_s")),
+                         data_price_s=c2(tr.get("data_price_s")), next_version=v1, note=tr.get("note") or "",
+                         label=lc.get("label", lc["model"])))
+    return rows
+
+
+def observers_report_line(L, cur, new_st):
+    """The cycle report's Observers line (no measured CPU here: it is in the Measured CPU line)."""
+    ob = cur.get("observed") or {}
+    obs = observers_in_cycle(L, L.state, cur["cycle"])
+    head = "- Observers (they train on the local set; they never play, aren't rated and get no self-games): "
+    if not ob:
+        return head + f"{plural(len(obs), 'observer')}, none trained this cycle."
+    parts = []
+    for lc in obs:
+        line, rec = lc["line"], ob.get(lc["line"]) or {}
+        parts.append(f"{line} v{L.state['lines'][line]['version']} to v{new_st['lines'][line]['version']}"
+                     + ("" if rec.get("ok") else f" ({rec.get('note') or 'not trained'})"))
+    gs = sorted({r["games"] for r in ob.values() if r.get("games") is not None})
+    ps = sorted({r["positions"] for r in ob.values() if r.get("positions") is not None})
+    return (head + "; ".join(parts) + f"; trained on {', '.join(f'{g:,}' for g in gs)} games ("
+            + ", ".join(f"{x:,}" for x in ps) + " positions).")
+
+
 def write_lines_csv(L):
     rows = []
     st = L.state
+    g11 = is_global11(L.cfg)
     for lc in L.cfg["lines"]:
         ls = st["lines"][lc["line"]]
+        patience = e1(ls["patience"] * 100) if g11 else ls["patience"] if L.is_global else ""  # g11: a level in %
+        extra = dict(patience_total=ls.get("patience_total", 0),
+                     patience_from=ls.get("patience_from", lc["entered_cycle"])) if g11 else {}
+        ob = lc.get("observer")  # an observer has no champion (observers_option)
         rows.append(dict(line=lc["line"], model=lc["model"], option=lc["option"], kind=lc["kind"],
                          archetype=lc["archetype"], status=ls["status"], version=ls["version"],
-                         version_name=L.vname(lc["line"], ls["version"]), champion=ls["champion"],
-                         champion_name=L.vname(lc["line"], ls["champion"]),
-                         patience=ls["patience"] if L.is_global else "", entered_cycle=lc["entered_cycle"],
+                         version_name=L.vname(lc["line"], ls["version"]), champion="" if ob else ls["champion"],
+                         champion_name="" if ob else L.vname(lc["line"], ls["champion"]), ply=lc.get("ply"),
+                         patience=patience, entered_cycle=lc["entered_cycle"],
                          retired_cycle=ls["retired_cycle"], train_binary=os.path.relpath(lc["train_binary"], REPO),
                          train_args=shlex.join(lc["train_args"]),
                          selfplay_binary=os.path.relpath(lc["selfplay_binary"], REPO) if lc["selfplay_binary"] else "",
@@ -2390,29 +5779,174 @@ def write_lines_csv(L):
                          train_overrides=" ".join(override_token(f, v) for f, v in lc.get("train_overrides", [])),
                          selfplay_overrides=" ".join(override_token(f, v)
                                                      for f, v in lc.get("selfplay_overrides", [])),
-                         replicate=lc.get("replicate", 1), seed_offset=lc.get("seed_offset", 0)))
-    write_csv(L.p("lines.csv"), LINES_FIELDS, rows)
+                         replicate=lc.get("replicate", 1), seed_offset=lc.get("seed_offset", 0), **extra))
+    write_csv(L.p("lines.csv"), LINES_FIELDS + (GLOBAL_LINES_EXTRA if g11 else []), rows)
 
 
 def plural(n, one, many=None):
     return f"{n} {one if n == 1 else (many or one + 's')}"
 
 
+def write_report_global11(L, cur, rows, total, events):
+    """The cycle report of a global league of the 11-10 design: each model at its own ply, the training window and
+    rule 6's patience (by training positions)."""
+    c, cfg = cur["cycle"], L.cfg
+    r = cur["rounds"]
+    nref = sum(1 for e in cur["field"] if e["role"] == "reference")
+    out = [f"# {cfg['name']}: cycle {c}", "",
+           f"Global league (the 11-10 design: each model at its own ply). {total['start']} to {total['end']} "
+           f"({total['wall_s']} s wall).", ""]
+    gpe, per = cur.get("games_per_entry"), 2 * (total["field"] - 1)
+    rule = ("" if not gpe else f"; games_per_entry {gpe} over {total['field']} entries: ceil({gpe} / {per}) rounds, "
+            f"{per * len(r)} games each" if per > 0 else f"; games_per_entry {gpe}: fewer than 2 entries, 1 round")
+    if cur.get("games_per_cycle"):
+        rule = gpc_rule(cur["games_per_cycle"], len(r))
+    out.append(f"- Field: {plural(total['field'], 'entry', 'entries')} ({plural(nref, 'reference')}; each model's "
+               f"current version and champion at its ply); {plural(len(r), 'round')} (tournaments {r[0]['t']}-"
+               f"{r[-1]['t']}{rule}), {plural(total['games'], 'game')}, {total['ply2_games']} with a model."
+               if r else "- No rounds.")
+    if cfg.get("self_games"):
+        g = cur.get("self_games") or {}
+        out.append(f"- Self-games: {plural(g.get('games', 0), 'game')} "
+                   f"({plural(g.get('entries', 0), 'entry', 'entries')} x {plural(g.get('rounds', 0), 'round')}), "
+                   f"{g.get('plies', 0)} plies, priced {g.get('price_s', 0.0):.2f} s; training games only (not in "
+                   f"the ratings).")
+    out.append(f"- Training: each model on the cycle's games and self-games whose players are all rated at or above "
+               f"its current version's Elo minus {cfg['train']['margin']:g} (its floor; unrated players count).")
+    if cfg.get("games_per_cycle") is not None:
+        out.append(train_batch_line(cfg, cur))
+    pr = cfg["patience_rule"]
+    out.append(f"- Patience (rule 6): a cycle without a new champion adds the positions the current version trained "
+               f"on; {pr['positions']:,} positions since the last crowning retire a model, but not within "
+               f"{plural(pr['floor_cycles'], 'cycle')} of its entry or last crowning.")
+    out.append(f"- Priced CPU (prices {total['prices_version']}): games {total['price_s']} s"
+               + (f", self-games {total['self_games_price_s']} s" if cfg.get("self_games") else "") + ".")
+    out.append(f"- Measured CPU: games {total['tournament_cpu_s']} s, tournament process "
+               f"{total['tournament_proc_cpu_s']} s, training {total['train_cpu_s']} s, calibration "
+               f"{total['cal_cpu_s']} s ({plural(total['cal_made'], 'version')})"
+               + (f", self-games {total['self_games_proc_cpu_s']} s" if cfg.get("self_games") else "") + ".")
+    out += ["", "| line | ply | version | Elo | champion | Elo | diff | z | decision | trained on (games, self-games, "
+                "positions) | floor | patience positions (this cycle, since crowning) | patience | next |",
+            "|---|---:|---|---:|---|---:|---:|---:|---|---:|---:|---:|---:|---|"]
+    for row in rows:
+        tg = row["train_games"]
+        trained = "" if tg is None else f"{tg}, {row['train_self_games']}, {row['train_positions'] or 0:,}"
+        out.append(f"| {row['line']} | {row['ply']} | {row['version_name']} | {row['elo2']} | {row['champion_name']} | "
+                   f"{row['champion_elo']} | {row['diff']} | {row['z']} | "
+                   f"{row['decision']}{' ' + row['new_name'] if row['new_name'] else ''} | {trained} | "
+                   f"{row['train_floor']} | {row['patience_positions']:,}, {row['patience_total']:,} | "
+                   f"{row['patience']}% | {row['next_version']} |")
+    ev = [e for e in events if e["event"] not in ("first-champion",)]
+    if ev:
+        out += ["", "Events:"]
+        out += [f"- {e['event']} {e['line']} {e['entry']} {e['version_name']} {e['value']} {e['detail']}".rstrip()
+                for e in ev]
+    atomic_write(L.p(f"cycle-{c:03d}.md"), "\n".join(out) + "\n")
+
+
+def rate_report_line(cfg, cur):
+    """The cycle report's line on rate_every's schedule."""
+    c, n = cur["cycle"], cfg["rate_every"]
+    if rated_cycle(cfg, c):
+        return (f"- Rated cycle (rate_every {n}: cycles 1, {n + 1}, {2 * n + 1}, ... rate): cold games and champion "
+                f"tests" + (", the plateau rule" if cfg.get("plateau") else "")
+                + (", the train filter's floors" if train_filter_of(cfg) is not None else "")
+                + (f"; the next rated cycle is {next_rated_cycle(cfg, c)}" if c < cfg["cycles"] else "") + ".")
+    return (f"- Unrated cycle ({unrated_text(cfg, c)}): no cold games, no champion test, no crowning, no plateau check"
+            + (f"; the train filter keeps cycle {cur['filter_carry_cycle']}'s floors and ratings"
+               if cur.get("filter_carry_cycle") is not None else "") + ".")
+
+
+def champion_test_report_line(cfg, cur):
+    """The cycle report's line on champion_se_kind and plateau.guard_z (a cycle that decides)."""
+    parts = []
+    if cfg.get("champion_se_kind") == "draw-aware":
+        parts.append(f"draw-aware SE (HC0: (s - p)^2 per game), crowning at z >= {cfg['champion_se']:g} (cycles.csv "
+                     f"keeps the nominal SE and z beside it)")
+    g = (cfg.get("plateau") or {}).get("guard_z")
+    if g is not None:
+        held = cur.get("plateau_held")
+        parts.append(f"plateau guard z {g:g}: " + ("the plateau's stop is held by " + ", ".join(
+            f"{line} (z {z:.2f})" for line, z in held) if held else "nothing held"))
+    return "- Champion test: " + "; ".join(parts) + "."
+
+
+def cold_report_line(cfg, cur, total):
+    """The cycle report's line on cold_games' round-robins."""
+    cg, k = cold_games_of(cfg), cur.get("cold") or {}
+    if not rated_cycle(cfg, cur["cycle"]):  # rate_every: none in an unrated cycle
+        return f"- Cold games (temperature {cg['temperature']:g}): none ({unrated_text(cfg, cur['cycle'])})."
+    cr = k.get("rounds") or []
+    n, t = k.get("n", 0), cfg["games_per_cycle"]
+    per = n * (n - 1)
+    rule = (f"{plural(k.get('planned', 0), 'round')} of {n} entries: round({cg['share']:g} x {t} / {per}), halves "
+            f"up" if per else "fewer than 2 entries: 1 round") + (f", from 1 to {GPC_MAX_ROUNDS}: {k['bound']}"
+                                                                    if k.get("bound") else "")
+    return (f"- Cold games (temperature {cg['temperature']:g}; {rule}): {plural(total['cold_games'], 'game')}"
+            + (f" (cold tournaments {cr[0]['t']}-{cr[-1]['t']})" if cr else "") + "; the in-run ratings and every "
+            f"decision are their fit alone (cold/), the round-robins' (tour/) decide nothing; "
+            + (f"{plural(total['cold_in_local'], 'cold game')} joined the local set." if cg["train"]
+               else "they rate only (no line trains on them)."))
+
+
 def write_report(L, cur, new_st, rows, total, events):
     c, cfg = cur["cycle"], L.cfg
+    if is_global11(cfg):
+        write_report_global11(L, cur, rows, total, events)
+        return
     out = [f"# {cfg['name']}: cycle {c}", "",
            f"{cfg['kind'].capitalize()} league. {total['start']} to {total['end']} ({total['wall_s']} s wall).", ""]
     r = cur["rounds"]
+    p = entry_ply(cfg)
+    rule = gpc_rule(cur["games_per_cycle"], len(r)) if cur.get("games_per_cycle") else ""
     out.append(f"- Field: {plural(total['field'], 'entry', 'entries')}; {plural(len(r), 'round')} (tournaments "
-               f"{r[0]['t']}-{r[-1]['t']}), {plural(total['games'], 'game')}, {total['ply2_games']} with a model at "
-               f"ply 2." if r else "- No rounds.")
-    out.append(f"- Priced CPU (prices {total['prices_version']}): games {total['price_s']} s (ply 2: "
+               f"{r[0]['t']}-{r[-1]['t']}{rule}), {plural(total['games'], 'game')}, {total['ply2_games']} with a "
+               f"model at ply {p}." if r else "- No rounds.")
+    xh = extend_redo(cfg, c)
+    if xh is not None:  # leagues.py extend: this cycle, the old cap's, ran again
+        out.append(extend_report_line(xh, cur))
+    if cfg.get("self_games"):
+        g = cur.get("self_games") or {}
+        out.append(f"- Self-games: {plural(g.get('games', 0), 'game')} "
+                   f"({plural(g.get('entries', 0), 'entry', 'entries')} x {plural(g.get('rounds', 0), 'round')}), "
+                   f"{g.get('plies', 0)} plies, priced "
+                   f"{g.get('price_s', 0.0):.2f} s; training games only (not in the ratings), in the local data's "
+                   f"price {total['data_price_target_s']} s.")
+    cg = cold_games_of(cfg)
+    if cg is not None:
+        out.append(cold_report_line(cfg, cur, total))
+    if cfg.get("rate_every"):
+        out.append(rate_report_line(cfg, cur))
+    if (cfg.get("champion_se_kind") or (cfg.get("plateau") or {}).get("guard_z") is not None) and rated_cycle(cfg, c):
+        out.append(champion_test_report_line(cfg, cur))
+    if train_filter_of(cfg) is not None:
+        out.append(train_filter_report_line(cfg, cur))
+    tu_on = total.get("topup_proc_cpu_s") not in (None, "") and bool(cfg.get("self_games_topup"))
+    if cfg.get("games_per_cycle") is not None:
+        out.append(train_batch_line(cfg, cur))
+    if observer_lines(cfg):
+        out.append(observers_report_line(L, cur, new_st))
+    rp = replay_of(cfg)
+    if rp is not None:
+        out.append(replay_report_line(rp, cur.get("replay")))
+    if frozen_refs(cfg):
+        out += frozen_report_lines(cfg, cur)
+    out.append(f"- Priced CPU (prices {total['prices_version']}): games {total['price_s']} s (ply {p}: "
                f"{total['ply2_price_s']} s)" + (f", self-play generation {total['selfplay_price_s']} s"
-                                                if total['selfplay_price_s'] != "" else "") + ".")
-    out.append(f"- Measured CPU: games {total['tournament_cpu_s']} s (ply 2: {total['ply2_cpu_s']} s), tournament "
+                                                if total['selfplay_price_s'] != "" else "")
+               + (f", cold games {total['cold_price_s']} s" if cg is not None and rated_cycle(cfg, c) else "")
+               + (f", top-up games {total['topup_price_s']} s" if tu_on else "") + ".")
+    out.append(f"- Measured CPU: games {total['tournament_cpu_s']} s (ply {p}: {total['ply2_cpu_s']} s), tournament "
                f"process {total['tournament_proc_cpu_s']} s, training {total['train_cpu_s']} s, self-play "
                f"{total['selfplay_cpu_s']} s (generation {total['selfplay_gen_cpu_s']} s), calibration "
-               f"{total['cal_cpu_s']} s ({plural(total['cal_made'], 'version')}).")
+               f"{total['cal_cpu_s']} s ({plural(total['cal_made'], 'version')})"
+               + (f", self-games {total['self_games_proc_cpu_s']} s" if cfg.get("self_games") else "")
+               + (f", observers' training {total['observer_train_cpu_s']} s" if observer_lines(cfg) else "")
+               + (f", cold games {total['cold_cpu_s']} s (their tournament process {total['cold_proc_cpu_s']} s)"
+                  if cg is not None and rated_cycle(cfg, c) else "")
+               + (f", top-up games {total['topup_proc_cpu_s']} s" if tu_on else "")
+               + (f"; the replayed games' generation (in their cycles) {total['replay_cpu_s']} s"
+                  if rp is not None and cur.get("replay") else "") + ".")
     if cur.get("copied"):
         k = cur["copied"]
         out.append(f"- Copied global cycle {k['global_cycle']} rounds {' '.join(str(x['t']) for x in k['rounds'])}: "
@@ -2420,11 +5954,15 @@ def write_report(L, cur, new_st, rows, total, events):
                    f"{cur['rounds_planned']} rounds at an estimated {k['est_round_ply2_price_s']:.1f} s each "
                    f"({k['estimate']}). Global carry after the cycle: {new_st.get('global_carry_s', 0.0):.1f} s. "
                    f"Waited {cur.get('wait_s', 0)} s.")
-    out += ["", "| line | version | ply 1 | ply 2 | champion | ply 2 | diff | z | decision | next |",
-            "|---|---|---:|---:|---|---:|---:|---:|---|---|"]
+    if p == 2:
+        out += ["", "| line | version | ply 1 | ply 2 | champion | ply 2 | diff | z | decision | next |",
+                "|---|---|---:|---:|---|---:|---:|---:|---|---|"]
+    else:  # no ply-1 entries besides the main ones (create refuses them): one Elo column per version
+        out += ["", f"| line | version | ply {p} | champion | ply {p} | diff | z | decision | next |",
+                "|---|---|---:|---|---:|---:|---:|---|---|"]
     for row in rows:
-        out.append(f"| {row['line']} | {row['version_name']} | {row['elo1']} | {row['elo2']} | "
-                   f"{row['champion_name']} | {row['champion_elo']} | {row['diff']} | {row['z']} | "
+        out.append(f"| {row['line']} | {row['version_name']} | " + (f"{row['elo1']} | " if p == 2 else "")
+                   + f"{row['elo2']} | {row['champion_name']} | {row['champion_elo']} | {row['diff']} | {row['z']} | "
                    f"{row['decision']}{' ' + row['new_name'] if row['new_name'] else ''} | {row['next_version']} |")
     if L.is_global and new_st["anchors"]:
         out += ["", "| interval | anchor | version | locked | Elo | outside | available |", "|---|---|---|---|---:|---:|---|"]
@@ -2448,10 +5986,26 @@ PHASES_GLOBAL = ["calibration", "tournament", "batch", "decide", "train", "recor
 PHASES_EXPERIMENT = ["copy", "calibration", "tournament", "decide", "train", "self-play", "records"]
 
 
+def phases_of(L):
+    """The league's phases: its kind's, with self-games after decide when the config has "self_games": true (and
+    topup-games after them with self_games_topup), and cold-games after the tournament with cold_games."""
+    phases = PHASES_GLOBAL if L.is_global else PHASES_EXPERIMENT
+    if L.cfg.get("self_games"):
+        i = phases.index("decide") + 1
+        phases = phases[:i] + ["self-games"] + phases[i:]
+    if L.cfg.get("self_games_topup"):
+        i = phases.index("self-games") + 1
+        phases = phases[:i] + ["topup-games"] + phases[i:]
+    if L.cfg.get("cold_games") is not None:
+        i = phases.index("tournament") + 1
+        phases = phases[:i] + ["cold-games"] + phases[i:]
+    return phases
+
+
 def run_cycle(L):
     cur = start_cycle(L)
     c = cur["cycle"]
-    phases = PHASES_GLOBAL if L.is_global else PHASES_EXPERIMENT
+    phases = phases_of(L)
     with_global = any(lc["option"] == "global" for lc in L.cfg["lines"])
     while True:
         phase = cur["phase"]
@@ -2469,6 +6023,12 @@ def run_cycle(L):
             publish_batch(L, cur)
         elif phase == "decide":
             phase_decide(L, cur)
+        elif phase == "self-games":
+            phase_selfgames(L, cur)
+        elif phase == "cold-games":
+            phase_cold(L, cur)
+        elif phase == "topup-games":
+            phase_topup(L, cur)
         elif phase == "train":
             phase_train(L, cur)
         elif phase == "self-play":
@@ -2478,6 +6038,8 @@ def run_cycle(L):
             return
         else:
             raise RuntimeError(f"unknown phase {phase}")
+        if L.cfg.get("cap_history"):  # leagues.py extend: the cycle that runs again checks itself (extend_check)
+            extend_check(L, cur, phase)
         L.set_phase(phases[phases.index(phase) + 1])
 
 
@@ -2485,6 +6047,19 @@ def cmd_run(ldir, cycles):
     L = League(ldir)
     if L.us is None:
         sys.exit(f"{L.dir}: made before prices (no prices in config.json); create the league again")
+    refuse_global_1109(L, "run")
+    try:
+        games_per_entry(L.cfg)
+        games_per_cycle(L.cfg)
+        frozen_refs_check(L.cfg)
+        reference_window_of(L.cfg)
+        cold_games_of(L.cfg)
+        train_filter_of(L.cfg)
+        topup_of(L.cfg)
+        openings_of(L.cfg)
+        rate_every_of(L.cfg)
+    except ValueError as e:
+        sys.exit(f"{L.dir}: config.json: {e}")
     lock = FileLock(L.p(".lock"), block=False)
     try:
         lock.__enter__()
@@ -2549,11 +6124,68 @@ def cmd_status(path):
         print(f"{cfg['name']} ({cfg['kind']}): {s['status']}, cycle {st['cycle']}"
               + (f" of {cfg['cycles']}" if cfg.get("cycles") else "")
               + (f", in cycle {st['current']['cycle']} phase {st['phase']}" if st.get("current") else ""))
+        for h in cfg.get("cap_history") or []:  # leagues.py extend
+            print(f"cap raised from {h['old']} to {h['new']} on {h['date']} (leagues.py extend): cycle "
+                  f"{h['redo_cycle']} ran again as an ordinary cycle; the originals in {h['backup']}/")
+        if cfg.get("plateau"):
+            pl = cfg["plateau"]
+            print(f"plateau rule: ends after {pl['cycles']} cycles without a new champion (not before cycle "
+                  f"{pl['min_cycles']}; at most {cfg['cycles']}); the last crowning was in cycle "
+                  f"{st.get('last_crown_cycle', '-')}"
+                  + (f" (K scaled: round({pl['scaled']['k2']} x sqrt(2 / {pl['scaled']['lines']} lines))"
+                     + (f", then x {pl['scaled']['rate_scale']} of rate_every {pl['scaled']['rate_every']}"
+                        if pl["scaled"].get("rate_scale") else "") + ")"
+                     if pl.get("scaled") else ""))
+        if cfg.get("champion_se_kind") or (cfg.get("plateau") or {}).get("guard_z") is not None:
+            g = (cfg.get("plateau") or {}).get("guard_z")
+            print(f"champion test: {cfg.get('champion_se_kind', 'nominal')} SE, crowning at z >= {cfg['champion_se']:g}"
+                  + (f"; the plateau's stop is held while a line's test has z above {g:g}" if g is not None else ""))
+        if cfg.get("rate_every"):
+            n, c = cfg["rate_every"], st["cycle"]
+            nxt = c + 1 if rated_cycle(cfg, c + 1) else next_rated_cycle(cfg, c + 1)
+            print(f"rate_every {n}: cycles 1, {n + 1}, {2 * n + 1}, ... play the cold games and decide; the others play "
+                  f"and train only; " + (f"the next rated cycle is {nxt}" if s["status"] != "done" and nxt <= cfg["cycles"]
+                                         else "no cycle is left to rate"))
+        if is_global11(cfg):
+            pr = cfg["patience_rule"]
+            print(f"the 11-10 design: each model at its own ply; self-games {'on' if cfg.get('self_games') else 'off'}"
+                  f"; training window: players rated at or above the model's Elo minus {cfg['train']['margin']:g}; "
+                  f"patience rule 6: the positions of versions that failed to become champion, {pr['positions']:,} "
+                  f"retire (100%), not within {pr['floor_cycles']} cycles of the entry or last crowning")
+            last = {}
+            for r in read_csv(L.p("cycles.csv")):
+                last[r["line"]] = r
+            print(f"{'line':32s} {'ply':>3s} {'status':8s} {'version':12s} {'champion':12s} {'Elo':>7s} "
+                  f"{'patience':>8s} {'positions':>11s} {'since':>5s}  trained on (games, self-games, positions; "
+                  f"last cycle)")
+            for lc in cfg["lines"]:
+                ls, r = st["lines"][lc["line"]], last.get(lc["line"], {})
+                tg = r.get("train_games") or ""
+                print(f"{lc['line']:32s} {lc['ply']:3d} {ls['status']:8s} {L.vname(lc['line'], ls['version']):12s} "
+                      f"{L.vname(lc['line'], ls['champion']):12s} {r.get('elo2', ''):>7s} "
+                      f"{e1(ls['patience'] * 100) + '%':>8s} {ls.get('patience_total', 0):>11,} "
+                      f"{ls.get('patience_from', lc['entered_cycle']):>5}  "
+                      + (f"{tg}, {r.get('train_self_games', '')}, {int(r.get('train_positions') or 0):,}"
+                         if tg else ""))
+            t = read_csv(L.p("totals.csv"))
+            if t:
+                x = t[-1]
+                print(f"last cycle {x['cycle']}: {x['games']} games and {x.get('self_games', 0)} self-games, priced "
+                      f"{x.get('price_s', '')} s (prices {x.get('prices_version', '')}); measured: game CPU "
+                      f"{x['tournament_cpu_s']} s, train {x['train_cpu_s']} s, calibration {x['cal_cpu_s']} s, "
+                      f"self-games {x.get('self_games_proc_cpu_s', '')} s, wall {x['wall_s']} s")
+            return
+        if "entry_ply" in cfg or "self_games" in cfg:
+            print(f"entries at ply {entry_ply(cfg)}; self-games {'on' if cfg.get('self_games') else 'off'}")
         print(f"{'line':32s} {'status':8s} {'version':12s} {'champion':12s} patience")
         for lc in cfg["lines"]:
             ls = st["lines"][lc["line"]]
+            ch = "" if lc.get("observer") else L.vname(lc["line"], ls["champion"])
             print(f"{lc['line']:32s} {ls['status']:8s} {L.vname(lc['line'], ls['version']):12s} "
-                  f"{L.vname(lc['line'], ls['champion']):12s} {ls['patience'] if L.is_global else ''}")
+                  f"{ch:12s} {ls['patience'] if L.is_global else ''}")
+        if observer_lines(cfg):
+            print(f"observers ({len(observer_lines(cfg))}): they train on the local set after the participants and "
+                  f"never play; their training per cycle is in observers.csv")
         if st["anchors"]:
             print("anchors: " + ", ".join(f"{lo}: {a['entry']}{' (available)' if a['available'] else ''}"
                                           for lo, a in sorted(st["anchors"].items(), key=lambda x: int(x[0]))))
@@ -2579,6 +6211,370 @@ def cmd_stop(ldir):
     print(f"{L.p('STOP')} written: the driver stops after the current cycle (or while waiting)")
 
 
+
+# ---------------------------------------------------------------- extend: an experiment that reached its cap goes on
+
+EXTEND_DIR = "extend"  # <league>/extend/cap-<C>/: an extension's originals (cmd_extend)
+EXTEND_KEYS = ("replay", "train_filter", "frozen_references", "self_games_topup", "reference_window")
+
+
+def extend_redo(cfg, c):
+    """The cap_history entry (cmd_extend) whose old cap is cycle c, the cycle that runs again; None in any other cycle
+    and in a league never extended (extend_check and the report's Extended line act only then)."""
+    for h in cfg.get("cap_history") or []:
+        if h.get("redo_cycle") == c:
+            return h
+    return None
+
+
+def extend_unsupported(cfg):
+    """Why cmd_extend refuses an experiment's configuration, or None. extend_test covers local lines, observers,
+    self-games, cold games (rating only and training), rate_every, the draw-aware champion test, the plateau rule and
+    its guard, games_per_cycle and rounds_per_cycle, warm starts, entry plies 1-3 and ply-1 entries on and off; the
+    other options (EXTEND_KEYS, the self-play and global options) are refused rather than extended untested."""
+    opts = sorted({lc["option"] for lc in cfg["lines"]} - {"local"})
+    if opts:
+        return f"lines with the {' and '.join(opts)} option: not supported (only local lines and observers)"
+    for key in EXTEND_KEYS:
+        if cfg.get(key) not in (None, False, [], {}):
+            return f"{key}: not supported (extend_test doesn't cover it)"
+    return None
+
+
+def games_split(path, t0, keep_to=None):
+    """The rows of rounds t0 and later of a tour/ (or cold/) games.csv or game_cpu.csv, with the header line, as text;
+    with keep_to, the file without them (the header and the other rows) is written there. Streams: a long run's
+    games.csv is over 100 MB."""
+    cut = []
+    out = open(keep_to, "w") if keep_to else None
+    try:
+        with open(path) as f:
+            head = f.readline()
+            cut.append(head)
+            if out:
+                out.write(head)
+            for line in f:
+                t = line.split(",", 1)[0]
+                if t.isdigit() and int(t) >= t0:
+                    cut.append(line)
+                elif out:
+                    out.write(line)
+    finally:
+        if out:
+            out.close()
+    return "".join(cut)
+
+
+def extend_report_line(h, cur):
+    """The cycle report's line in the cycle an extension runs again (write_report)."""
+    x = cur.get("extend_redo") or {}
+    return (f"- Extended ({h['date']}, leagues.py extend): the cap went from {h['old']} to {h['new']}; this cycle, the "
+            f"old last one, ran again as an ordinary cycle, so it trains. Its field ({x.get('field', '?')} entries), "
+            f"{x.get('games', '?')} games" + (f", {x['cold']} cold games" if x.get("cold") else "")
+            + f" and {x.get('decisions', '?')} decisions, ratings included, are the original's (checked; the "
+              f"originals in {h['backup']}/).")
+
+
+def extend_check(L, cur, phase):
+    """In the cycle an extension runs again (extend_redo; run_cycle calls it after each phase): its field (after
+    calibration), its round-robins' and cold games' rows (after them) and its decisions and the field's ratings
+    (after decide) against the originals in the extension's backup (cmd_extend: redo.json, tour-games.csv,
+    cold-games.csv, cycles.csv, history.csv). A difference stops the cycle with an error: the run would no longer be
+    the one a higher cap would have made. What passed is kept in current.extend_redo (the report's Extended line)."""
+    c = cur["cycle"]
+    h = extend_redo(L.cfg, c)
+    if h is None or phase not in ("calibration", "tournament", "cold-games", "decide"):
+        return
+    b = L.p(h["backup"])
+    redo = read_json(os.path.join(b, "redo.json"))
+
+    def fail(msg):
+        raise RuntimeError(f"extend: cycle {c} ran again (the cap went from {h['old']} to {h['new']}), but {msg}; the "
+                           f"originals are in {b}")
+
+    x = cur.setdefault("extend_redo", {})
+    if phase == "calibration":
+        got = [e["entry"] for e in cur["field"]]
+        if got != redo["field"]:
+            fail(f"its field ({len(got)} entries) isn't the original's ({len(redo['field'])}; differing: "
+                 f"{sorted(set(got) ^ set(redo['field']))[:6]})")
+        x["field"] = len(got)
+    elif phase in ("tournament", "cold-games"):
+        if phase == "tournament":
+            d, t0, n, now_t0, now_n = "tour", redo["t0"], redo["rounds"], cur["t0"], cur["rounds_planned"]
+        else:
+            k = cur.get("cold") or {}
+            d, t0, n, now_t0, now_n = COLD_DIR, redo["cold_t0"], redo["cold_rounds"], k.get("t0"), k.get("planned")
+            if not n:  # the original played no cold rounds
+                if now_n:
+                    fail(f"it played {now_n} cold rounds, the original none")
+                return
+        if (now_t0, now_n) != (t0, n):
+            fail(f"its {d}/ rounds start at {now_t0} ({now_n} of them), not at the original's {t0} ({n})")
+        cut = games_split(L.p(d, "games.csv"), t0)
+        with open(os.path.join(b, f"{d}-games.csv")) as f:
+            orig = f.read()
+        if cut != orig:
+            fail(f"its {d}/games.csv rows from round {t0} on aren't the original's ({cut.count(chr(10)) - 1} rows, "
+                 f"the original {orig.count(chr(10)) - 1})")
+        x["games" if phase == "tournament" else "cold"] = cut.count("\n") - 1
+    else:
+        rated = rated_cycle(L.cfg, c)
+        ratings = league_ratings(L) if rated else {}
+        dec, st = cur["decisions"], L.state
+        orig = {r["line"]: r for r in read_csv(os.path.join(b, "cycles.csv"))}
+        if set(orig) != set(dec):
+            fail(f"it decided for lines {sorted(dec)}, not the original's {sorted(orig)}")
+
+        def el(name, i):
+            r = ratings.get(name)
+            return e1(r[i]) if r else ""
+
+        for line, d in dec.items():
+            o = orig[line]
+            got = dict(version=str(d["version"]), champion=str(d["champion"]), entry1=d["entry1"],
+                       entry2=d["entry2"], champion_entry=d["champion_entry"], decision=d["decision"],
+                       diff=e1(d["diff"]), se_diff=e1(d["se"]), z=c2(d["z"]), elo1=el(d["entry1"], 0),
+                       ci1=el(d["entry1"], 1), elo2=el(d["entry2"], 0), ci2=el(d["entry2"], 1),
+                       champion_elo=el(d["champion_entry"], 0), champion_ci=el(d["champion_entry"], 1))
+            if L.cfg.get("rate_every"):
+                got.update(rated="1" if rated else "0",
+                           champion_age=str(c - st["lines"][line].get("champion_cycle", c)))
+            if L.cfg.get("champion_se_kind") == "draw-aware":
+                got.update(se_nominal=e1(d.get("se_nominal")), z_nominal=c2(d.get("z_nominal")))
+            bad = [k for k, v in got.items() if o.get(k, "") != v]
+            if bad:
+                fail(f"{line}'s decision isn't the original's: "
+                     + ", ".join(f"{k} {got[k]!r}, not {o.get(k)!r}" for k in bad))
+        for r in read_csv(os.path.join(b, "history.csv")):
+            g = ratings.get(r["entry"])
+            got = (e1(g[0]), e1(g[1]), cell(g[2])) if g else ("", "", "")
+            if got != (r["elo"], r["ci95"], r["games"]):
+                fail(f"{r['entry']}'s rating {got} isn't the original's {(r['elo'], r['ci95'], r['games'])}")
+        if L.cfg.get("plateau"):  # the original ended on its cap, not on the plateau rule, with this last crowning
+            want = (read_json(os.path.join(b, "state.json")) or {}).get("last_crown_cycle")
+            if cur.get("last_crown_cycle") != want or cur.get("plateau_stop"):
+                fail(f"its plateau rule has the last crowning in cycle {cur.get('last_crown_cycle')} (the original "
+                     f"{want}) and {'stops' if cur.get('plateau_stop') else 'goes on'}")
+        x["decisions"] = len(dec)
+    L.save()
+
+
+def cmd_extend(ldir, cycles, dry=False):
+    """leagues.py extend LEAGUE --cycles N (2026-11-12; the user: "For the experiments which didn't meet the plateau
+    rule for termination can we keep running them?"). An experiment that ended at its cap C goes on to cap N, as if N
+    had been its cap from the start. Its last cycle, C, rated and decided but trained nothing and played no self-games
+    (last_cycle), and its records ended the run; a run with cap N would have trained in cycle C and gone on. So cycle
+    C runs again: the state before it is rebuilt from state.json and the records (the cap cycle changed no version; a
+    crowning in it is undone from cycles.csv, and the last crowning taken from before it), cycle C's rounds leave
+    tour/games.csv and game_cpu.csv (and cold/'s), and the re-run replays them (the tournament seeds each round by
+    its number: the same games), rates and decides as before, then plays its self-games, trains and goes on; the
+    plateau rule, its guard and the cap N decide the end. The re-run checks its field, games, decisions and ratings
+    against the originals (extend_check) and stops with an error on any difference. The originals stay in
+    extend/cap-C/: config.json, state.json, lines.csv, entries.csv, the cap cycle's report and per-cycle rows, the
+    rows cut from the games files, redo.json, and the finals' models and training states (runs/<line>/, hard links:
+    the run's cleanup deletes its states once it trains on; with config.json the dir is a warm start's source,
+    {"experiment": "<league>/extend/cap-C", "version": V}).
+    config.json's cycles becomes N and cap_history gets {date, old, new, redo_cycle, finals (each line's version at
+    the old cap), backup}; driver.log gets an "extend: cap C -> N" line
+    (the library index reads it: end reason "extending" until the run ends again). tour/elo_history.csv stays (the
+    tournament keeps its rows of rounds whose games are unchanged, elo_history.key); scan-cache/ goes (rebuilt); own
+    calibration games are made again where missing (fixed seeds: the same games). Refused, changing nothing: a league
+    that isn't an experiment; one a driver holds; one not done (running, stopped, failed); one that ended on its
+    plateau rule; a cap below 2; N not above C, or not a rated cycle with rate_every; a configuration
+    extend_unsupported names; records that don't line up; extend/cap-C/ already there. --dry-run (dry): every check,
+    then what it would do, changing nothing (it reads the games files itself, so not even scan-cache/ is written)."""
+    L = League(ldir)
+
+    def refuse(msg):
+        sys.exit(f"{L.dir}: extend: {msg}")
+
+    if L.cfg["kind"] != "experiment":
+        refuse("only an experiment has a cap (the global league runs without one)")
+    lock = FileLock(L.p(".lock"), block=False)
+    try:
+        lock.__enter__()
+    except OSError:
+        refuse("a driver runs this league")
+    try:
+        extend_league(L, cycles, refuse, dry)
+    finally:
+        lock.__exit__(None, None, None)
+
+
+def rounds_in(path):
+    """done_round_robins of a games.csv, read here (no scan-cache/): its largest round + 1, 0 without rows."""
+    t = -1
+    if os.path.exists(path):
+        with open(path) as f:
+            next(f, None)
+            for line in f:
+                h = line.split(",", 1)[0]
+                if h.isdigit():
+                    t = max(t, int(h))
+    return t + 1
+
+
+def extend_league(L, n, refuse, dry=False):
+    """cmd_extend's work, under the league's lock."""
+    cfg, st = L.cfg, L.state or {}
+    c = cfg["cycles"]
+    status = st.get("status")
+    if status != "done":
+        refuse(f"it isn't done (status {status}): extend goes on from a cap the experiment reached (a stopped "
+               f"experiment resumes with run)")
+    if st.get("current") or st.get("cycle") != c:
+        refuse(f"it ended in cycle {st.get('cycle')}, before its cap {c}: on its plateau rule (nothing to extend)")
+    ends = [e for e in read_csv(L.p("events.csv")) if e["event"] == "done"]
+    if not ends or ends[-1]["cycle"] != str(c):
+        refuse(f"events.csv has no done event in cycle {c}")
+    if ends[-1]["detail"] != f"{c} cycles":
+        refuse(f"it ended on its plateau rule in cycle {c} ({ends[-1]['detail']}): nothing to extend")
+    if c < 2:
+        refuse("a cap of 1 cycle: create the experiment again instead")
+    if isinstance(n, bool) or not isinstance(n, int) or n <= c:
+        refuse(f"--cycles {n}: the new cap must be above the old one, {c}")
+    why = extend_unsupported(cfg)
+    if why:
+        refuse(why)
+    new_cfg = dict(cfg, cycles=n)
+    try:
+        rate_every_of(new_cfg)
+    except ValueError as e:
+        refuse(f"--cycles {n}: {e}")
+    # the cap cycle's rounds, and the cycle before's
+    rrows = read_csv(L.p("rounds.csv"))
+
+    def ts_of(rows, k):
+        return sorted(int(r["t"]) for r in rows if r["cycle"] == str(k))
+
+    def contiguous(ts):
+        return bool(ts) and ts == list(range(ts[0], ts[0] + len(ts)))
+
+    ts, prev = ts_of(rrows, c), ts_of(rrows, c - 1)
+    if (not contiguous(ts) or st.get("last_rounds") != [ts[0], len(ts)]
+            or rounds_in(L.p("tour", "games.csv")) != ts[-1] + 1):
+        refuse(f"cycle {c}'s rounds in rounds.csv ({len(ts)} from {ts[:1]}), state.json's last_rounds "
+               f"{st.get('last_rounds')} and tour/games.csv ({rounds_in(L.p('tour', 'games.csv'))} rounds) don't line up")
+    if not contiguous(prev) or prev[-1] + 1 != ts[0]:
+        refuse(f"cycle {c - 1}'s rounds in rounds.csv don't end where cycle {c}'s begin")
+    cts = []
+    if cold_games_of(cfg) is not None and rated_cycle(cfg, c):
+        cts = ts_of(read_csv(L.p("cold_rounds.csv")), c)
+        if cts and (not contiguous(cts) or rounds_in(L.p(COLD_DIR, "games.csv")) != cts[-1] + 1):
+            refuse(f"cycle {c}'s cold rounds ({len(cts)} from {cts[:1]}) and cold/games.csv "
+                   f"({rounds_in(L.p(COLD_DIR, 'games.csv'))} rounds) don't line up")
+    # the state before the cap cycle
+    cyc = read_csv(L.p("cycles.csv"))
+    last = {r["line"]: r for r in cyc if r["cycle"] == str(c)}
+    crowns = {}
+    for r in cyc:
+        if r["decision"] in ("first-champion", "new-champion"):
+            crowns.setdefault(r["line"], []).append(int(r["cycle"]))
+    pre, undone = copy.deepcopy(st), []
+    for line, r in last.items():
+        ls = pre["lines"][line]
+        if ls["status"] != "active" or str(ls["version"]) != r["version"]:
+            refuse(f"{line}: state.json's version {ls['version']} ({ls['status']}) isn't cycle {c}'s ({r['version']})")
+        if r["decision"] == "first-champion":
+            refuse(f"{line} entered in cycle {c}, the cap cycle")
+        if r["decision"] == "new-champion":
+            if len(ls["crowned"]) < 2 or ls["crowned"][-1] != ls["version"] or ls["champion"] != ls["version"]:
+                refuse(f"{line} was crowned in cycle {c}, but state.json's champions are {ls['crowned']}")
+            ls["crowned"] = ls["crowned"][:-1]
+            ls["champion"] = ls["crowned"][-1]
+            ls["major"] = len(ls["crowned"]) - 1
+            if cfg.get("rate_every"):
+                before = [k for k in crowns.get(line, []) if k < c]
+                if before:
+                    ls["champion_cycle"] = before[-1]
+                else:
+                    ls.pop("champion_cycle", None)
+            undone.append(line)
+        if str(ls["champion"]) != r["champion"]:
+            refuse(f"{line}: cycle {c}'s champion {r['champion']} isn't the rebuilt state's {ls['champion']}")
+    if any(ls.get("retired_cycle") == c for ls in st["lines"].values()):
+        refuse(f"a line retired in cycle {c}")
+    if cfg.get("plateau"):
+        prior = max([k for ks in crowns.values() for k in ks if k < c], default=0)
+        want = c if any(r["decision"] in ("first-champion", "new-champion") for r in last.values()) else prior
+        if st.get("last_crown_cycle") != want:
+            refuse(f"state.json's last_crown_cycle {st.get('last_crown_cycle')} isn't the records' {want}")
+        pre["last_crown_cycle"] = prior
+    prows = [r for r in rrows if r["cycle"] == str(c - 1)]
+    pre["last_rounds"] = [prev[0], len(prev)]
+    pre["last_round_ply2_cpu_s"] = round(sum(float(r["ply2_cpu_s"] or 0) for r in prows) / len(prows), 3)
+    pre.update(cycle=c - 1, current=None, phase="idle", status="stopped", pid=None)
+    field = [r["entry"] for r in read_csv(L.p("history.csv")) if r["cycle"] == str(c)]
+    if [e["entry"] for e in field_of(L, pre, c)] != field:
+        refuse(f"the rebuilt state's field for cycle {c} isn't the one history.csv has")
+    # the originals
+    bdir = L.p(EXTEND_DIR, f"cap-{c}")
+    if os.path.exists(bdir):
+        refuse(f"{bdir} is there already (an extension from cap {c} that stopped half way?): look at it, remove it and "
+               f"run extend again")
+    if dry:
+        nst = sum(1 for line, ls in st["lines"].items() if os.path.exists(L.state_path(line, ls["version"])))
+        print(f"{L.dir}: extend would raise the cap from {c} to {n} (nothing changed: --dry-run). Cycle {c} would run "
+              f"again: the state back to the end of cycle {c - 1}"
+              + (f", the cap cycle's crowning undone for {', '.join(undone)}" if undone else ", no crowning to undo")
+              + f"; its {len(ts)} rounds from {ts[0]}" + (f" and {len(cts)} cold rounds from {cts[0]}" if cts else "")
+              + f" cut from the games files and replayed; its field ({len(field)} entries) checked; the originals, the "
+                f"finals' {len(st['lines'])} models and {nst} training states into {bdir}.")
+        return
+    tmp = bdir + ".tmp"
+    shutil.rmtree(tmp, ignore_errors=True)
+    os.makedirs(tmp)
+    for f in ("config.json", "state.json", "lines.csv", "entries.csv", f"cycle-{c:03d}.md"):
+        if os.path.exists(L.p(f)):
+            shutil.copy2(L.p(f), os.path.join(tmp, f))
+    for f in ("cycles.csv", "history.csv", "rounds.csv", "events.csv", "totals.csv", "cold_rounds.csv",
+              "self_games.csv", "observers.csv"):
+        if os.path.exists(L.p(f)):
+            with open(L.p(f), newline="") as fh:
+                fields = next(csv.reader(fh), [])
+            write_csv(os.path.join(tmp, f), fields, [r for r in read_csv(L.p(f)) if r.get("cycle") == str(c)])
+    cuts = []
+    for d, t0 in [("tour", ts[0])] + ([(COLD_DIR, cts[0])] if cts else []):
+        for f in ("games.csv", "game_cpu.csv"):
+            p = L.p(d, f)
+            if os.path.exists(p):
+                keep = f"keep-{d}-{f}"  # the file without cycle C's rows, moved into place below
+                atomic_write(os.path.join(tmp, f"{d}-{f}"), games_split(p, t0, os.path.join(tmp, keep)))
+                cuts.append((keep, p))
+    finals = {line: ls["version"] for line, ls in st["lines"].items()}
+    models, states = [], []  # the finals' models and training states (hard links): the run's cleanup deletes the
+    for line, v in finals.items():  # states once it trains on; with config.json, a warm start's source
+        for src, out in ((L.model_path(line, v), models), (L.state_path(line, v), states)):
+            if os.path.exists(src):
+                os.makedirs(os.path.join(tmp, "runs", line), exist_ok=True)
+                link_or_copy(src, os.path.join(tmp, "runs", line, os.path.basename(src)))
+                out.append(os.path.join("runs", line, os.path.basename(src)))
+    write_json(os.path.join(tmp, "redo.json"), dict(cycle=c, t0=ts[0], rounds=len(ts), cold_t0=cts[0] if cts else None,
+                                                    cold_rounds=len(cts), field=field, finals=finals, models=models,
+                                                    states=states))
+    os.rename(tmp, bdir)
+    # the change: the games files cut, the state before cycle C, the new cap
+    for keep, p in cuts:
+        os.replace(os.path.join(bdir, keep), p)
+    shutil.rmtree(L.p(SCAN_CACHE), ignore_errors=True)
+    h = dict(date=now(), old=c, new=n, redo_cycle=c, finals=finals, backup=os.path.relpath(bdir, L.dir))
+    new_cfg["cap_history"] = list(cfg.get("cap_history") or []) + [h]
+    L.state = pre
+    L.save()
+    write_json(L.p("config.json"), new_cfg)
+    L.cfg = new_cfg
+    write_lines_csv(L)
+    L.save(index=True)
+    L.log(f"extend: cap {c} -> {n} (leagues.py extend); cycle {c}, the old last cycle, runs again as an ordinary cycle "
+          f"and trains (the originals in {h['backup']}/)")
+    print(f"{L.dir}: the cap went from {c} to {n}. Cycle {c} runs again on the next run (repeat.sh or leagues.py run): "
+          f"the state rebuilt to the end of cycle {c - 1}"
+          + (f" (the cap cycle's crowning undone for {', '.join(undone)})" if undone else "")
+          + f"; its {len(ts)} rounds" + (f" and {len(cts)} cold rounds" if cts else "")
+          + f" cut from the games files, to be replayed; the originals in {bdir}.")
+
+
 # ---------------------------------------------------------------- selftest
 
 def selftest(dirpath, quick):
@@ -2589,6 +6585,15 @@ def selftest(dirpath, quick):
             raise AssertionError(f"{name}: {detail}")
         ok.append(name)
 
+    # flags: a value that starts with "-" travels as --flag=value (2026-11-11)
+    check("flags: negative values as --flag=value",
+          apply_overrides(["--split-limit", "4", "--revise", "2"], [("--revise", "-2")])
+          == ["--split-limit", "4", "--revise=-2"]
+          and parse_flags(["--revise=-2", "--split-limit", "4", "--x"]) == [("--revise", "-2"), ("--split-limit", "4"),
+                                                                            ("--x", True)]
+          and parse_flags(["--revise", "-2"]) == [("--revise", "-2")]
+          and without_flags(["--revise=-2", "--seed", "3"], {"--seed"}) == ["--revise=-2"]
+          and apply_overrides(["--a", "1", "--b"], []) == ["--a", "1", "--b"])
     # version names
     check("names: entering version", version_name("G", [0], 0) == "G.0.0")
     check("names: crowned version takes the new major",
@@ -2613,6 +6618,20 @@ def selftest(dirpath, quick):
     check("champion: z < 2 keeps", champion_decision(129.0, 100.0, 15.0, 2.0)[0] == "champion-kept")
     check("champion: missing rating", champion_decision(None, 100.0, 15.0, 2.0)[0] == "unrated")
     check("champion: no SE", champion_decision(150.0, 100.0, None, 2.0)[0] == "unrated")
+    # rate_every (2026-11-12): the rated cycles, the next one, the plateau's K
+    check("rate_every: rated cycles 1, N + 1, 2N + 1, ... (N 4), the next one; every cycle without the key",
+          [c for c in range(1, 15) if rated_cycle(dict(rate_every=4), c)] == [1, 5, 9, 13]
+          and [next_rated_cycle(dict(rate_every=4), c) for c in (1, 2, 4, 5, 8, 9)] == [5, 5, 5, 9, 9, 13]
+          and all(rated_cycle({}, c) for c in range(1, 9)) and next_rated_cycle({}, 7) == 8
+          and [c for c in range(1, 8) if rated_cycle(dict(rate_every=3), c)] == [1, 4, 7])
+    check("rate_every: a scaled plateau's K times sqrt(N), N or 1, rounded half up",
+          [rate_scaled_cycles(35, 4, x) for x in RATE_SCALES] == [70, 140, 35]
+          and rate_scaled_cycles(35, 3, "sqrt") == 61 and rate_scaled_cycles(29, 4, "sqrt") == 58
+          and rate_scaled_cycles(32, 4, "linear") == 128)
+    # variable-length cycles (2026-11-11 ~20:30): the global league's rounds from games_per_entry and the field's size
+    check("rounds: ceil(G / (2 (N - 1))) double round-robins, at least 1 (N 16, 12, 2 and 1)",
+          [rounds_for_games(g, n) for g, n in ((600, 16), (600, 12), (600, 2), (300, 16), (1200, 16), (30, 16),
+                                               (31, 16), (1, 16), (5, 1))] == [20, 28, 300, 10, 40, 1, 2, 1, 1])
     # its SE: a synthetic fit; compare with the dense inverse of the information matrix
     tmp = tempfile.mkdtemp(prefix="selftest-", dir=dirpath)
     with open(os.path.join(tmp, "games.csv"), "w") as f:
@@ -2650,6 +6669,263 @@ def selftest(dirpath, quick):
     want_c = math.sqrt(inv[2][2])
     check("champion: SE from the fit's covariance", abs(se[0] - want_ba) < 1e-9 and abs(se[1] - want_c) < 1e-9,
           f"{se} vs {want_ba}, {want_c}")
+    se_a = contrast_ses(tmp, rat, [(["b"], ["a"]), (["c"], ["random"])], anchor="a")
+    check("champion: a contrast's SE doesn't depend on the pinned player", se_a is not None
+          and all(abs(x - y) < 1e-9 for x, y in zip(se, se_a)), f"{se} vs {se_a}")
+    # the draw-aware SE (champion_se_kind): the HC0 sandwich A^-1 B A^-1 against a dense computation, with draws
+    dse_dir = os.path.join(tmp, "drawse")
+    os.makedirs(dse_dir)
+    dse_seq = ["1-0", "1/2-1/2", "0-1", "1/2-1/2", "1-0", "1-0", "1/2-1/2"]
+    dse_t = 0
+    with open(os.path.join(dse_dir, "games.csv"), "w") as dse_f:
+        dse_f.write("tournament,white,black,result,plies\n")
+        for dse_i in range(4):
+            for dse_j in range(4):
+                if dse_i != dse_j:
+                    for _ in range(4 + 2 * dse_i + dse_j):
+                        dse_f.write(f"{dse_t},{pl[dse_i]},{pl[dse_j]},{dse_seq[(dse_t + dse_i) % len(dse_seq)]},50\n")
+                        dse_t += 1
+    dse_pairs = [(["b"], ["a"]), (["c"], ["random"]), (["a", "b"], ["c"])]
+    dse_got = contrast_ses_draws(dse_dir, rat, dse_pairs)
+    dse_info, dse_meat = [[0.0] * 3 for _ in range(3)], [[0.0] * 3 for _ in range(3)]
+    for dse_line in open(os.path.join(dse_dir, "games.csv")).readlines()[1:]:
+        _, dse_w, dse_b, dse_r, _ = dse_line.split(",")
+        dse_p = 1 / (1 + 10 ** (-(rat[dse_w][0] - rat[dse_b][0]) / 400))
+        for dse_m, dse_v in ((dse_info, dse_p * (1 - dse_p) * w2), (dse_meat, (GAME_SCORES[dse_r] - dse_p) ** 2 * w2)):
+            for dse_u in (dse_w, dse_b):
+                if dse_u in names:
+                    dse_m[names.index(dse_u)][names.index(dse_u)] += dse_v
+            if dse_w in names and dse_b in names:
+                dse_m[names.index(dse_w)][names.index(dse_b)] -= dse_v
+                dse_m[names.index(dse_b)][names.index(dse_w)] -= dse_v
+    dse_inv = invert3(dse_info)
+    dse_want = []
+    for dse_e in ([-1.0, 1.0, 0.0], [0.0, 0.0, 1.0], [0.5, 0.5, -1.0]):
+        dse_y = [sum(dse_inv[i][j] * dse_e[j] for j in range(3)) for i in range(3)]
+        dse_want.append(math.sqrt(sum(dse_y[i] * dse_meat[i][j] * dse_y[j] for i in range(3) for j in range(3))))
+    check("champion: the draw-aware SE is the HC0 sandwich (dense A^-1 B A^-1, draws in the games)",
+          dse_got is not None and all(abs(x - y) < 1e-9 for x, y in zip(dse_got, dse_want)),
+          f"{dse_got} vs {dse_want}")
+    dse_a = contrast_ses_draws(dse_dir, rat, dse_pairs, anchor="a")
+    check("champion: the draw-aware SE doesn't depend on the pinned player", dse_a is not None
+          and all(abs(x - y) < 1e-9 for x, y in zip(dse_got, dse_a)), f"{dse_got} vs {dse_a}")
+
+    # batch-4 options: the plateau rule, the field without ply-1 entries, the rating zero
+    rules = dict(cycles=50, min_cycles=100)
+    check("plateau: not before min_cycles", not plateau_stop(99, 40, rules) and plateau_stop(100, 40, rules))
+    check("plateau: K cycles since the last crowning", not plateau_stop(109, 60, rules) and plateau_stop(110, 60, rules)
+          and not plateau_stop(150, 150, rules) and plateau_stop(3, 1, dict(cycles=2)))
+
+    class FakeL:
+        pass
+
+    fl0 = FakeL()
+    fl0.spec = lambda line, v: f"spec-{line}-{v}"
+    fl0.p = lambda *parts: os.path.join(tmp, *parts)
+    st0 = dict(lines={"X": dict(status="active", version=3, champion=1), "Y": dict(status="active", version=2,
+                                                                                  champion=2)}, anchors={})
+    xl = [dict(line="X", entered_cycle=1), dict(line="Y", entered_cycle=1)]
+    fl0.cfg = dict(references=[], ply1_entries=False, lines=xl)
+    check("field: without references and ply-1 entries, current and champion at ply 2",
+          [(e["entry"], e["role"]) for e in field_of(fl0, st0, 4)] == [("X@3-2", "current"), ("X@1-2", "champion"),
+                                                                       ("Y@2-2", "current+champion")])
+    fl0.cfg = dict(references=["random"], lines=xl)
+    check("field: by default the references and ply-1 entries are in",
+          [e["entry"] for e in field_of(fl0, st0, 4)] == ["random", "X@3-1", "X@3-2", "X@1-2", "Y@2-1", "Y@2-2"])
+    fl0.cfg = dict(references=[], ply1_entries=False, lines=xl, entry_ply=1)
+    f1 = field_of(fl0, st0, 4)
+    check("entry ply: the main entries at the config's entry_ply",
+          [(e["entry"], e["ply"], e["role"]) for e in f1] == [("X@3-1", 1, "current"), ("X@1-1", 1, "champion"),
+                                                               ("Y@2-1", 1, "current+champion")])
+    check("entry ply: 2 when absent", entry_ply({}) == 2 and entry_ply(dict(entry_ply=1)) == 1)
+    fl3 = FakeL()
+    fl3.spec = fl0.spec
+    fl3.cfg = dict(references=["random-3"], ply1_entries=False, lines=xl, entry_ply=3)
+    f3 = field_of(fl3, st0, 4)
+    check("entry ply 3: the main entries at ply 3, a reference at its own ply",
+          [(e["entry"], e["ply"], e["role"]) for e in f3] == [("random-3", 3, "reference"), ("X@3-3", 3, "current"),
+                                                               ("X@1-3", 3, "champion"),
+                                                               ("Y@2-3", 3, "current+champion")]
+          and [e["entry"] for e in self_game_entries(fl3, f3)] == ["X@3-3", "X@1-3", "Y@2-3"])
+    check("entry ply 3: the training rule at ply 3", qualifies("A@1-3", "B@2-3", 3)
+          and qualifies("A@1-3", "random-3", 3) and qualifies("random", "A@1-3", 3)
+          and not qualifies("random-3", "random-2", 3) and not qualifies("A@1-2", "B@2-2", 3)
+          and not qualifies("A@1-1", "B@2-2", 3) and not qualifies("A@1-3", "B@2-3")
+          and not qualifies("A@1-3", "B@2-3", 1))
+    fl4 = FakeL()
+    fl4.spec = fl0.spec
+    fl4.cfg = dict(references=[], ply1_entries=False, lines=xl, entry_ply=4)
+    f4 = field_of(fl4, st0, 4)
+    check("entry ply 4: the main entries and the self-games at ply 4, the training rule at 4",
+          [(e["entry"], e["ply"], e["role"]) for e in f4] == [("X@3-4", 4, "current"), ("X@1-4", 4, "champion"),
+                                                               ("Y@2-4", 4, "current+champion")]
+          and [e["entry"] for e in self_game_entries(fl4, f4)] == ["X@3-4", "X@1-4", "Y@2-4"]
+          and qualifies("A@1-4", "random-3", 4) and not qualifies("A@1-3", "B@2-3", 4)
+          and not qualifies("A@1-4", "B@2-4", 3) and entry_ply(dict(entry_ply=4)) == 4)
+    check("entry ply: the training rule at the entry ply", qualifies("A@1-1", "B@2-1", 1)
+          and qualifies("A@1-1", "random-2", 1) and not qualifies("random-1", "random", 1)
+          and not qualifies("A@1-2", "B@2-2", 1) and qualifies("A@1-2", "B@2-2") and not qualifies("A@1-1", "B@2-1"))
+    fl2 = FakeL()
+    fl2.spec = fl0.spec
+    fl2.cfg = dict(references=["random", "random-2"], lines=xl)
+    f2 = field_of(fl2, st0, 4)
+    check("self-games: the entries whose game against itself qualifies, in field order",
+          [e["entry"] for e in self_game_entries(fl0, f1)] == ["X@3-1", "X@1-1", "Y@2-1"]
+          and [e["entry"] for e in f2] == ["random", "random-2", "X@3-1", "X@3-2", "X@1-2", "Y@2-1", "Y@2-2"]
+          and [e["entry"] for e in self_game_entries(fl2, f2)] == ["X@3-2", "X@1-2", "Y@2-2"])
+    fl2.is_global = False
+    pe = phases_of(fl2)
+    fl2.cfg = dict(fl2.cfg, self_games=True)
+    ps = phases_of(fl2)
+    fl2.is_global = True
+    pg = phases_of(fl2)
+    check("self-games: a phase only with self_games, after decide", pe == PHASES_EXPERIMENT and ps == [
+        "copy", "calibration", "tournament", "decide", "self-games", "train", "self-play", "records"] and pg == [
+        "calibration", "tournament", "batch", "decide", "self-games", "train", "records"])
+    check("plateau: scaled K = round(k2 x sqrt(2 / lines))",
+          [scaled_plateau_cycles(50, n) for n in (1, 2, 3, 4, 8, 14, 32)] == [71, 50, 41, 35, 25, 19, 13]
+          and scaled_plateau_cycles(25, 8) == 13 and scaled_plateau_cycles(0.1, 50) == 1)
+    cg = dict(temperature=0.02, share=0.25, train=True)
+    check("cold games: R = round(S x T / (N (N - 1))), halves up, from 1 to the cap; the share as its decimal",
+          [cold_rounds_for(cg, 1584, n) for n in (2, 4, 5, 6, 7, 8)]
+          == [(48, "under T"), (33, ""), (20, ""), (13, ""), (9, ""), (7, "")]
+          and cold_rounds_for(dict(cg, share=0.1), 10, 2) == (1, "") and cold_rounds_for(cg, 45, 4) == (1, "")
+          and cold_rounds_for(cg, 45, 1) == (1, "") and cold_rounds_for(dict(cg, share=0.3), 50, 3) == (3, "")
+          and cold_rounds_for(dict(cg, share=0.29), 100, 2) == (15, "")
+          and cold_rounds_for(dict(cg, share=0.01), 10, 4) == (1, "over T"),
+          f"{[cold_rounds_for(cg, 1584, n) for n in (2, 4, 5, 6, 7, 8)]}")
+    check("cold games: the tournament's flags with the cold temperature in place of its own",
+          cold_flags(dict(tournament=dict(flags=["--reports-last", "--temperature", "0.1", "--sparse-fit"]),
+                          kind="experiment", cold_games=cg, games_per_cycle=10, lines=[]))
+          == ["--reports-last", "--sparse-fit", "--temperature", "0.02"]
+          and cold_flags(dict(tournament=dict(flags=["--policy", "wld-score-softmax"]), kind="experiment",
+                              cold_games=dict(cg, temperature=1), games_per_cycle=10, lines=[]))
+          == ["--policy", "wld-score-softmax", "--temperature", "1"])
+    ox = dict(kind="experiment", tournament=dict(flags=["--policy", "log-odds-softmax", "--temperature", "0.02"]),
+              cold_games=cg, games_per_cycle=10, lines=[])
+    check("openings: the binary's flags (the temperature by repr), none without the key; never in the cold games'",
+          openings_flags(dict(ox, openings={"plies": 6})) == ["--opening-plies", "6"]
+          and openings_flags(dict(ox, openings={"plies": 6, "temperature": None})) == ["--opening-plies", "6"]
+          and openings_flags(dict(ox, openings={"plies": 1, "temperature": 0.5}))
+          == ["--opening-plies", "1", "--opening-temperature", "0.5"]
+          and openings_flags(dict(ox, openings={"plies": 2, "temperature": 2})) == [
+              "--opening-plies", "2", "--opening-temperature", "2"]
+          and openings_flags(ox) == [] and openings_flags(dict(ox, openings=None)) == []
+          and cold_flags(dict(ox, openings={"plies": 6}))
+          == ["--policy", "log-odds-softmax", "--temperature", "0.02"])
+    bad_openings = [dict(ox, openings={"plies": 0}), dict(ox, openings={"plies": "6"}), dict(ox, openings={"plies": True}),
+                    dict(ox, openings={"plies": 6.0}), dict(ox, openings={"temperature": 1}),
+                    dict(ox, openings={"plies": 6, "temperature": 0}), dict(ox, openings={"plies": 6, "temperature": -1}),
+                    dict(ox, openings={"plies": 6, "temperature": "1"}),
+                    dict(ox, openings={"plies": 6, "temperature": float("nan")}),
+                    dict(ox, openings={"plies": 6, "temperature": True}), dict(ox, openings={"plies": 6, "t": 1}),
+                    dict(ox, openings=6), dict(ox, openings=[6]), dict(ox, kind="global", openings={"plies": 6})]
+
+    def refused(c):
+        try:
+            openings_of(c)
+        except ValueError:
+            return True
+        return False
+
+    check("openings: malformed values and the global league refused", all(refused(c) for c in bad_openings),
+          f"{[c['openings'] for c in bad_openings if not refused(c)]}")
+    fc = FakeL()
+    fc.is_global = False
+    fc.cfg = dict(self_games=True, cold_games=cg)
+    fc.p = lambda *a: os.path.join("/L", *a)
+    check("cold games: a phase after the tournament's; the in-run ratings are cold/'s", phases_of(fc) == [
+        "copy", "calibration", "tournament", "cold-games", "decide", "self-games", "train", "self-play", "records"]
+          and rating_tour(fc) == "/L/cold")
+    fc.cfg = dict(self_games=True)
+    check("cold games: without them, no phase and tour/'s ratings", phases_of(fc) == [
+        "copy", "calibration", "tournament", "decide", "self-games", "train", "self-play", "records"]
+          and rating_tour(fc) == "/L/tour")
+    low = {"Y@2-1", "Z@1-1"}
+    gs = [(1, "X@3-1", "X@3-1"), (1, "X@1-1", "X@1-1"), (1, "Y@2-1", "Y@2-1"), (1, "W@4-1", "W@4-1"),
+          (1, "X@3-1", "Y@2-1"), (1, "W@4-1", "X@3-1"), (1, "Z@1-1", "W@4-1"), (COLD_T_BASE + 1, "U@9-1", "X@1-1")]
+    check("train filter: a game only with no player below the line's floor, its own games too (an unrated player "
+          "counts)", [filter_keeps(g, low) for g in gs] == [True, True, False, True, False, True, False, True]
+          and not filter_keeps((1, "X@1-1", "X@1-1"), {"X@1-1"}) and filter_keeps((1, "W@4-1", "U@9-1"), low))
+    check('train filter: the floor is the rating minus the margin, or with "se" minus the rating\'s standard error; '
+          "none while unrated or without an SE",
+          filter_floor(50, 100.0, 17.5) == 50.0 and filter_floor(0, 100.0, None) == 100.0
+          and filter_floor("se", 100.0, 17.5) == 82.5 and filter_floor("se", 100.0, None) is None
+          and filter_floor("se", None, 17.5) is None and filter_floor(12.5, None, None) is None)
+    sl, se = smoothed_ratings(7, 3, {"A@6-1": 110.0, "A@4-1": 90.0, "B@6-1": None, "B@5-1": 60.0, "C@6-1": 30.0},
+                              {"A": "A@6-1", "B": "B@6-1", "C": "C@6-1"},
+                              {"A": {4: 50.0, 5: 100.0, 6: 80.0}, "B": {5: 70.0, 6: None}},
+                              {"A@4-1": {4: 70.0, 5: 85.0, 6: 95.0}, "B@5-1": {6: 50.0}})
+    sl1, se1 = smoothed_ratings(7, 1, {"A@6-1": 110.0, "A@4-1": 90.0, "B@6-1": None}, {"A": "A@6-1", "B": "B@6-1"},
+                                {"A": {6: 80.0}}, {"A@4-1": {6: 95.0}})
+    check("train filter: a line's smoothed rating is the mean of its last k current versions' Elo (each in its own "
+          "cycle's fit, the rated ones), its current version rates as it, a champion as its own last k cycles' mean",
+          sl == {"A": (100.0 + 80.0 + 110.0) / 3, "B": 70.0, "C": 30.0}
+          and se == {"A@6-1": sl["A"], "A@4-1": 90.0, "B@6-1": 70.0, "B@5-1": 55.0, "C@6-1": 30.0}
+          and sl1 == {"A": 110.0, "B": None} and se1 == {"A@6-1": 110.0, "A@4-1": 90.0, "B@6-1": None})
+    tb = dict(kind="experiment", cold_games=cg, games_per_cycle=10, lines=[], self_games=True)
+
+    def refused(f, cfg):
+        try:
+            f(cfg)
+        except ValueError:
+            return True
+        return False
+
+    tfx = dict(tb, train_filter={"margin": 50})
+    tfo = dict(tb)
+    train_filter_option({"train_filter": {"margin": 50}}, tfo)
+    tfo2 = dict(tb)
+    train_filter_option({"train_filter": {"margin": 12.5, "smooth": 3}}, tfo2)
+    tfo3 = dict(tb)
+    train_filter_option({"train_filter": {"margin": "se"}}, tfo3)
+    check('train filter: a margin "se" or from 0 and a smoothing from 1 cycle (1 by default, kept in the config; "se" '
+          "only with 1), with cold_games; not with observers or reference_window, nor in the global league",
+          train_filter_of(tfx) == 50 and train_filter_of(dict(tb, train_filter={"margin": 0})) == 0
+          and train_filter_of(dict(tb, train_filter={"margin": 12.5})) == 12.5 and train_filter_of(tb) is None
+          and train_filter_smooth(tfx) == 1 and tfo["train_filter"] == {"margin": 50, "smooth": 1}
+          and tfo2["train_filter"] == {"margin": 12.5, "smooth": 3} and train_filter_smooth(tfo2) == 3
+          and tfo3["train_filter"] == {"margin": "se", "smooth": 1} and train_filter_of(tfo3) == "se"
+          and train_filter_of(dict(tb, train_filter={"margin": 50, "smooth": 9})) == 50
+          and all(refused(train_filter_of, x) for x in [
+              dict(tb, train_filter={"margin": -1}), dict(tb, train_filter={"margin": "50"}),
+              dict(tb, train_filter={"margin": "SE"}), dict(tb, train_filter={"margin": "se", "smooth": 2}),
+              dict(tb, train_filter={"margin": True}), dict(tb, train_filter={"margin": float("inf")}),
+              dict(tb, train_filter={"margin": 50, "share": 1}), dict(tb, train_filter=50),
+              dict(tb, train_filter={"smooth": 5}), dict(tb, train_filter={"margin": 50, "smooth": 0}),
+              dict(tb, train_filter={"margin": 50, "smooth": 2.5}),
+              dict(tb, train_filter={"margin": 50, "smooth": True}),
+              dict(tb, train_filter={"margin": 50, "smooth": "5"}),
+              dict({k: v for k, v in tfx.items() if k != "cold_games"}),
+              dict(tfx, lines=[dict(line="F-P.obs", observer=True)]), dict(tfx, kind="global"),
+              dict(tfx, reference_window={"margin": 50})]))
+    check("self-games top-up: true, with train_filter and self_games",
+          topup_of(dict(tfx, self_games_topup=True)) is True and topup_of(tfx) is False
+          and all(refused(topup_of, x) for x in [
+              dict(tb, self_games_topup=True), dict(tfx, self_games_topup="yes"), dict(tfx, self_games_topup=False),
+              dict(tfx, self_games_topup=1), dict(tfx, self_games_topup=True, self_games=False)]))
+    fc.cfg = dict(self_games=True, cold_games=cg, train_filter={"margin": 50}, self_games_topup=True)
+    pt = phases_of(fc)
+    fc.cfg = dict(self_games=True, cold_games=cg, train_filter={"margin": 50})
+    check("self-games top-up: a phase after the self-games', only with it", pt == [
+        "copy", "calibration", "tournament", "cold-games", "decide", "self-games", "topup-games", "train",
+        "self-play", "records"] and phases_of(fc) == [
+        "copy", "calibration", "tournament", "cold-games", "decide", "self-games", "train", "self-play", "records"])
+    os.makedirs(os.path.join(tmp, "tour"))
+    with open(os.path.join(tmp, "tour", "ratings.csv"), "w") as f:
+        f.write("rank,player,elo,ci95,running,games,score,wins,losses,draws,plies\n"
+                "1,X@3-2,40.5,20.0,0,10,60,5,3,2,50\n2,X@0-2,-10.0,25.0,0,10,40,3,5,2,50\n")
+    fl0.cfg = dict(rating_zero="X@0-2")
+    rz = league_ratings(fl0)
+    check("rating zero: ratings re-centred on it, the SE pinned at it",
+          rz == {"X@3-2": (50.5, 20.0, 10), "X@0-2": (0.0, 25.0, 10)} and fit_pin(fl0, rz) == "X@0-2")
+    fl0.cfg = dict(rating_zero="Z@0-2")
+    rz = league_ratings(fl0)
+    check("rating zero: while unrated, ratings as given, a rated player pinned",
+          rz["X@3-2"][0] == 40.5 and fit_pin(fl0, rz) == "X@0-2")
+    fl0.cfg = dict(references=["random"])
+    check("rating zero: none by default (random is the anchor)", league_ratings(fl0)["X@3-2"][0] == 40.5
+          and fit_pin(fl0, {}) == ANCHOR)
 
     # anchors
     rules = dict(step=100, margin=25, out_cycles=5, lowest=100)
@@ -2721,6 +6997,11 @@ def selftest(dirpath, quick):
     check("prices: the keys a league needs", needed_prices(pcfg) == {
         "tournament random 0", "tournament random 1", "tournament lr 1", "tournament lr 2", "self-play lr 2",
         "tournament bdt 1", "tournament bdt 2"})
+    check("prices: the keys a league needs, entry_ply 1 or 3", needed_prices(dict(pcfg, entry_ply=1)) ==
+          needed_prices(pcfg) and needed_prices(dict(pcfg, entry_ply=3)) == needed_prices(pcfg)
+          | {"tournament lr 3", "tournament bdt 3"})
+    check("prices: the keys a league needs, entry_ply 4", needed_prices(dict(pcfg, entry_ply=4)) ==
+          needed_prices(pcfg) | {"tournament lr 4", "tournament bdt 4"})
     try:
         check_prices(pcfg)
         check("prices: a league with a kind the version lacks is refused", False)
@@ -2772,6 +7053,14 @@ def selftest(dirpath, quick):
             + (0 + 10 * 2.0) + (100 + 10 * 10)) / 1e6  # C@0-1 v C@0-2
     check("estimate: a round's qualifying price at the classes' mean moves", abs(est - want) < 1e-15,
           f"{est} vs {want}")
+    est_sg = estimate_self_games_price(names, {n: side_of(n, {"C": "lr"}) for n in names}, ust, moves, fb)
+    check("estimate: a round's self-games, each qualifying entry against itself at its class's mean moves (else "
+          "the mean over all)", abs(est_sg - ((100 + 7 * 10) + (100 + 19 / 3 * 10)) / 1e6) < 1e-15, f"{est_sg}")
+    est1 = estimate_round_ply2_price(names, {n: side_of(n, {"C": "lr"}) for n in names}, ust, moves, fb, 1)
+    want1 = (((0 + 7 * 2.0) + (50 + 19 / 3 * 1)) + ((50 + 7 * 1) + (0 + 19 / 3 * 2.0))  # C@0-1 v random and back
+             + ((100 + 7 * 10) + (0 + 19 / 3 * 2.0))  # C@0-2 v C@0-1: not seen
+             + ((0 + 10 * 2.0) + (100 + 10 * 10))) / 1e6  # C@0-1 v C@0-2: seen
+    check("estimate: at entry ply 1, the pairs with a model at ply 1", abs(est1 - want1) < 1e-15, f"{est1} {want1}")
     check("self-play: plan in priced s", selfplay_plan(100.0, 0.0, None, 0.25) == 1
           and selfplay_plan(100.0, 10.0, 1.0, 0.25) == 25 and selfplay_plan(100.0, 99.6, 1.0, 0.25) == 0
           and selfplay_plan(100.0, 80.0, 1.0, 0.25) == 20 and selfplay_plan(100.0, 0.0, 30.0, 0.25) == 1
@@ -2802,9 +7091,621 @@ def selftest(dirpath, quick):
     check("budget: the target is the fixed budget, or the local data's price",
           selfplay_target(fk, dict(data_price_target_s=7.0)) == 120.0
           and selfplay_target(fk2, dict(data_price_target_s=7.0)) == 7.0 and c3["selfplay_budget_s"] is None)
+    _, b0 = make_config(dict(base, options=["local"]))
+    _, b4 = make_config(dict(base, options=["local"], references=[], ply1_entries=False,
+                             plateau={"cycles": 50, "min_cycles": 100}))
+    check("batch-4 options: absent from a spec, absent from the config",
+          not {"rating_zero", "ply1_entries", "plateau"} & set(b0) and b0["references"] == DEFAULTS["references"])
+    check("batch-4 options: a spec's options in the config; without random, the first line's version 0 at ply 2 is "
+          "the rating zero", b4["rating_zero"] == "F-L.loc@0-2" and b4["ply1_entries"] is False
+          and b4["plateau"] == {"cycles": 50, "min_cycles": 100} and b4["references"] == [])
+    for bad, why in ((dict(base, options=["local"], plateau={"cycles": 0}), "a plateau of 0 cycles"),
+                     (dict(base, options=["local"], plateau={"cycles": 5, "after": 3}), "an unknown plateau key"),
+                     (dict(base, options=["local"], ply1_entries="no"), "ply1_entries not a boolean"),
+                     (dict(kind="global", root=tmp, models=[{"recipe": "F-L", "ply": 1}], references=["random-1"]),
+                      "a global league without random"),
+                     (dict(kind="global", root=tmp, models=[{"recipe": "F-L", "ply": 1}], ply1_entries=True),
+                      "a global league with ply-1 entries besides its models' own"),
+                     (dict(kind="global", root=tmp, models=[{"recipe": "F-L", "ply": 1}], plateau={"cycles": 5}),
+                      "a global plateau")):
+        try:
+            make_config(bad)
+            check(f"batch-4 options: refuses {why}", False)
+        except SystemExit:
+            check(f"batch-4 options: refuses {why}", True)
+    # the options of 2026-11-10 ~22:15-22:30: a scaled plateau, self-games, the entries' ply
+    h9 = dict(binary=os.path.join(BIN, "chessai-hybrid9"))
+    check("11-10 options: absent from a spec, absent from the config",
+          not {"self_games", "entry_ply"} & set(b0) and "scaled" not in b4["plateau"])
+    _, s1 = make_config(dict(base, options=["local", "self-play"], plateau={"scaled": True, "min_cycles": 100}))
+    _, s2 = make_config(dict(base, models=["F-L", "F-P"], options=["local"],
+                             plateau={"scaled": {"k2": 60}, "min_cycles": 7}))
+    check("plateau: a scaled plateau's K from the lines, its inputs kept",
+          s1["plateau"] == {"cycles": 50, "min_cycles": 100, "scaled": {"k2": 50, "lines": 2}}
+          and s2["plateau"] == {"cycles": 60, "min_cycles": 7, "scaled": {"k2": 60, "lines": 2}}, f"{s1['plateau']}")
+    _, g1 = make_config(dict(base, options=["local", "self-play"], self_games=True, tournament=h9))
+    _, g0 = make_config(dict(base, options=["local"], self_games=False))
+    check("self-games: the option in the config as given", g1["self_games"] is True and g0["self_games"] is False)
+    _, e1c = make_config(dict(base, options=["local", "self-play"], entry_ply=1, references=[]))
+    sp1 = [lc for lc in e1c["lines"] if lc["option"] == "self-play"][0]
+    _, e1d = make_config(dict(base, models=[{"model": "F-L", "set": {"--depth": 0}, "to": "selfplay"}],
+                              options=["self-play", "local"], entry_ply=1, references=[]))
+    sp0 = [lc for lc in e1d["lines"] if lc["option"] == "self-play"][0]
+    _, e1r = make_config(dict(base, models=["F-L-d2jit"], options=["self-play", "local"], entry_ply=1, references=[]))
+    spr = [lc for lc in e1r["lines"] if lc["option"] == "self-play"][0]
+    _, e2c = make_config(dict(base, options=["local", "self-play"], entry_ply=2))
+    check("entry ply: in the config; with 1, no ply-1 entries, its version 0 the rating zero, the training rule at 1",
+          e1c["entry_ply"] == 1 and e1c["ply1_entries"] is False and e1c["rating_zero"] == "F-L.sp@0-1"
+          and e1c["train"]["qualify"] == "a model at ply 1" and e2c["entry_ply"] == 2 and "ply1_entries" not in e2c)
+    check("entry ply: a self-play line plays at the entry ply unless the spec or the recipe sets --depth",
+          selfplay_depth(sp1) == 1 and sp1["selfplay_depth_default"] == 1
+          and sp1["selfplay_games"] == round_size(e1c["selfplay"]["round_anchor_games"], load_costs(), 1)
+          and selfplay_depth(sp0) == 0 and "selfplay_depth_default" not in sp0
+          and selfplay_depth(spr) == 2 and "selfplay_depth_default" not in spr
+          and selfplay_depth([lc for lc in e2c["lines"] if lc["option"] == "self-play"][0]) == 2)
+    _, e3c = make_config(dict(base, options=["local", "self-play"], entry_ply=3, references=[], tournament=h9,
+                              self_games=True))
+    sp3 = [lc for lc in e3c["lines"] if lc["option"] == "self-play"][0]
+    _, e3r = make_config(dict(base, models=["F-L-d2jit"], options=["self-play", "local"], entry_ply=3,
+                              ply1_entries=False))
+    spr3 = [lc for lc in e3r["lines"] if lc["option"] == "self-play"][0]
+    check("entry ply 3: in the config; no ply-1 entries, its version 0 the rating zero, the training rule at 3",
+          e3c["entry_ply"] == 3 and e3c["ply1_entries"] is False and e3c["rating_zero"] == "F-L.sp@0-3"
+          and e3c["train"]["qualify"] == "a model at ply 3" and e3c["self_games"] is True
+          and e3r["entry_ply"] == 3 and e3r["ply1_entries"] is False and "rating_zero" not in e3r
+          and e3r["references"] == DEFAULTS["references"])
+    check("entry ply 3: a self-play line plays at depth 3 unless the spec or the recipe sets --depth",
+          selfplay_depth(sp3) == 3 and sp3["selfplay_depth_default"] == 3
+          and sp3["selfplay_games"] == round_size(e3c["selfplay"]["round_anchor_games"], load_costs(), 3)
+          and selfplay_depth(spr3) == 2 and "selfplay_depth_default" not in spr3)
+    check("entry ply 3: priced at ply 3 (prices.csv's last version has the kinds' ply-3 tournament constants)",
+          {"tournament lr 3", "self-play lr 3"} <= needed_prices(e3c) <= set(e3c["prices"]["us_per_ply"]))
+    h10 = dict(binary=os.path.join(BIN, "chessai-hybrid10"))
+    _, e4c = make_config(dict(base, options=["local", "self-play"], entry_ply=4, references=[], tournament=h10,
+                              self_games=True))
+    sp4 = [lc for lc in e4c["lines"] if lc["option"] == "self-play"][0]
+    check("entry ply 4: in the config; no ply-1 entries, its version 0 the rating zero, the training rule at 4",
+          e4c["entry_ply"] == 4 and e4c["ply1_entries"] is False and e4c["rating_zero"] == "F-L.sp@0-4"
+          and e4c["train"]["qualify"] == "a model at ply 4" and e4c["self_games"] is True)
+    check("entry ply 4: a self-play line plays at depth 4 unless the spec or the recipe sets --depth",
+          selfplay_depth(sp4) == 4 and sp4["selfplay_depth_default"] == 4
+          and sp4["selfplay_games"] == round_size(e4c["selfplay"]["round_anchor_games"], load_costs(), 4))
+    check("entry ply 4: priced at ply 4 (P2: lr measured, the other kinds estimated)",
+          {"tournament lr 4", "self-play lr 4"} <= needed_prices(e4c) <= set(e4c["prices"]["us_per_ply"]))
+    for bad, why in ((dict(base, options=["local"], plateau={"scaled": True, "cycles": 5}), "a plateau with cycles "
+                      "and scaled"),
+                     (dict(base, options=["local"], plateau={"scaled": {"k2": 0}}), "a scaled plateau with k2 0"),
+                     (dict(base, options=["local"], plateau={"scaled": False}), "a plateau scaled false"),
+                     (dict(base, options=["local"], plateau={"scaled": {"k": 5}}), "an unknown scaled key"),
+                     (dict(base, options=["local"], self_games="yes"), "self_games not a boolean"),
+                     (dict(base, options=["self-play"], self_games=True, tournament=h9), "self-games without "
+                      "local lines"),
+                     (dict(base, options=["local"], self_games=True, tournament=dict(binary="/bin/false")),
+                      "self-games without replay-games"),
+                     (dict(base, options=["local"], entry_ply=5), "entry_ply 5 (no prices at ply 5)"),
+                     (dict(base, options=["local"], entry_ply=4, ply1_entries=True), "entry_ply 4 with ply-1 entries"),
+                     (dict(base, options=["local"], entry_ply=4, prices_version="P1"), "entry_ply 4 on P1"),
+                     (dict(base, options=["local"], entry_ply="3"), "entry_ply a string"),
+                     (dict(base, options=["local"], entry_ply=2.5), "entry_ply 2.5"),
+                     (dict(kind="global", root=tmp, models=[{"recipe": "F-L", "ply": 4}], entry_ply=4),
+                      "entry_ply 4 in the global league"),
+                     (dict(base, options=["local"], entry_ply=0), "entry_ply 0"),
+                     (dict(base, options=["local"], entry_ply=3, ply1_entries=True), "entry_ply 3 with ply-1 entries"),
+                     (dict(base, options=["local"], entry_ply=3, prices_version="P1"), "entry_ply 3 on prices without "
+                      "ply-3 constants (P1)"),
+                     (dict(kind="global", root=tmp, models=[{"recipe": "F-L", "ply": 3}], entry_ply=3),
+                      "entry_ply 3 in the global league"),
+                     (dict(base, options=["local"], entry_ply=True), "entry_ply true"),
+                     (dict(base, options=["local"], entry_ply=1, ply1_entries=True), "entry_ply 1 with ply-1 entries"),
+                     (dict(kind="global", root=tmp, models=[{"recipe": "F-L", "ply": 1}], entry_ply=2),
+                      "entry_ply in the global league")):
+        try:
+            make_config(bad)
+            check(f"11-10 options: refuses {why}", False)
+        except SystemExit:
+            check(f"11-10 options: refuses {why}", True)
     check("budget: a self-play line's games per round are fixed in the config",
           all(lc["selfplay_games"] == round_size(c1["selfplay"]["round_anchor_games"], load_costs(),
                                                  selfplay_depth(lc)) for lc in c1["lines"]))
+
+    # replay (2026-11-11 ~22:00, analyst 6.46 (i)): the config key, the counts, the window and the sample
+    _, rpc = make_config(dict(base, options=["local", "self-play"], replay={"share": 0.5, "window": 50}))
+    _, rp0 = make_config(dict(base, options=["local", "self-play"]))
+    check("replay: in the config only when the spec gives it; nothing else changes",
+          rpc["replay"] == {"share": 0.5, "window": 50} and replay_of(rpc) == (0.5, 50) and "replay" not in rp0
+          and replay_of(rp0) is None and {k: v for k, v in rpc.items() if k not in ("replay", "created")}
+          == {k: v for k, v in rp0.items() if k != "created"})
+    for bad, why in ((dict(share=0, window=5), "share 0"), (dict(share=1, window=5), "share 1"),
+                     (dict(share=-0.2, window=5), "a negative share"), (dict(share="0.5", window=5), "a string share"),
+                     (dict(share=True, window=5), "share true"), (dict(share=0.5, window=0), "window 0"),
+                     (dict(share=0.5, window=2.5), "window 2.5"), (dict(share=0.5, window=True), "window true"),
+                     (dict(share=0.5), "no window"), (dict(share=0.5, window=5, cycles=3), "an unknown key"),
+                     ([0.5, 5], "a list")):
+        try:
+            make_config(dict(base, options=["local"], replay=bad))
+            check(f"replay: refuses {why}", False)
+        except SystemExit as e:
+            check(f"replay: refuses {why}", "replay" in str(e.code), str(e.code))
+    for bad, why in ((dict(base, options=["self-play"], replay={"share": 0.5, "window": 5}), "no local lines"),
+                     (dict(kind="global", root=tmp, models=[{"recipe": "F-L", "ply": 1}],
+                           replay={"share": 0.5, "window": 5}), "the global league")):
+        try:
+            make_config(bad)
+            check(f"replay: refuses {why}", False)
+        except SystemExit as e:
+            check(f"replay: refuses {why}", "replay" in str(e.code), str(e.code))
+    check("replay: the count wanted is S / (1 - S) x the own games, rounded half up",
+          [replay_target(s, n) for s, n in ((0.5, 768), (0.5, 0), (0.25, 10), (0.75, 10), (0.2, 12), (0.5, 1))]
+          == [768, 0, 3, 30, 3, 1])
+    cands = [(k, 100 * k + i // 4, f"w{i}", f"b{i}") for k in (3, 4, 5) for i in range(40)]
+    s1 = replay_sample(7, 10, cands, 50)
+    mixed = sorted(cands, key=lambda g: hashlib.md5(repr(g).encode()).hexdigest())  # another order
+    freq = {g: 0 for g in cands}
+    src = {k: 0 for k in (3, 4, 5)}
+    for cc in range(400):
+        for g in replay_sample(7, cc, cands, 50):
+            freq[g] += 1
+            src[g[0]] += 1
+    check("replay: the sample is n distinct candidates, sorted, the same for any order of the candidates, all when "
+          "fewer, another for another cycle or seed",
+          len(s1) == 50 == len(set(s1)) and set(s1) <= set(cands) and s1 == sorted(s1)
+          and s1 == replay_sample(7, 10, list(reversed(cands)), 50) == replay_sample(7, 10, mixed, 50)
+          and replay_sample(7, 10, cands, 500) == sorted(cands) and replay_sample(7, 10, cands, 0) == []
+          and replay_sample(7, 11, cands, 50) != s1 and replay_sample(8, 10, cands, 50) != s1)
+    check("replay: the sample is uniform (each of 120 candidates drawn 117-216 times in 400 draws of 50, expected "
+          "166.7; each source cycle 6000-7330 of 20000)",
+          all(117 <= v <= 216 for v in freq.values()) and all(6000 <= v <= 7330 for v in src.values()),
+          f"{min(freq.values())}-{max(freq.values())} {src}")
+
+    class _RL:  # a league stub for replaypool/: p() only
+        def __init__(self, d):
+            self.dir = d
+
+        def p(self, *parts):
+            return os.path.join(self.dir, *parts)
+
+    rl = _RL(os.path.join(tmp, "replaystub"))
+    for k in range(1, 7):
+        os.makedirs(replay_dir(rl, k))
+        write_csv(os.path.join(replay_dir(rl, k), "games.csv"), REPLAY_GAMES_FIELDS,
+                  [dict(t=10 * k + j, white=f"a{k}", black=f"b{j}", price_s="1.500000", cpu_s="0.250000")
+                   for j in range(2)])
+    os.makedirs(replay_dir(rl, 7))  # an unfinished keep (no games.csv): not replayed from
+    w3 = replay_kept(rl, 6, 3)
+    w50 = replay_kept(rl, 2, 50)
+    replay_prune(rl, 4)
+    check("replay: the window is cycles max(1, c - W) to c - 1; the prune drops the cycles before the next window",
+          sorted({g[0] for g in w3}) == [3, 4, 5] and len(w3) == 6 and w3[0][1:] == (30, "a3", "b0", 1.5, 0.25)
+          and [g[0] for g in w50] == [1, 1] and replay_kept(rl, 1, 5) == [] and replay_kept(rl, 8, 1) == []
+          and sorted(os.listdir(replay_dir(rl))) == ["c000004", "c000005", "c000006", "c000007"])
+
+    # the global league of the 11-10 design (2026-11-11): each model at its own ply, the Elo window, rule 6
+    gbase = dict(kind="global", root=tmp, models=[{"recipe": "F-L", "ply": 1}, {"recipe": "T-L-Ne", "ply": 2},
+                                                   {"recipe": "F-L", "ply": 2}])
+    _, gc = make_config(gbase)
+    check("global 11-10: the config (one ply per model, no anchors, rule 6, the training window, self-games on)",
+          gc["global_design"] == GLOBAL_DESIGN and is_global11(gc) and gc["anchors"] is None
+          and gc["patience_cycles"] is None and gc["patience_rule"] == PATIENCE_RULE and gc["ply1_entries"] is False
+          and gc["train"]["margin"] == 30 and gc["train"]["seed"] == 1 and gc["self_games"] is True
+          and "entry_ply" not in gc and gc["references"] == DEFAULTS["references"] and gc["cycles"] is None
+          and [(lc["line"], lc["model"], lc["ply"], lc["option"], lc.get("label")) for lc in gc["lines"]] == [
+              ("F-L.p1", "F-L", 1, "league", None), ("T-L-Ne.p2", "T-L-Ne", 2, "league", None),
+              ("F-L.p2", "F-L", 2, "league", None)]
+          and data_ply(gc) is None and data_ply(b0) == 2 and data_ply(e1c) == 1 and not is_global11(b0)
+          and line_ply(gc, gc["lines"][1]) == 2 and line_ply(e1c, e1c["lines"][0]) == 1, f"{gc}")
+    tk = gc["lines"][1]["kind"]
+    check("global 11-10: prices needed only at each model's own ply",
+          needed_prices(gc) == {"tournament random 0", "tournament random 1", "tournament random 2",
+                                "tournament random 3", "tournament lr 1", "tournament lr 2", f"tournament {tk} 2"})
+    _, gm = make_config(dict(gbase, train={"margin": 50}, self_games=False, patience_rule={"positions": 1000,
+                                                                                          "floor_cycles": 0}))
+    _, gr = make_config(dict(gbase, patience_rule={"rule": "positions", "floor_cycles": 2}))
+    check("global 11-10: train.margin, self_games false and rule 6's positions and floor as the spec gives them",
+          gm["train"]["margin"] == 50 and gm["self_games"] is False and gm["train"]["seed"] == 1
+          and gm["patience_rule"] == {"rule": "positions", "positions": 1000, "floor_cycles": 0}
+          and gr["patience_rule"] == {"rule": "positions", "positions": 20_000_000, "floor_cycles": 2}
+          and PATIENCE_RULE == {"rule": "positions", "positions": 20_000_000, "floor_cycles": 5}, f"{gm} {gr}")
+    _, gv = make_config(dict(gbase, games_per_entry=600))
+    refused = []
+    for bad_cfg, says in ((dict(e1c, games_per_entry=600), "the global league's"),
+                          (dict(gc, games_per_entry=0), "a whole number from 1"),
+                          (dict(gc, games_per_entry=600.0), "a whole number from 1")):
+        try:
+            games_per_entry(bad_cfg)
+        except ValueError as e:
+            refused.append(says in str(e))
+    check("rounds: games_per_entry in the global league's config only when the spec gives it (without it, "
+          "rounds_per_cycle rounds); the config otherwise the same; refused in an experiment's config and when not a "
+          "whole number from 1",
+          "games_per_entry" not in gc and games_per_entry(gc) is None and gc["rounds_per_cycle"] == 5
+          and gv["games_per_entry"] == 600 and games_per_entry(gv) == 600 and refused == [True, True, True]
+          and {k: v for k, v in gv.items() if k not in ("games_per_entry", "created")}
+          == {k: v for k, v in gc.items() if k != "created"}, f"{refused}")
+    gsrc = os.path.join(tmp, "g11")
+    os.makedirs(gsrc)
+    write_json(os.path.join(gsrc, "config.json"), gc)
+    for bad, why, says in (
+            (dict(gbase, models=["F-L"]), "a model without its ply", "each model plays at its own ply"),
+            (dict(gbase, models=[{"recipe": "F-L"}]), "a model object without its ply", "each model plays"),
+            (dict(gbase, models=[{"recipe": "F-L", "ply": 0}]), "ply 0", "each model plays"),
+            (dict(gbase, models=[{"recipe": "F-L", "ply": True}]), "ply true", "each model plays"),
+            (dict(gbase, models=[{"recipe": "F-L", "ply": 1, "set": {}}]), "an unknown model key", "each model"),
+            (dict(gbase, models=[{"recipe": "F-L", "ply": 1}, {"recipe": "F-L", "ply": 1}]), "a model twice",
+             "given twice"),
+            (dict(gbase, models=[{"recipe": "nope", "ply": 1}]), "an unknown recipe", "not a recipe"),
+            (dict(gbase, anchors={"step": 100}), "anchors", "no anchors"),
+            (dict(gbase, patience_cycles=20), "patience_cycles", "rule 6"),
+            (dict(gbase, patience_rule={"rule": "percentile"}), "a rule other than positions", "the only rule"),
+            (dict(gbase, patience_rule={"step": 0.05}), "an unknown patience_rule key", "the only rule"),
+            (dict(gbase, patience_rule="positions"), "patience_rule as text", "the only rule"),
+            (dict(gbase, patience_rule={"positions": 0}), "0 positions", "a whole number from 1"),
+            (dict(gbase, patience_rule={"positions": 2e7}), "positions as a float", "a whole number from 1"),
+            (dict(gbase, patience_rule={"positions": True}), "positions true", "a whole number from 1"),
+            (dict(gbase, patience_rule={"floor_cycles": -1}), "a negative floor", "floor_cycles one from 0"),
+            (dict(base, options=["local"], patience_rule={"positions": 10}), "patience_rule in an experiment",
+             "don't retire"),
+            (dict(gbase, train={"margin": -1}), "a negative margin", "train.margin"),
+            (dict(gbase, train={"margin": "30"}), "a margin as text", "train.margin"),
+            (dict(gbase, models=[{"recipe": "F-L", "ply": 5}]), "a ply without prices", "has no price for"),
+            (dict(base, options=["local"], train={"margin": 30}), "train.margin in an experiment", "train.margin"),
+            (dict(gbase, games_per_entry=0), "games_per_entry 0", "games_per_entry must be a whole number from 1"),
+            (dict(gbase, games_per_entry=600.0), "games_per_entry as a float", "a whole number from 1"),
+            (dict(gbase, games_per_entry=True), "games_per_entry true", "a whole number from 1"),
+            (dict(base, options=["local"], games_per_entry=600), "games_per_entry in an experiment",
+             "the global league's (variable-length cycles)"),
+            (dict(base, options=["global"], global_source=gsrc), "the global option against it", "11-10 design")):
+        try:
+            make_config(bad)
+            check(f"global 11-10: refuses {why}", False)
+        except SystemExit as e:
+            check(f"global 11-10: refuses {why}", says in str(e), str(e))
+    # games_per_cycle (T; 2026-11-12): R = round(T / (N (N - 1))), halves up, from 1 to GPC_MAX_ROUNDS
+    want = {(1584, 8): (28, ""), (1584, 20): (4, ""), (1584, 12): (12, ""), (1584, 7): (38, ""),
+            (1584, 6): (48, "under T"), (1584, 4): (48, "under T"), (1584, 2): (48, "under T"), (1584, 56): (1, ""),
+            (1584, 57): (1, "over T"), (1584, 1): (1, ""), (1584, 0): (1, ""), (3, 2): (2, ""), (45, 6): (2, ""),
+            (29, 5): (1, ""), (10, 5): (1, ""), (9, 5): (1, "over T"), (2688, 8): (48, ""), (2716, 8): (48, "under T")}
+    got = {k: rounds_for_cycle_games(*k) for k in want}
+    check("games_per_cycle: R = round(T / (N (N - 1))) halves up, at least 1 (over T when one round is more than "
+          "2 T games), at most 48 (under T when the cap binds)", got == want and GPC_MAX_ROUNDS == 48,
+          f"{ {k: v for k, v in got.items() if v != want[k]} }")
+    _, x0 = make_config(dict(base, options=["local"]))
+    _, xg = make_config(dict(base, options=["local"], games_per_cycle=1584))
+    _, g0 = make_config(gbase)
+    _, gg = make_config(dict(gbase, games_per_cycle=1584))
+    drop = ("games_per_cycle", "rounds_per_cycle", "min_rounds", "created")
+    check("games_per_cycle: in the config only when the spec gives it (an experiment's or the global league's), in "
+          "place of rounds_per_cycle and min_rounds; the config otherwise the same",
+          xg["games_per_cycle"] == 1584 and gg["games_per_cycle"] == 1584
+          and not {"rounds_per_cycle", "min_rounds"} & (set(xg) | set(gg))
+          and "games_per_cycle" not in x0 and "games_per_cycle" not in g0 and x0["rounds_per_cycle"] == 5
+          and games_per_cycle(x0) is None and games_per_cycle(g0) is None and games_per_cycle(xg) == 1584
+          and games_per_cycle(gg) == 1584
+          and {k: v for k, v in xg.items() if k not in drop} == {k: v for k, v in x0.items() if k not in drop}
+          and {k: v for k, v in gg.items() if k not in drop} == {k: v for k, v in g0.items() if k not in drop})
+    refused = []
+    for bad_cfg, says in ((dict(gg, games_per_entry=600), "both set"), (dict(xg, games_per_cycle=0), "whole number"),
+                          (dict(xg, games_per_cycle=1584.0), "whole number"),
+                          (dict(xg, games_per_cycle=True), "whole number")):
+        try:
+            games_per_cycle(bad_cfg)
+            refused.append(False)
+        except ValueError as e:
+            refused.append(says in str(e))
+    check("games_per_cycle: refused in a config with games_per_entry too, or not a whole number from 1",
+          refused == [True] * 4, f"{refused}")
+    for bad, why, says in (
+            (dict(base, options=["local"], games_per_cycle=1584, rounds_per_cycle=12), "with rounds_per_cycle",
+             "give it or rounds_per_cycle, not both"),
+            (dict(base, options=["local"], games_per_cycle=1584, min_rounds=5), "with min_rounds",
+             "give it or min_rounds, not both"),
+            (dict(gbase, games_per_cycle=1584, games_per_entry=600), "with games_per_entry",
+             "give it or games_per_entry, not both"),
+            (dict(gbase, games_per_cycle=1584, rounds_per_cycle=5), "with the global league's rounds_per_cycle",
+             "not both"),
+            (dict(base, options=["local"], games_per_cycle=0), "0", "games_per_cycle must be a whole number from 1"),
+            (dict(base, options=["local"], games_per_cycle=1584.0), "a float", "a whole number from 1"),
+            (dict(base, options=["local"], games_per_cycle=True), "true", "a whole number from 1"),
+            (dict(gbase, games_per_cycle="1584"), "text", "a whole number from 1")):
+        try:
+            make_config(bad)
+            check(f"games_per_cycle: refuses {why}", False)
+        except SystemExit as e:
+            check(f"games_per_cycle: refuses {why}", says in str(e), str(e))
+    flg = FakeL()
+    flg.spec = fl0.spec
+    flg.cfg = gc
+    stg = dict(lines={"F-L.p1": dict(status="active", version=3, champion=1),
+                      "T-L-Ne.p2": dict(status="active", version=2, champion=2),
+                      "F-L.p2": dict(status="retired", version=5, champion=4)}, anchors={})
+    fg = field_of(flg, stg, 4)
+    check("global 11-10: the field: the references, then each active model's current and champion at its own ply; "
+          "every model entry plays self-games",
+          [(e["entry"], e["ply"], e["role"]) for e in fg] == [
+              ("random", 0, "reference"), ("random-1", 1, "reference"), ("random-2", 2, "reference"),
+              ("random-3", 3, "reference"), ("F-L.p1@3-1", 1, "current"), ("F-L.p1@1-1", 1, "champion"),
+              ("T-L-Ne.p2@2-2", 2, "current+champion")]
+          and [e["entry"] for e in self_game_entries(flg, fg)] == ["F-L.p1@3-1", "F-L.p1@1-1", "T-L-Ne.p2@2-2"],
+          f"{fg}")
+    check("global 11-10: the league-wide count (ply None): a game with a model at any ply",
+          qualifies("A@1-1", "random", None) and qualifies("random-2", "B@2-2", None)
+          and not qualifies("random", "random-3", None) and is_model_at("B@2-2", None) and not is_model_at("random",
+                                                                                                         None))
+    rt = {"A@1-1": (100.0, 20, 50), "B@2-2": (70.0, 20, 50), "random": (0.0, 0, 50), "C@0-1": (69.9, 20, 50)}
+    check("global 11-10: the training window (rated at or above the floor; unrated players count; no floor: all)",
+          window_ok("A@1-1", 70.0, rt) and window_ok("B@2-2", 70.0, rt) and not window_ok("C@0-1", 70.0, rt)
+          and not window_ok("random", 70.0, rt) and window_ok("N@0-1", 70.0, rt) and window_ok("random", None, rt))
+    rwc = dict(kind="experiment", entry_ply=2, lines=[dict(line="A", option="local")],
+               frozen_references=[dict(name="xA", v=1), dict(name="xB", v=1), dict(name="xC", v=1)])
+    rwr = {"xA@1F-2": (90.0, 20, 50), "xB@1F-2": (120.0, 20, 50), "A@3-2": (100.0, 20, 50)}
+    rwg = [(0, "A@3-2", "xA@1F-2", "d0"), (0, "xB@1F-2", "A@3-2", "d1"), (0, "xA@1F-2", "xB@1F-2", "d2"),
+           (0, "xB@1F-2", "xC@1F-2", "d3"), (0, "A@3-2", "B@2-2", "d4"), (0, "A@3-2", "A@3-2", "d5")]
+    cut, below = ref_window_cut(rwc, rwg, {"A": 100.0, "B": None, "C": 50.0, "D": 120.0, "E": 120.5}, rwr)
+    check("reference window: a line's cut is every game with a frozen reference below its floor (line-reference "
+          "and reference-reference alike; at the floor kept; unrated references, line-line games and self-games "
+          "kept; no floor: no cut)",
+          cut == {"A": [rwg[0], rwg[2]], "D": [rwg[0], rwg[2]], "E": rwg[:4]}
+          and below == {"A": [("xA@1F-2", 90.0)], "D": [("xA@1F-2", 90.0)],
+                        "E": [("xA@1F-2", 90.0), ("xB@1F-2", 120.0)]}, f"{cut} {below}")
+    rw_bad = [(dict(rwc, reference_window=dict(margin=30), frozen_references=[]), "for experiments with frozen_"),
+              (dict(rwc, reference_window=dict(margin=30), kind="global"), "for experiments with frozen_"),
+              (dict(rwc, reference_window=dict(margin=30), replay=dict(share=0.5, window=2)), "with replay"),
+              (dict(rwc, reference_window=dict(margin=30), lines=[dict(line="A", option="global")]),
+               "with the global option"),
+              (dict(rwc, reference_window=30), "must be {"), (dict(rwc, reference_window=dict(m=30)), "must be {"),
+              (dict(rwc, reference_window=dict(margin=30, x=1)), "must be {")] + [
+              (dict(rwc, reference_window=dict(margin=m)), "margin must be") for m in (-1, "30", True, float("nan"),
+                                                                                      float("inf"), None)]
+    got = []
+    for cfgx, msg in rw_bad:
+        try:
+            reference_window_of(cfgx)
+            got.append(None)
+        except ValueError as e:
+            got.append(msg in str(e))
+    tbc = dict(lines=[dict(line="A", option="local"), dict(line="B", option="local")])
+    tb0 = dict(trained=dict(A=dict(games=10, positions=100), B=dict(games=10, positions=100)))
+    tb1 = dict(trained=dict(A=dict(games=6, positions=60), B=dict(games=10, positions=100)),
+               ref_window=dict(margin=30, floors=dict(A=1.0, B=None),
+                               lines=dict(A=dict(excluded=4, below=[["x", 0.5]], price_s=0.0, cpu_s=0.0))))
+    tbi = dict(tb0, ref_window=dict(margin=30, floors={}, lines={}))
+    check("reference window: the training batch line names its cut, and only when it cut (inert: as without it)",
+          train_batch_line(tbc, tb0) == train_batch_line(tbc, tbi)
+          == "- Training batch: 10 games, 100 positions (each of 2 lines)."
+          and train_batch_line(tbc, tb1) == "- Training batch: 8 games and 80 positions on average over 2 lines (6-10 "
+                                             "games, 60-100 positions). The reference window cut 4 games from 1 line's "
+                                             "sets.", train_batch_line(tbc, tb1))
+    check("reference window: the config refused without frozen references, in the global league, with replay or the "
+          "global option, and with a malformed window or margin; a margin from 0 accepted; none without the key",
+          all(got) and [reference_window_of(dict(rwc, reference_window=dict(margin=m))) for m in (0, 30, 2.5, 1e9)]
+          == [0, 30, 2.5, 1e9] and reference_window_of(rwc) is None, f"{got}")
+
+    def retire_cycle(per, rule, crown_at=()):  # a line entering in cycle 1, training on `per` positions a cycle
+        ls, lc = {}, dict(entered_cycle=1)
+        for c in range(1, 1000):
+            _, total, frm = patience_step(ls, lc, c == 1 or c in crown_at, c)
+            if patience_retires(total, c - frm, rule):
+                return c
+            ls.update(patience_total=total, patience_from=frm, trained_positions=per)
+        return None
+
+    R = PATIENCE_RULE
+    rc = [retire_cycle(p, R) for p in (10_000_000, 5_000_000, 4_000_000, 1_000_000, 0)]
+    check("global 11-10: rule 6 by positions (20M, floor 5): a line entering in cycle 1 and training on 10M, 5M or "
+          "4M positions a cycle retires in cycle 6 (the floor), on 1M in cycle 21 (exactly 20M), on none never; "
+          "a crowning in cycle 4 moves 5M's to cycle 9; the count adds the training that made the current version",
+          rc == [6, 6, 6, 21, None] and retire_cycle(5_000_000, R, crown_at=(4,)) == 9
+          and retire_cycle(5_000_000, dict(R, floor_cycles=0)) == 5
+          and retire_cycle(1, dict(R, positions=1, floor_cycles=0)) == 2
+          and patience_step({}, dict(entered_cycle=3), False, 4) == (0, 0, 3)
+          and patience_step(dict(patience_total=7, patience_from=2, trained_positions=5), {}, False, 4) == (5, 12, 2)
+          and patience_step(dict(patience_total=7, patience_from=2, trained_positions=5), {}, True, 4) == (0, 0, 4)
+          and patience_level(10_000_000, R) == 0.5 and patience_retires(20_000_000, 5, R)
+          and not patience_retires(19_999_999, 50, R) and not patience_retires(50_000_000, 4, R), f"{rc}")
+
+    # warm starts (2026-11-11 ~03:40): a line's version 0 is a copy of a model of another experiment's line
+    src = os.path.join(tmp, "experiments", "src")
+    src_lines = (("F-L#1.loc", "lr"), ("F-L#2.loc", "lr"), ("F-L.loc", "probit"), ("F-L+init-forget=2#1.loc", "lr"),
+                 ("F-L+init-forget=2#2.loc", "lr"))
+    for line, kind in src_lines:
+        os.makedirs(os.path.join(src, "runs", line), exist_ok=True)
+        with open(os.path.join(src, "runs", line, f"{kind}5.model"), "w") as f:
+            f.write(f"a model of {line}\n")
+    write_json(os.path.join(src, "config.json"), dict(name="src", kind="experiment", lines=[
+        dict(line=x, model=x[:-4], option="local", kind=k) for x, k in src_lines]))
+    ws = {"experiment": "src", "version": 5}
+    _, w8 = make_config(dict(base, options=["local"], models=[{"model": "F-L", "replicates": 2, "start": ws,
+                                                               "start_forget": 8}]))
+    _, w1 = make_config(dict(base, options=["local"], models=[{"model": "F-L", "replicates": 2,
+                                                               "start": dict(ws, experiment=src)}]))
+    _, w0 = make_config(dict(base, options=["local"], models=[{"model": "F-L", "replicates": 2}]))
+    want = [dict(experiment="src", dir=src, line=f"F-L#{k}.loc", version=5,
+                 path=os.path.join(src, "runs", f"F-L#{k}.loc", "lr5.model"),
+                 md5=file_md5(os.path.join(src, "runs", f"F-L#{k}.loc", "lr5.model")), forget=8) for k in (1, 2)]
+    check("warm start: each line records its start (the line of its own name), path, md5 and forget",
+          [lc["start"] for lc in w8["lines"]] == want and [lc["start"]["forget"] for lc in w1["lines"]] == [1, 1]
+          and [lc["start"]["dir"] for lc in w1["lines"]] == [src, src] and w1["lines"][0]["start"]["experiment"] == src
+          and [{k: v for k, v in lc.items() if k != "start"} for lc in w8["lines"]] == w0["lines"],
+          f"{[lc.get('start') for lc in w8['lines']]}")
+    check("warm start: absent from a spec, absent from the config", all("start" not in lc for lc in w0["lines"]))
+    fw = FakeL()
+    fw.model_path = lambda line, v: f"m/{line}/{v}"
+    fw.state_path = lambda line, v: f"s/{line}/{v}"
+    l8, l1 = w8["lines"][0], w1["lines"][0]
+    check("warm start: the first training --start version 0 with --init-forget F (none at F 1), later ones as usual",
+          train_start(fw, l8, 0) == ["--start", "m/F-L#1.loc/0", "--init-forget", "8"]
+          and train_start(fw, l8, 1) == ["--start", "m/F-L#1.loc/1"]
+          and train_start(fw, l1, 0) == ["--start", "m/F-L#1.loc/0"] and train_start(fw, w0["lines"][0], 0) == []
+          and train_start(fw, w0["lines"][0], 3) == ["--start", "m/F-L#1.loc/3"]
+          and train_start(fw, dict(line="T", kind="bdt"), 2) == ["--start", "s/T/2"]
+          and train_start(fw, dict(l8, start=dict(l8["start"], forget=2.5)), 0)[-1] == "2.5"
+          and start_detail(l8["start"]).startswith(f"warm start: {want[0]['path']} (md5 {want[0]['md5']}; ")
+          and start_detail(l1["start"]) == f"warm start: {want[0]['path']} (md5 {want[0]['md5']})")
+    tree = next(r["model"] for r in load_recipes() if r["kind"] in TREE_KINDS)
+    for opts, models, why in (
+            (["local"], [{"model": "F-L", "start": dict(ws, line="x")}], "an unknown start key"),
+            (["local"], [{"model": "F-L", "start": "src"}], "a start that is not an object"),
+            (["local"], [{"model": "F-L", "replicates": 2, "start": dict(ws, version=-1)}], "a version below 0"),
+            (["local"], [{"model": "F-L", "replicates": 2, "start": dict(ws, version=True)}], "a version true"),
+            (["local"], [{"model": "F-L", "replicates": 2, "start": dict(ws, experiment="nope")}], "no such league"),
+            (["local"], [{"model": "F-L", "replicates": 3, "start": ws}], "no line of the name (replicate 3)"),
+            (["local"], [{"model": "F-L", "replicates": 2, "start": dict(ws, version=6)}], "no model of the version"),
+            (["local"], [{"model": "F-L", "start": ws}], "a start line of another kind"),
+            (["self-play", "local"], [{"model": "F-L", "replicates": 2, "start": ws}], "a self-play line"),
+            (["local"], [{"model": tree, "replicates": 2, "start": ws}], "a tree without a start line of its name"),
+            (["local"], [{"model": "F-L", "replicates": 2, "start_forget": 8}], "start_forget without start"),
+            (["local"], [{"model": "F-L", "replicates": 2, "start": ws, "start_forget": 0}], "start_forget 0"),
+            (["local"], [{"model": "F-L", "replicates": 2, "start": ws, "start_forget": True}], "start_forget true"),
+            (["local"], [{"model": "F-L", "replicates": 2, "start": ws, "start_forget": "8"}], "start_forget text"),
+            (["local"], [{"model": "F-L", "replicates": 2, "set": {"--init-forget": 2}, "start": ws,
+                          "start_forget": 8}], "--init-forget in the train arguments")):
+        try:
+            make_config(dict(base, options=opts, models=models))
+            check(f"warm start: refuses {why}", False)
+        except SystemExit:
+            check(f"warm start: refuses {why}", True)
+    # tree warm starts (2026-11-12): version 0 copies the model and its training state; same recipe and arguments
+    _, t0 = make_config(dict(base, options=["local"], models=[{"model": tree, "replicates": 2}]))
+    tl, tk = t0["lines"], t0["lines"][0]["kind"]
+    for lc in tl:
+        os.makedirs(os.path.join(src, "runs", lc["line"]), exist_ok=True)
+        for ext in ("model", "state"):
+            with open(os.path.join(src, "runs", lc["line"], f"{tk}5.{ext}"), "w") as f:
+                f.write(f"a {ext} of {lc['line']}\n")
+    with open(os.path.join(src, "runs", tl[0]["line"], f"{tk}6.model"), "w") as f:
+        f.write("a model without its state\n")
+    srcfg = read_json(os.path.join(src, "config.json"))
+    srcfg["lines"] += [dict(line=lc["line"], model=lc["model"], option="local", kind=tk, recipe=lc["recipe"],
+                            train_args=lc["train_args"]) for lc in tl]
+    write_json(os.path.join(src, "config.json"), srcfg)
+    _, tw = make_config(dict(base, options=["local"], models=[{"model": tree, "replicates": 2, "start": ws}]))
+    twant = [dict(experiment="src", dir=src, line=lc["line"], version=5,
+                  path=os.path.join(src, "runs", lc["line"], f"{tk}5.model"),
+                  md5=file_md5(os.path.join(src, "runs", lc["line"], f"{tk}5.model")), forget=1,
+                  state=os.path.join(src, "runs", lc["line"], f"{tk}5.state"),
+                  state_md5=file_md5(os.path.join(src, "runs", lc["line"], f"{tk}5.state"))) for lc in tl]
+    lt = tw["lines"][0]
+    check("warm start: a tree records its model and its training state, and trains on from the state",
+          [lc["start"] for lc in tw["lines"]] == twant
+          and [{k: v for k, v in lc.items() if k != "start"} for lc in tw["lines"]] == tl
+          and train_start(fw, lt, 0) == ["--start", f"s/{lt['line']}/0"]
+          and train_start(fw, lt, 1) == ["--start", f"s/{lt['line']}/1"]
+          and start_detail(lt["start"]) == (f"warm start: {twant[0]['path']} (md5 {twant[0]['md5']}; training state "
+                                            f"{twant[0]['state']} (md5 {twant[0]['state_md5']}))"),
+          f"{[lc.get('start') for lc in tw['lines']]}")
+    for models, why, edit in (
+            ([{"model": tree, "replicates": 2, "start": ws, "start_forget": 8}], "a tree with start_forget 8", None),
+            ([{"model": tree, "replicates": 2, "start": dict(ws, version=6)}], "a tree without its training state",
+             None),
+            ([{"model": tree, "replicates": 2, "start": ws}], "a tree whose start line has other train arguments",
+             "args"),
+            ([{"model": tree, "replicates": 2, "start": ws}], "a tree whose start line has another recipe", "recipe")):
+        bad = copy.deepcopy(srcfg)
+        for x in bad["lines"]:
+            if x["line"] == tl[0]["line"] and edit == "args":
+                x["train_args"] = list(x["train_args"]) + ["--forget-factor", "2"]
+            elif x["line"] == tl[0]["line"] and edit == "recipe":
+                x["recipe"] = "another"
+        write_json(os.path.join(src, "config.json"), bad)
+        try:
+            make_config(dict(base, options=["local"], models=models))
+            check(f"warm start: refuses {why}", False)
+        except SystemExit:
+            check(f"warm start: refuses {why}", True)
+    write_json(os.path.join(src, "config.json"), srcfg)
+    # 2026-11-12 (the ply-2 rung of training standard v1): a tree's start_forget and start_reset on a train binary that
+    # has --start-leaf-forget and --warm-reset (chessai-grow7), and an entry's own train_binary
+    g7, capped, grown = os.path.join(BIN, "chessai-grow7"), "T-L-Ne", "T-P-Ne-grow"
+    _, c0 = make_config(dict(base, options=["local"], models=[{"model": capped}, {"model": grown}]))
+    for lc in c0["lines"]:
+        os.makedirs(os.path.join(src, "runs", lc["line"]), exist_ok=True)
+        for ext in ("model", "state"):
+            with open(os.path.join(src, "runs", lc["line"], f"{lc['kind']}5.{ext}"), "w") as f:
+                f.write(f"a {ext} of {lc['line']}\n")
+    srcfg2 = copy.deepcopy(srcfg)
+    srcfg2["lines"] += [dict(line=lc["line"], model=lc["model"], option="local", kind=lc["kind"], recipe=lc["recipe"],
+                             train_args=lc["train_args"]) for lc in c0["lines"]]
+    write_json(os.path.join(src, "config.json"), srcfg2)
+    _, c7 = make_config(dict(base, options=["local"], models=[
+        {"model": capped, "start": ws, "start_forget": 10, "train_binary": "chessai-grow7"},
+        {"model": grown, "start": ws, "start_reset": True, "train_binary": "chessai-grow7"}]))
+    _, c8 = make_config(dict(base, options=["local"], models=[
+        {"model": capped, "start": ws, "start_reset": False},
+        {"model": grown, "start": ws, "start_forget": 2, "start_reset": True, "train_binary": g7},
+        {"model": grown, "set": {"--grow-mdl": 1}, "train_binary": "models/from-scratch/bin/chessai-grow7"}]))
+    lcc, lcg = c7["lines"]
+    nostart = lambda lines: [{k: v for k, v in lc.items() if k not in ("start", "train_binary")} for lc in lines]
+    check("warm start (2026-11-12): a tree's start_forget F and start_reset, on a train binary with the flags (the "
+          "entry's train_binary): the start records forget and reset (only when true), the first training --start "
+          "<version 0's state> [--warm-reset] [--start-leaf-forget F], the later ones as usual; train_binary (a name, "
+          "a path from the repository, an absolute path) changes the line's binary and nothing else",
+          lcc["start"]["forget"] == 10 and "reset" not in lcc["start"] and lcg["start"]["reset"] is True
+          and lcg["start"]["forget"] == 1 and [lc["train_binary"] for lc in c7["lines"]] == [g7, g7]
+          and [lc["train_binary"] for lc in c8["lines"]] == [c0["lines"][0]["train_binary"], g7, g7]
+          and nostart(c7["lines"]) == nostart(c0["lines"]) and "start" not in c8["lines"][2]
+          and train_start(fw, lcc, 0) == ["--start", f"s/{lcc['line']}/0", "--start-leaf-forget", "10"]
+          and train_start(fw, lcg, 0) == ["--start", f"s/{lcg['line']}/0", "--warm-reset"]
+          and train_start(fw, c8["lines"][1], 0) == ["--start", f"s/{lcg['line']}/0", "--warm-reset",
+                                                      "--start-leaf-forget", "2"]
+          and train_start(fw, lcg, 1) == ["--start", f"s/{lcg['line']}/1"]
+          and train_start(fw, c8["lines"][0], 0) == ["--start", f"s/{lcc['line']}/0"]
+          and "reset" not in c8["lines"][0]["start"]
+          and "; the first training --start-leaf-forget 10; training state " in start_detail(lcc["start"])
+          and "; the first training --warm-reset; training state " in start_detail(lcg["start"])
+          and "; the first training --warm-reset --start-leaf-forget 2; training state " in start_detail(
+              c8["lines"][1]["start"])
+          and "the first training" not in start_detail(c8["lines"][0]["start"]),
+          f"{[lc.get('start') for lc in c7['lines']]}")
+    for models, why in (
+            ([{"model": capped, "start": ws, "start_forget": 10}],
+             "a tree's start_forget 10 on a train binary without --start-leaf-forget (its recipe's)"),
+            ([{"model": grown, "start": ws, "start_reset": True}],
+             "a start_reset on a train binary without --warm-reset (its recipe's)"),
+            ([{"model": capped, "start": ws, "start_reset": True, "train_binary": "chessai-grow7"}],
+             "a start_reset without the growth rule"),
+            ([{"model": grown, "start": ws, "start_forget": 2, "train_binary": "chessai-grow7"}],
+             "a growing tree's start_forget without start_reset"),
+            ([{"model": "F-L", "replicates": 2, "start": ws, "start_reset": True}], "a start_reset of a flat model"),
+            ([{"model": grown, "start_reset": True, "train_binary": "chessai-grow7"}], "start_reset without start"),
+            ([{"model": grown, "start": ws, "start_reset": 1, "train_binary": "chessai-grow7"}],
+             "start_reset 1 (not true or false)"),
+            ([{"model": grown, "train_binary": "chessai-nope"}], "a train_binary that doesn't exist"),
+            ([{"model": grown, "train_binary": 7}], "a train_binary that is not a name"),
+            ([{"model": "D-P-Ne-ctx-grow", "train_binary": "chessai-hybrid4gfx"}],
+             "a train_binary that doesn't take the row's own arguments")):
+        try:
+            make_config(dict(base, options=["local"], models=models))
+            check(f"warm start: refuses {why}", False)
+        except SystemExit:
+            check(f"warm start: refuses {why}", True)
+
+    class LabelL:  # 2026-11-13 (analyst 6.113): a --label-model naming a line labels with its current version
+        cfg = dict(lines=[dict(line="F-P-lab.loc", model="F-P-lab", kind="probit", option="local"),
+                          dict(line="T.loc", model="T", kind="bdt", option="local")])
+        state = dict(lines={"F-P-lab.loc": dict(version=7), "T.loc": dict(version=3)})
+
+        def model_path(self, line, v):
+            return f"r/{line}/{v}"
+    ll, plain, refused = LabelL(), ["--use-probs", "--label-depth", "2"], []
+    for bad in ([dict(line="T.loc", model="T", option="local", train_args=["--label-model", "T"])],
+                [dict(line="T.loc", model="T", option="local", train_args=["--label-model", "nope"])]):
+        try:
+            label_lines_option({}, bad)
+            refused.append(False)
+        except SystemExit:
+            refused.append(True)
+    check("label lines (2026-11-13): train arguments without a --label-model that names a line are returned as they "
+          "are (the same list); a name becomes that line's current version as KIND:PATH (two tokens or --flag=value); "
+          "a model spec (with a colon) stays; create refuses a name of the line itself or of no line",
+          label_line_args(ll, plain) is plain
+          and label_line_args(ll, plain + ["--label-model", "F-P-lab"]) == plain + ["--label-model",
+                                                                                     "probit:r/F-P-lab.loc/7"]
+          and label_line_args(ll, ["--label-model=F-P-lab"]) == ["--label-model=probit:r/F-P-lab.loc/7"]
+          and label_line_args(ll, ["--label-model", "probit:x/y"]) == ["--label-model", "probit:x/y"]
+          and label_lines_option({}, [dict(line="T.loc", model="T", option="local",
+                                           train_args=["--label-model", "probit:x/y"])]) is None
+          and refused == [True, True], f"{refused}")
+    write_json(os.path.join(src, "config.json"), srcfg)
+    shutil.rmtree(src)  # not a league to index
 
     # model variants, sweeps, replicates and their seeds
     rec = load_recipes()
@@ -2932,6 +7833,14 @@ def selftest(dirpath, quick):
           and [e["event"] for e in cur["events"]] == ["wait-start", "copied", "wait-end"]
           and Lw.state["used_global_rounds"] == [[1, 0], [1, 1], [1, 2], [2, 3], [2, 4], [2, 5], [2, 6]],
           f"{cur['events']}")
+    publish(3, [7, 8, 9], 10)
+    Lw.cfg = dict({k: v for k, v in cfg.items() if k not in ("min_rounds", "rounds_per_cycle")},
+                  references=["random", "random-1", "random-2"], games_per_cycle=18)
+    cur = dict(cycle=3, events=[], rounds_planned=None)
+    check("games_per_cycle with the global option: R for the cycle's field (3 entries: round(18 / 6) = 3) in place "
+          "of min_rounds; the newest rounds covering 3 rounds", try_copy(Lw, cur)
+          and [r["t"] for r in cur["copied"]["rounds"]] == [8, 9] and cur["rounds_planned"] == 3
+          and cur["games_per_cycle"] == dict(t=18, n=3, rounds=3, bound=""), f"{cur.get('copied')}")
     globals()["experiment_round_estimate"] = real_estimate
     shutil.rmtree(tmp, ignore_errors=True)
     for name in ok:
@@ -2939,6 +7848,170 @@ def selftest(dirpath, quick):
     print(f"{len(ok)} rule checks passed")
     if not quick:
         replay_test(dirpath)
+        varlen_test(dirpath)
+        options_test(dirpath)
+        selfgames_test(dirpath, 1)
+        selfgames_test(dirpath, 2)
+        selfgames_test(dirpath, 3)
+        warmstart_test(dirpath)
+        warmreset_test(dirpath)
+        replay_set_test(dirpath)
+        frozenref_test(dirpath)
+        gpc_test(dirpath)
+        refwindow_test(dirpath)
+        observers_test(dirpath)
+        cold_games_test(dirpath)
+        train_filter_test(dirpath)
+        openings_test(dirpath)
+        rate_every_test(dirpath)
+        drawse_test(dirpath)
+        extend_test(dirpath)
+
+
+def drawse_test(dirpath):
+    """champion_se_kind "draw-aware" and plateau.guard_z (2026-11-12), on scratch experiments of F-L and F-P at ply 1
+    with cold games (rating only), chessai-hybrid19 games. Runs: d with champion_se_kind draw-aware at champion_se 2.0
+    (4 cycles); h and s at champion_se 1000 (nothing crowns after the first champions) with a plateau of 1 cycle from
+    cycle 2, h with guard_z 0 (held while a test has z above 0), s with guard_z 1000 (never held). Checks: d's config
+    and index carry champion_se_kind, cycles.csv carries se_nominal and z_nominal; at the last cycle every tested
+    line's se_diff is contrast_ses_draws on cold/ at its ratings and se_nominal contrast_ses (one decimal), each z is
+    diff over its SE, each decision z >= 2.0 on the draw-aware z; the
+    report's Champion test line; h holds the stop exactly while some test's z is above 0 (state's plateau_held, the
+    log line, the report), and ends on the first decided cycle without one, or at its cap; s ends in cycle 2 (the
+    plateau) as a run without the guard does; "nominal" gives the config without the key; create refuses 9 bad
+    specs."""
+    base = os.path.join(os.path.abspath(dirpath), "drawse")
+    shutil.rmtree(base, ignore_errors=True)
+    os.makedirs(base)
+    t0 = os.times()
+    problems = []
+    h19 = os.path.join(BIN, "chessai-hybrid19")
+    cg = dict(temperature=0.02, share=0.5, train=False)
+    small = dict(kind="experiment", name="k", options=["local"], models=["F-L", "F-P"], references=[], entry_ply=1,
+                 cycles=4, seed=11, train={"seed": 11}, games_per_cycle=40, self_games=True, cold_games=cg,
+                 nice=19, threads=2, jobs=2, calibration={"games": 20}, tournament={"binary": h19})
+    bad = {"champion_se as text": (dict(small, champion_se="TODO"), "champion_se must be a number above 0"),
+           "champion_se 0": (dict(small, champion_se=0), "champion_se must be a number above 0"),
+           "champion_se true": (dict(small, champion_se=True), "champion_se must be a number above 0"),
+           "another kind": (dict(small, champion_se_kind="robust"), "champion_se_kind must be"),
+           "kind true": (dict(small, champion_se_kind=True), "champion_se_kind must be"),
+           "in the global league": (dict(kind="global", models=[{"recipe": "F-L", "ply": 1}], games_per_cycle=30,
+                                         champion_se_kind="draw-aware"), "champion_se_kind is for experiments"),
+           "guard_z negative": (dict(small, plateau={"cycles": 2, "guard_z": -1}), "guard_z must be a number from 0"),
+           "guard_z as text": (dict(small, plateau={"cycles": 2, "guard_z": "TODO"}), "guard_z must be a number"),
+           "guard_z true": (dict(small, plateau={"scaled": True, "guard_z": True}), "guard_z must be a number")}
+    for what, (s, says) in bad.items():
+        root = os.path.join(base, "refused-" + what.replace(" ", "-"))
+        p = root + ".json"
+        write_json(p, dict(s, root=root))
+        r = driver(["create", p])
+        if r.returncode == 0 or os.path.exists(root) or says not in r.stderr:
+            problems.append(f"create ({what}): exit {r.returncode}, {r.stderr.strip()[-200:]!r}")
+    made = {}
+    for what, s in {"nokey": small, "nominal": dict(small, champion_se_kind="nominal"),
+                    "guard": dict(small, plateau={"scaled": True, "min_cycles": 2, "guard_z": 1.5})}.items():
+        root = os.path.join(base, "made-" + what)
+        p = root + ".json"
+        write_json(p, dict(s, root=root))
+        driver(["create", p], check_code=0)
+        made[what] = {k: v for k, v in read_json(os.path.join(root, "experiments", "k", "config.json")).items()
+                      if k not in ("created", "root")}
+    if made["nominal"] != made["nokey"] or "champion_se_kind" in made["nokey"]:
+        problems.append("champion_se_kind nominal doesn't give the config without the key")
+    if made["guard"]["plateau"] != dict(cycles=50, min_cycles=2, scaled=dict(k2=PLATEAU_K2_DEFAULT, lines=2),
+                                        guard_z=1.5):
+        problems.append(f"the guarded plateau is {made['guard']['plateau']}")
+    plat = {"cycles": 1, "min_cycles": 2}
+    variants = {"d": (dict(champion_se_kind="draw-aware", champion_se=2.0), 4),
+                "h": (dict(champion_se_kind="draw-aware", champion_se=1000, plateau=dict(plat, guard_z=0)), 6),
+                "s": (dict(champion_se_kind="draw-aware", champion_se=1000, plateau=dict(plat, guard_z=1000)), 6)}
+    dirs, logs = {}, {}
+    for name, (extra, cap) in variants.items():
+        root = os.path.join(base, name)
+        p = os.path.join(base, f"{name}-k.json")
+        write_json(p, dict(small, root=root, cycles=cap, **extra))
+        driver(["create", p], check_code=0)
+        ldir = os.path.join(root, "experiments", "k")
+        dirs[name] = ldir
+        while True:
+            st = read_json(os.path.join(ldir, "state.json"))
+            if st["status"] == "done" or st["cycle"] >= cap:
+                break
+            r = driver(["run", ldir, "--cycles", "1"])
+            if r.returncode not in (0, EXIT_DONE):
+                raise AssertionError(f"drawse: {name}: exit {r.returncode}\n{r.stdout[-1500:]}\n{r.stderr[-1500:]}")
+            logs.setdefault(name, []).append(r.stdout + r.stderr)
+
+    def rows_of(name, f):
+        return read_csv(os.path.join(dirs[name], f))
+
+    # d: the records against the SEs recomputed on the last cycle's fit
+    L = League(dirs["d"])
+    cfg = L.cfg
+    if cfg.get("champion_se_kind") != "draw-aware":
+        problems.append("d: config.json's champion_se_kind")
+    idx = [x for x in read_json(os.path.join(L.cfg["root"], "index.json"))["leagues"] if x["name"] == "k"]
+    if len(idx) != 1 or idx[0].get("champion_se_kind") != "draw-aware":
+        problems.append(f"d: index.json's champion_se_kind {idx}")
+    cyc = rows_of("d", "cycles.csv")
+    if not cyc or list(cyc[0])[-2:] != DRAWSE_CYCLES_FIELDS:
+        problems.append(f"d: cycles.csv's last columns {list(cyc[0])[-2:] if cyc else None}")
+    last = max(int(x["cycle"]) for x in cyc)
+    ratings = league_ratings(L)
+    tested = [x for x in cyc if int(x["cycle"]) == last and x["decision"] in ("new-champion", "champion-kept")
+              and x["se_diff"] != ""]
+    pairs = [([x["entry2"]], [x["champion_entry"]]) for x in tested]
+    sd = contrast_ses_draws(rating_tour(L), ratings, pairs, anchor=fit_pin(L, ratings)) if pairs else []
+    sn = contrast_ses(rating_tour(L), ratings, pairs, anchor=fit_pin(L, ratings)) if pairs else []
+    if not tested:
+        problems.append(f"d: no champion test in cycle {last}")
+    for x, a, b in zip(tested, sd or [], sn or []):
+        z = float(x["diff"]) / a
+        if x["se_diff"] != e1(a) or x["se_nominal"] != e1(b) or abs(float(x["z"]) - z) > 0.006 + 0.05 / a \
+                or (abs(z - 2.0) > 0.01 and (x["decision"] == "new-champion") != (z >= 2.0)):
+            problems.append(f"d cycle {last} {x['line']}: se {x['se_diff']} / {x['se_nominal']} z {x['z']} "
+                            f"{x['decision']}, recomputed {a:.2f} / {b:.2f} z {z:.3f}")
+    for x in cyc:
+        if x["se_diff"] != "" and x["se_nominal"] == "":
+            problems.append(f"d cycle {x['cycle']} {x['line']}: a test without se_nominal")
+    rep = open(os.path.join(dirs["d"], f"cycle-{last:03d}.md")).read()
+    if "- Champion test: draw-aware SE" not in rep:
+        problems.append("d: the report lacks the Champion test line")
+    # h: held exactly while some test has z above 0; s: stops in cycle 2
+    held_cycles = []
+    for name in ("h", "s"):
+        cyc = rows_of(name, "cycles.csv")
+        ev = [e for e in rows_of(name, "events.csv") if e["event"] == "done"]
+        end = max(int(x["cycle"]) for x in cyc)
+        g = variants[name][0]["plateau"]["guard_z"]
+        for c in range(2, end + 1):
+            zs = [float(x["z"]) for x in cyc if int(x["cycle"]) == c and x["z"] != ""]
+            hold = any(z > g for z in zs)
+            if c < end and not hold:
+                problems.append(f"{name}: cycle {c} met the plateau without a hold, yet the run went on")
+            if name == "h" and hold:
+                held_cycles.append(c)
+                rep = open(os.path.join(dirs[name], f"cycle-{c:03d}.md")).read()
+                if "the plateau's stop is held by" not in rep:
+                    problems.append(f"h: cycle {c}'s report doesn't say the stop is held")
+            if c == end and hold and end != variants[name][1]:
+                problems.append(f"{name}: ended in cycle {end} though a test held it")
+        if name == "s" and (end != 2 or not ev or not ev[0]["detail"].startswith("plateau")):
+            problems.append(f"s: ended in cycle {end}, {ev}")
+    if not held_cycles:
+        problems.append("h: no cycle was held: the test is vacuous")
+    if not any("held by plateau.guard_z 0" in x for x in logs.get("h", [])) and held_cycles:
+        drv = open(os.path.join(dirs["h"], "driver.log")).read()
+        if "held by plateau.guard_z 0" not in drv:
+            problems.append("h: driver.log lacks the held line")
+    t1 = os.times()
+    cpu = (t1.children_user + t1.children_system) - (t0.children_user + t0.children_system)
+    if problems:
+        raise AssertionError("drawse: " + "; ".join(problems))
+    print(f"ok  drawse: experiment k (F-L, F-P; cold games rating only) with champion_se_kind draw-aware: cycle "
+          f"{last}'s {len(tested)} tests on contrast_ses_draws (se_nominal contrast_ses), the z and decisions on the "
+          f"draw-aware SE; plateau.guard_z 0 held cycles {held_cycles}, guard_z 1000 ended in cycle "
+          f"2; nominal is no key; create refuses {len(bad)} bad specs; CPU {cpu:.0f} s")
 
 
 def invert3(m):
@@ -2965,7 +8038,9 @@ def driver(args, env_extra=None, check_code=None):
 
 MEASURED = {"date", "start", "end", "copied_at", "note", "wall_s", "cpu_s", "ply2_cpu_s", "train_cpu_s", "cal_cpu_s",
             "data_cpu_s", "selfplay_cpu_s", "selfplay_gen_cpu_s", "tournament_cpu_s", "tournament_wall_s",
-            "tournament_proc_cpu_s", "global_cpu_s", "global_ply2_cpu_s", "wait_s", "data_cpu_target_s", "estimated"}
+            "tournament_proc_cpu_s", "global_cpu_s", "global_ply2_cpu_s", "wait_s", "data_cpu_target_s", "estimated",
+            "self_games_proc_cpu_s", "self_games_wall_s", "replay_cpu_s", "observer_train_cpu_s", "cold_cpu_s",
+            "cold_proc_cpu_s", "cold_wall_s", "topup_proc_cpu_s", "topup_wall_s"}
 
 
 def snapshot(ldir, root):
@@ -2976,16 +8051,21 @@ def snapshot(ldir, root):
 
     out = {}
     for f in ("tour/games.csv", "tour/ratings.csv", "tour/players.txt", "tour/retired.txt", "anchors.csv",
-              "entries.csv", "lines.csv", "batch/games.csv"):
+              "entries.csv", "lines.csv", "batch/games.csv", "cold/games.csv", "cold/ratings.csv",
+              "cold/players.txt", "cold/retired.txt"):
         p = os.path.join(ldir, f)
         if os.path.exists(p):
             text = open(p).read()
             if f == "batch/games.csv":  # its cpu_s column is measured
                 text = "\n".join(",".join(x.split(",")[:5] + x.split(",")[6:]) for x in text.splitlines())
             out[f] = rel(text)
-    for f in ("cycles.csv", "events.csv", "history.csv", "rounds.csv", "totals.csv", "copied.csv"):
+    for f in ("cycles.csv", "events.csv", "history.csv", "rounds.csv", "totals.csv", "copied.csv", "self_games.csv",
+              "observers.csv"):
         rows = read_csv(os.path.join(ldir, f))
         out[f] = [{k: rel(v) for k, v in r.items() if k not in MEASURED} for r in rows]
+    if os.path.exists(os.path.join(ldir, "cold_rounds.csv")):
+        out["cold_rounds.csv"] = [{k: v for k, v in r.items() if k not in MEASURED}
+                                  for r in read_csv(os.path.join(ldir, "cold_rounds.csv"))]
     bj = read_json(os.path.join(ldir, "batch", "batch.json"))
     if bj:
         out["batch.json"] = dict(cycle=bj["cycle"], prices_version=bj.get("prices_version"),
@@ -2999,28 +8079,105 @@ def snapshot(ldir, root):
                 out[os.path.relpath(p, ldir)] = open(p).read()
     st = read_json(os.path.join(ldir, "state.json"))
     out["state"] = {k: st.get(k) for k in ("cycle", "lines", "anchors", "anchor_entries", "used_global_rounds",
-                                          "global_carry_s", "last_rounds", "status")}
+                                          "global_carry_s", "last_rounds", "status", "last_crown_cycle")}
     return out
 
 
+def global11_record_checks(ldir):
+    """A global league of the 11-10 design checked from its records (the replay test; dry runs): every rated game
+    and self-game at its models' plies; no anchors; in each cycle each line that trained trained on exactly the
+    cycle's games and self-games whose players were all rated (history.csv: the cycle's fit, as decide saw it) at
+    or above its floor, its current version's Elo minus the margin (unrated players count); rule 6's counts, levels
+    and retirements recomputed from the decisions and the training positions (a version's training counts in the
+    next cycle unless that cycle crowns a champion; the floor from the entry or last crowning). Returns (problems,
+    summary)."""
+    cfg = read_json(os.path.join(ldir, "config.json"))
+    margin, rule = cfg["train"]["margin"], cfg["patience_rule"]
+    plies = {lc["line"]: lc["ply"] for lc in cfg["lines"]}
+    games = read_csv(os.path.join(ldir, "tour", "games.csv"))
+    sg = read_csv(os.path.join(ldir, "self_games.csv"))
+    hist = read_csv(os.path.join(ldir, "history.csv"))
+    rounds = read_csv(os.path.join(ldir, "rounds.csv"))
+    cyc = read_csv(os.path.join(ldir, "cycles.csv"))
+    problems = []
+
+    def ply_ok(name):
+        p = parse_entry(name)
+        return name in REFERENCE_PLY or (p is not None and plies.get(p[0]) == p[3])
+
+    bad = ([f"{g['white']}-{g['black']}" for g in games if not (ply_ok(g["white"]) and ply_ok(g["black"]))]
+           + [r["entry"] for r in sg if not ply_ok(r["entry"]) or r["white"] != r["black"]])
+    if bad:
+        problems.append(f"games or self-games of entries not at their model's ply: {bad[:5]}")
+    if any(g["white"] == g["black"] for g in games):
+        problems.append("a self-game in tour/games.csv")
+    if os.path.exists(os.path.join(ldir, "anchors.csv")):
+        problems.append("an anchors.csv")
+    total, since, prev = {}, {}, {}
+    checked, retired, floored = 0, 0, 0
+    for c in sorted({int(r["cycle"]) for r in cyc}):
+        cs = str(c)
+        hc = [r for r in hist if r["cycle"] == cs]
+        ratings = {r["entry"]: (float(r["elo"]), 0.0, 0) for r in hc if r["elo"] != ""}
+        ts = {r["t"] for r in rounds if r["cycle"] == cs}
+        cg = ([(g["white"], g["black"]) for g in games if g["tournament"] in ts]
+              + [(r["white"], r["black"]) for r in sg if r["cycle"] == cs])
+        for r in (r for r in cyc if r["cycle"] == cs):
+            line = r["line"]
+            own = ratings.get(r["entry2"])
+            floor = own[0] - margin if own else None
+            if r["train_games"] != "":
+                n = sum(1 for w, b in cg if window_ok(w, floor, ratings) and window_ok(b, floor, ratings))
+                if int(r["train_games"]) != n:
+                    problems.append(f"cycle {c} {line}: trained on {r['train_games']} games; the window gives {n}")
+                if r["train_floor"] != e1(floor):
+                    problems.append(f"cycle {c} {line}: floor {r['train_floor']}, not {e1(floor)}")
+                checked += 1
+            crowned = r["decision"] in ("first-champion", "new-champion")
+            p0 = prev.get(line)  # the line's row of the cycle before: its training made this cycle's current version
+            add = 0 if crowned or not p0 or p0["next_version"] != str(int(p0["version"]) + 1) else int(
+                p0["train_positions"])
+            total[line] = 0 if crowned else total.get(line, 0) + add
+            since[line] = c if crowned else since.get(line, c)
+            want = (str(add), str(total[line]), e1(total[line] / rule["positions"] * 100))
+            if (r["patience_positions"], r["patience_total"], r["patience"]) != want:
+                problems.append(f"cycle {c} {line}: patience {r['patience_positions']}, {r['patience_total']}, "
+                                f"{r['patience']}%; rule 6 gives {want}")
+            out = patience_retires(total[line], c - since[line], rule)
+            if (r["status"] == "retired") != out or (r["status"] == "retired") != (r["decision"] == "retired"):
+                problems.append(f"cycle {c} {line}: status {r['status']}, decision {r['decision']} at "
+                                f"{total[line]} positions since cycle {since[line]}")
+            retired += r["status"] == "retired"
+            floored += total[line] >= rule["positions"] and not out
+            prev[line] = r
+    return problems, dict(checked=checked, games=len(games), self_games=len(sg), retired=retired, floored=floored)
+
+
 def replay_test(dirpath):
-    """Two roots, each a global league (F-L, T-L-Ne) and an experiment (F-L under self-play, local and global),
-    run in step (global cycle k, then experiment cycle k): root a straight through, root b interrupted at many
-    points of both leagues (every interrupted run resumes). Both must give the same games, ratings, models,
-    self-play rounds and records: every decision uses prices and seeds, nothing measured."""
+    """Two roots, each a global league of the 11-10 design (F-L at ply 1 and T-L-Ne at ply 2, self-games on; F-P at
+    ply 1 added after cycle 1; rule 6 scaled down to 10,000 positions and a 2-cycle floor, so that F-L and T-L-Ne
+    retire in cycle 3 and F-P, past 10,000 too, is kept by the floor) and an experiment (F-L under self-play and
+    local), run in step (global cycle k, then experiment cycle k): root a straight through, root b interrupted at
+    many points of both leagues (every interrupted run resumes). Both must give the same games, ratings, models,
+    self-play rounds and records: every decision uses prices and seeds, nothing measured. Then root a's global league
+    passes global11_record_checks with a retirement and a line kept by the floor, and add refuses a model already in
+    the league. (Until 2026-11-11 the global league was of the 11-09 design and
+    the experiment had a global line copying from it; the global option isn't built for the 11-10 design.)"""
     base = os.path.join(dirpath, "replay")
     shutil.rmtree(base, ignore_errors=True)
     os.makedirs(base)
-    gspec = dict(kind="global", models=["F-L", "T-L-Ne"], nice=19, threads=2, jobs=2, rounds_per_cycle=2,
-                 calibration={"games": 20})
-    xspec = dict(kind="experiment", name="x", models=["F-L"], options=["self-play", "local", "global"], cycles=3,
+    gspec = dict(kind="global", models=[{"recipe": "F-L", "ply": 1}, {"recipe": "T-L-Ne", "ply": 2}], nice=19,
+                 threads=2, jobs=2, rounds_per_cycle=2, calibration={"games": 20},
+                 patience_rule={"positions": 10_000, "floor_cycles": 2})
+    xspec = dict(kind="experiment", name="x", models=["F-L"], options=["self-play", "local"], cycles=3,
                  nice=19, threads=2, jobs=2, min_rounds=2, calibration={"games": 20},
                  selfplay={"round_anchor_games": 20, "chunk": 0.25})
-    faults_b = {("global", 1): ["1:calibration", "1:tournament-partial", "1:batch", "1:train-one", "1:records-half"],
-                ("x", 1): ["1:copy", "1:tournament-partial", "1:train-one", "1:self-play-chunk", "1:records-half"],
-                ("global", 2): ["2:decide"],
-                ("x", 2): ["2:copy", "2:self-play", "2:self-play-chunk", "2:records"],
-                ("global", 3): [],
+    faults_b = {("global", 1): ["1:calibration", "1:tournament-partial", "1:batch", "1:self-games",
+                                "1:self-games-partial", "1:train-one", "1:records-half"],
+                ("x", 1): ["1:tournament-partial", "1:train-one", "1:self-play-chunk", "1:records-half"],
+                ("global", 2): ["2:decide", "2:train-one"],
+                ("x", 2): ["2:self-play", "2:self-play-chunk", "2:records"],
+                ("global", 3): ["3:self-games-partial", "3:records-half"],
                 ("x", 3): ["3:calibration", "3:train", "3:records-half"]}
     runs, cpu = {}, {}
     t0 = os.times()
@@ -3046,6 +8203,8 @@ def replay_test(dirpath):
                     if r.returncode not in (0, EXIT_DONE):
                         raise AssertionError(f"{kind} cycle {k}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
                                              f"{r.stderr[-1500:]}")
+            if k == 1:
+                driver(["add", dirs["global"], "--ply", "1", "F-P"], check_code=0)
         runs[name] = {kind: snapshot(d, root) for kind, d in dirs.items()}
         t1 = os.times()
         cpu[name] = (t1.children_user + t1.children_system) - (t0.children_user + t0.children_system)
@@ -3061,17 +8220,2675 @@ def replay_test(dirpath):
     st = x["state"]
     sp_rounds = len([k for k in x if k.startswith("runs/F-L.sp/sp/lr") and k.endswith(".model")])
     opts = {r["option"] for r in x["cycles.csv"]}
-    if not (st["status"] == "done" and st["cycle"] == 3 and opts == {"self-play", "local", "global"}
-            and x["copied.csv"] and sp_rounds > 0 and "runs/F-L.sp/sp/plies.csv" in x):
+    if not (st["status"] == "done" and st["cycle"] == 3 and opts == {"self-play", "local"}
+            and sp_rounds > 0 and "runs/F-L.sp/sp/plies.csv" in x):
         raise AssertionError(f"replay: the experiment didn't run as planned: {st} {opts} {sp_rounds}")
-    print(f"ok  replay: an experiment with self-play, local and global lines and its global league, run straight and "
-          f"interrupted {sum(len(v) for v in faults_b.values())} times, give the same games, ratings, models, "
-          f"self-play rounds and records ({len(runs['a']['global'])} and {len(x)} items compared; "
-          f"{sp_rounds} self-play rounds; global carry {st['global_carry_s']:.2f} priced s; CPU {cpu['a']:.0f} s "
+    gdir = os.path.join(base, "a", "global")
+    problems, summ = global11_record_checks(gdir)
+    g = runs["a"]["global"]
+    lrows = read_csv(os.path.join(gdir, "lines.csv"))
+    lines = {r["line"]: r for r in lrows}
+    if (sorted(lines) != ["F-L.p1", "F-P.p1", "T-L-Ne.p2"] or lines["F-P.p1"]["entered_cycle"] != "2"
+            or [r["ply"] for r in lrows] != ["1", "2", "1"] or g["state"]["cycle"] != 3):
+        problems.append(f"lines {[(r['line'], r['ply'], r['entered_cycle']) for r in lrows]}")
+    entered = [(r["cycle"], r["line"], r["entry"]) for r in g["events.csv"] if r["event"] == "entered"]
+    if entered != [("1", "F-L.p1", "F-L.p1@0-1"), ("1", "T-L-Ne.p2", "T-L-Ne.p2@0-2"), ("2", "F-P.p1", "F-P.p1@0-1")]:
+        problems.append(f"entered events {entered}")
+    if not summ["self_games"] or summ["checked"] < 6 or not summ["retired"] or not summ["floored"]:
+        problems.append(f"too little checked (self-games, training sets, a retirement, a line kept by the floor): "
+                        f"{summ}")
+    r = driver(["add", gdir, "--ply", "1", "F-L"])
+    if r.returncode == 0 or "already in the league" not in r.stderr:
+        problems.append(f"add of a model already in the league: exit {r.returncode} {r.stderr[-300:]}")
+    if problems:
+        raise AssertionError("replay: the global league: " + "; ".join(problems))
+    print(f"ok  replay: a global league of the 11-10 design (F-L at ply 1, T-L-Ne at ply 2, F-P at ply 1 added "
+          f"after cycle 1; self-games) and an experiment with self-play and local lines, run straight and interrupted "
+          f"{sum(len(v) for v in faults_b.values())} times, give the same games, ratings, models, self-play rounds and "
+          f"records ({len(g)} and {len(x)} items compared; {sp_rounds} self-play rounds); the global league's "
+          f"records follow its rules ({summ['games']} games, {summ['self_games']} self-games, {summ['checked']} "
+          f"training sets recomputed from the ratings; rule 6: {summ['retired']} retired, {summ['floored']} kept by "
+          f"the floor); add refuses a model already in; CPU {cpu['a']:.0f} s "
           f"straight, {cpu['b']:.0f} s interrupted)")
 
 
+def varlen_test(dirpath):
+    """Variable-length cycles (games_per_entry; the user, 2026-11-11 ~20:10) in a global league of the 11-10 design
+    (F-L at ply 1, self-games on), switched on in config.json of a running league, as it will be: cycle 1 without it
+    (rounds_per_cycle 1); games_per_entry 11 before cycle 2, which is interrupted at the start of its tournament (its
+    rounds planned) and then, after games_per_entry is changed to 30, inside the tournament: the resumed cycle keeps
+    the rounds it planned with 11; F-P at ply 1 added, cycle 3 plays games_per_entry 30's rounds. Checks: each cycle's
+    rounds (totals.csv and rounds.csv): 1, then ceil(G / (2 (N - 1))) for the cycle's field of N entries; its games,
+    N (N - 1) a round; one self-game per model entry per round; the reports' rule text; the records
+    (global11_record_checks); run refusing games_per_entry 0 before touching the league."""
+    base = os.path.join(dirpath, "varlen")
+    shutil.rmtree(base, ignore_errors=True)
+    os.makedirs(base)
+    sp = os.path.join(base, "spec.json")
+    write_json(sp, dict(kind="global", root=base, models=[{"recipe": "F-L", "ply": 1}], nice=19, threads=2, jobs=2,
+                        rounds_per_cycle=1, calibration={"games": 20}))
+    driver(["create", sp], check_code=0)
+    gdir = os.path.join(base, "global")
+    cpath, spath = os.path.join(gdir, "config.json"), os.path.join(gdir, "state.json")
+
+    def set_g(g):
+        write_json(cpath, dict(read_json(cpath), games_per_entry=g))
+
+    t0 = os.times()
+    driver(["run", gdir, "--cycles", "1"], check_code=0)
+    set_g(11)
+    problems = []
+    for f in ("2:tournament", "2:tournament-partial"):
+        r = driver(["run", gdir, "--cycles", "1"], {"LEAGUES_FAIL_AT": f})
+        if r.returncode != EXIT_INJECTED:
+            raise AssertionError(f"varlen fault {f}: exit {r.returncode}\n{r.stdout[-1500:]}\n{r.stderr[-1500:]}")
+        set_g(30)
+    driver(["run", gdir, "--cycles", "1"], check_code=0)
+    driver(["add", gdir, "--ply", "1", "F-P"], check_code=0)
+    driver(["run", gdir, "--cycles", "1"], check_code=0)
+    t1 = os.times()
+    tot = read_csv(os.path.join(gdir, "totals.csv"))
+    rnd = read_csv(os.path.join(gdir, "rounds.csv"))
+    sgr = read_csv(os.path.join(gdir, "self_games.csv"))
+    nref = len(DEFAULTS["references"])
+    gs = {"1": None, "2": 11, "3": 30}
+    if [r["cycle"] for r in tot] != ["1", "2", "3"]:
+        problems.append(f"cycles {[r['cycle'] for r in tot]}")
+    seen = []
+    for r in tot:
+        c, n, k = r["cycle"], int(r["field"]), int(r["rounds"])
+        want = 1 if gs[c] is None else rounds_for_games(gs[c], n)
+        seen.append((n, k))
+        if k != want:
+            problems.append(f"cycle {c}: {k} rounds with {n} entries, not {want}")
+        if sum(1 for x in rnd if x["cycle"] == c) != k:
+            problems.append(f"cycle {c}: rounds.csv has {sum(1 for x in rnd if x['cycle'] == c)} rounds, not {k}")
+        if int(r["games"]) != n * (n - 1) * k:
+            problems.append(f"cycle {c}: {r['games']} games, not {n * (n - 1) * k}")
+        if sum(1 for x in sgr if x["cycle"] == c) != (n - nref) * k:
+            problems.append(f"cycle {c}: {sum(1 for x in sgr if x['cycle'] == c)} self-games, not {(n - nref) * k}")
+        text = open(os.path.join(gdir, f"cycle-{int(c):03d}.md")).read()
+        rule = (f"games_per_entry {gs[c]} over {n} entries: ceil({gs[c]} / {2 * (n - 1)}) rounds, "
+                f"{2 * (n - 1) * k} games each")
+        if (gs[c] is None and "games_per_entry" in text) or (gs[c] is not None and rule not in text):
+            problems.append(f"cycle {c}'s report: the rule text ({rule!r} for games_per_entry {gs[c]})")
+    if seen and (seen[1][1] == 1 or seen[2][0] <= seen[1][0]):
+        problems.append(f"too little exercised (cycle 2 must play more than rounds_per_cycle, cycle 3 have more "
+                        f"entries): {seen}")
+    rp, summ = global11_record_checks(gdir)
+    problems += rp
+    set_g(0)
+    st = read_json(spath)
+    r = driver(["run", gdir, "--cycles", "1"])
+    if r.returncode == 0 or "games_per_entry must be a whole number from 1" not in r.stderr or read_json(spath) != st:
+        problems.append(f"games_per_entry 0: exit {r.returncode} {r.stderr[-300:]}")
+    if problems:
+        raise AssertionError("varlen: " + "; ".join(problems))
+    print(f"ok  varlen: games_per_entry switched on in a running global league; (entries, rounds) by cycle {seen} "
+          f"(rounds_per_cycle 1, then games_per_entry 11 kept by cycle 2 through an interruption and a change to 30, "
+          f"then 30); games, self-games, reports and records as the rule gives ({summ['games']} games, "
+          f"{summ['self_games']} self-games, {summ['checked']} training sets recomputed); run refuses "
+          f"games_per_entry 0; CPU {(t1.children_user + t1.children_system) - (t0.children_user + t0.children_system):.0f} s)")
+
+
+def options_test(dirpath):
+    """An experiment with the batch-4 options (no references, no ply-1 entries, the plateau rule; hybrid8 as the
+    tournament binary), run straight (root a) and interrupted (root b): the same games, ratings, models and records.
+    Its field has only ply-2 model entries, the tournament has no anchor, the ratings are re-centred on the rating
+    zero, the last cycle is the one the plateau rule (or the cap) gives from the recorded decisions, it trains
+    nothing, and a later run exits with 4 (done)."""
+    base = os.path.join(dirpath, "options")
+    shutil.rmtree(base, ignore_errors=True)
+    os.makedirs(base)
+    rules = {"cycles": 1, "min_cycles": 2}
+    cap = 6
+    spec = dict(kind="experiment", name="y", models=["F-L", "F-P"], options=["local"], cycles=cap, nice=19,
+                threads=2, jobs=2, rounds_per_cycle=2, min_rounds=2, calibration={"games": 20}, references=[],
+                ply1_entries=False, plateau=rules, tournament={"binary": os.path.join(BIN, "chessai-hybrid8")})
+    faults_b = {1: ["1:calibration", "1:tournament-partial", "1:records-half"], 2: ["2:decide", "2:train",
+                                                                                   "2:records-half"]}
+    runs, injected = {}, 0
+    for name in ("a", "b"):
+        root = os.path.join(base, name)
+        sp = os.path.join(base, f"{name}-y.json")
+        write_json(sp, dict(spec, root=root))
+        driver(["create", sp], check_code=0)
+        ldir = os.path.join(root, "experiments", "y")
+        for k in range(1, cap + 1):
+            if read_json(os.path.join(ldir, "state.json"))["status"] == "done":
+                break
+            for f in (faults_b.get(k, []) if name == "b" else []):
+                r = driver(["run", ldir, "--cycles", "1"], {"LEAGUES_FAIL_AT": f})
+                if r.returncode != EXIT_INJECTED:
+                    raise AssertionError(f"options fault {f}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                         f"{r.stderr[-1500:]}")
+                injected += 1
+            while True:
+                st = read_json(os.path.join(ldir, "state.json"))
+                if st["cycle"] >= k or st["status"] == "done":
+                    break
+                r = driver(["run", ldir, "--cycles", "1"])
+                if r.returncode not in (0, EXIT_DONE):
+                    raise AssertionError(f"options cycle {k}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                         f"{r.stderr[-1500:]}")
+        driver(["run", ldir, "--cycles", "1"], check_code=EXIT_DONE)
+        runs[name] = (snapshot(ldir, root), ldir)
+    a, b = runs["a"][0], runs["b"][0]
+    diff = sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
+    if diff:
+        raise AssertionError(f"options: straight and interrupted differ in {diff}")
+    ldir = runs["a"][1]
+    cfg = read_json(os.path.join(ldir, "config.json"))
+    zero = cfg["rating_zero"]
+    entries = read_csv(os.path.join(ldir, "entries.csv"))
+    hist = read_csv(os.path.join(ldir, "history.csv"))
+    cyc = read_csv(os.path.join(ldir, "cycles.csv"))
+    ev = read_csv(os.path.join(ldir, "events.csv"))
+    players = open(os.path.join(ldir, "tour", "players.txt")).read()
+    last, stop = 0, None
+    for c in range(1, cap + 1):
+        if any(r["decision"] in ("first-champion", "new-champion") for r in cyc if int(r["cycle"]) == c):
+            last = c
+        if plateau_stop(c, last, rules) or c >= cap:
+            stop = c
+            break
+    by_plateau = plateau_stop(stop, last, rules)
+    done = [r for r in ev if r["event"] == "done"]
+    st = a["state"]
+    problems = []
+    if zero != "F-L.loc@0-2" or cfg.get("ply1_entries") is not False:
+        problems.append(f"config {zero} {cfg.get('ply1_entries')}")
+    if not entries or not all(r["ply"] == "2" and r["line"] for r in entries) or "random" in players:
+        problems.append("an entry that is not a model at ply 2")
+    if "relative to the field's mean" not in open(os.path.join(ldir, "tour", "ratings.md")).read():
+        problems.append("the tournament had an anchor")
+    zrows = [r for r in hist if r["entry"] == zero]
+    if not zrows or zrows[0]["cycle"] != "1" or not all(r["elo"] in ("0.0", "") for r in zrows):
+        problems.append(f"the rating zero's rows {zrows}")
+    if any(r["entry1"] or r["elo1"] for r in cyc):
+        problems.append("a ply-1 entry in cycles.csv")
+    if st["cycle"] != stop or st["status"] != "done" or st["last_crown_cycle"] != last:
+        problems.append(f"stopped at {st['cycle']} ({st['status']}, last crowning {st['last_crown_cycle']}); the "
+                        f"rule says {stop} (last crowning {last})")
+    if len(done) != 1 or done[0]["cycle"] != str(stop) or done[0]["detail"].startswith("plateau") != by_plateau:
+        problems.append(f"done events {done}")
+    if any(r["train_games"] for r in cyc if r["cycle"] == str(stop)):
+        problems.append("the last cycle trained")
+    if problems:
+        raise AssertionError("options: " + "; ".join(problems))
+    print(f"ok  options: an experiment without references or ply-1 entries, with the plateau rule, run straight and "
+          f"interrupted {injected} times, gives the same games, ratings, models and records "
+          f"({len(a)} items compared); only ply-2 entries ({len(entries)}); the rating zero {zero} at 0; done "
+          f"after cycle {stop} by {'the plateau rule' if by_plateau else 'the cap'} (last crowning in cycle {last}); "
+          f"the last cycle trained nothing; a later run exits with {EXIT_DONE}")
+
+
+def selfgames_test(dirpath, ply):
+    """An experiment with the options of 2026-11-10 ~22:15-22:30: self-games, a scaled plateau and (ply 1 or 3) the main
+    entries at that ply (its self-play lines self-play at it); F-L and F-P under self-play and local, no references,
+    hybrid9 as the tournament binary. Run straight (root a) and interrupted (root b, including inside the self-games
+    phase): the same games, ratings, models, self-games and records. Root c is the same experiment without self-games,
+    for one cycle. Checks: every entry and game at the entry ply; no self-game in tour/games.csv; one self-game per main
+    entry per round in each cycle that trains and none in the last; the local lines train on the round-robins'
+    qualifying games plus the self-games; the local data's price (the self-play budget) is the round-robins' plus the
+    self-games'; cycle 1's games, ratings and decisions are root c's, and its self-play budget exceeds c's by the
+    self-games' price; the plateau's K is round(k2 x sqrt(2 / lines))."""
+    base = os.path.join(dirpath, f"selfgames-ply{ply}")
+    shutil.rmtree(base, ignore_errors=True)
+    os.makedirs(base)
+    cap = 4
+    spec = dict(kind="experiment", name="z", models=["F-L", "F-P"], options=["self-play", "local"], cycles=cap,
+                nice=19, threads=2, jobs=2, rounds_per_cycle=2, min_rounds=2, calibration={"games": 20},
+                selfplay={"round_anchor_games": 20, "chunk": 0.5}, references=[], ply1_entries=False,
+                plateau={"scaled": {"k2": 2}, "min_cycles": 3}, self_games=True,
+                tournament={"binary": os.path.join(BIN, "chessai-hybrid9")})
+    if ply != 2:
+        spec["entry_ply"] = ply
+    faults_b = {1: ["1:self-games", "1:self-games-partial", "1:train-one", "1:self-play-chunk"],
+                2: ["2:self-games-partial", "2:records-half"], 3: ["3:self-games", "3:records-half"]}
+    runs, injected, cpu = {}, 0, {}
+    t0 = os.times()
+    for name in ("a", "b", "c"):
+        root = os.path.join(base, name)
+        sp = os.path.join(base, f"{name}-z.json")
+        write_json(sp, dict(spec, root=root) if name != "c" else dict({k: v for k, v in spec.items()
+                                                                       if k != "self_games"}, root=root))
+        driver(["create", sp], check_code=0)
+        ldir = os.path.join(root, "experiments", "z")
+        for k in range(1, (1 if name == "c" else cap) + 1):
+            if read_json(os.path.join(ldir, "state.json"))["status"] == "done":
+                break
+            for f in (faults_b.get(k, []) if name == "b" else []):
+                r = driver(["run", ldir, "--cycles", "1"], {"LEAGUES_FAIL_AT": f})
+                if r.returncode != EXIT_INJECTED:
+                    raise AssertionError(f"self-games fault {f}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                         f"{r.stderr[-1500:]}")
+                injected += 1
+            while True:
+                st = read_json(os.path.join(ldir, "state.json"))
+                if st["cycle"] >= k or st["status"] == "done":
+                    break
+                r = driver(["run", ldir, "--cycles", "1"])
+                if r.returncode not in (0, EXIT_DONE):
+                    raise AssertionError(f"self-games cycle {k}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                         f"{r.stderr[-1500:]}")
+        runs[name] = (snapshot(ldir, root), ldir)
+        t1 = os.times()
+        cpu[name] = (t1.children_user + t1.children_system) - (t0.children_user + t0.children_system)
+        t0 = t1
+    a, b = runs["a"][0], runs["b"][0]
+    diff = sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
+    if diff:
+        raise AssertionError(f"self-games (ply {ply}): straight and interrupted differ in {diff}")
+    ldir, cdir = runs["a"][1], runs["c"][1]
+    cfg = read_json(os.path.join(ldir, "config.json"))
+    rd = {f: read_csv(os.path.join(ldir, f)) for f in ("cycles.csv", "rounds.csv", "totals.csv", "history.csv",
+                                                       "self_games.csv")}
+    cd = {f: read_csv(os.path.join(cdir, f)) for f in ("cycles.csv", "totals.csv", "history.csv")}
+    games = read_csv(os.path.join(ldir, "tour", "games.csv"))
+    st = a["state"]
+    problems = []
+    k_want = scaled_plateau_cycles(2, len(cfg["lines"]))
+    if cfg["plateau"] != {"cycles": k_want, "min_cycles": 3, "scaled": {"k2": 2, "lines": len(cfg["lines"])}}:
+        problems.append(f"plateau {cfg['plateau']}")
+    if entry_ply(cfg) != ply or not cfg.get("self_games"):
+        problems.append(f"config entry ply {entry_ply(cfg)}, self_games {cfg.get('self_games')}")
+    if any(g["white"] == g["black"] for g in games):
+        problems.append("a self-game in tour/games.csv")
+    if not games or not all(parse_entry(g["white"])[3] == ply and parse_entry(g["black"])[3] == ply for g in games):
+        problems.append(f"a round-robin game not at ply {ply}")
+    last = st["cycle"]
+    for c in range(1, last + 1):
+        cs = str(c)
+        field = [r["entry"] for r in rd["history.csv"] if r["cycle"] == cs]
+        sg = [r for r in rd["self_games.csv"] if r["cycle"] == cs]
+        rounds = [r for r in rd["rounds.csv"] if r["cycle"] == cs]
+        tot = [r for r in rd["totals.csv"] if r["cycle"] == cs][0]
+        want_n = 0 if c == last else len(rounds) * len(field)
+        if len(sg) != want_n or int(tot["self_games"]) != want_n:
+            problems.append(f"cycle {c}: {len(sg)} self-games (totals {tot['self_games']}), not {want_n}")
+        if any(r["white"] != r["entry"] or r["black"] != r["entry"] or r["entry"] not in field
+               or parse_entry(r["entry"])[3] != ply for r in sg):
+            problems.append(f"cycle {c}: a self-game not of a main entry against itself")
+        if sorted((int(r["t"]), r["entry"]) for r in sg) != sorted((int(x["t"]), e) for x in rounds for e in field
+                                                                  if want_n):
+            problems.append(f"cycle {c}: the self-games are not one per entry per round")
+        sg_price = sum(float(r["price_s"]) for r in sg)
+        if abs(float(tot["self_games_price_s"] or 0) - sg_price) > 0.006:
+            problems.append(f"cycle {c}: totals' self-games price {tot['self_games_price_s']} vs {sg_price}")
+        if abs(float(tot["data_price_target_s"]) - float(tot["ply2_price_s"]) - sg_price) > 0.011:
+            problems.append(f"cycle {c}: the local data's price {tot['data_price_target_s']} is not the round-robins' "
+                            f"{tot['ply2_price_s']} plus the self-games' {sg_price:.3f}")
+        q = sum(int(r["ply2_games"]) for r in rounds)
+        for r in rd["cycles.csv"]:
+            if r["cycle"] != cs:
+                continue
+            if r["option"] == "local" and c != last and int(r["train_games"]) != q + len(sg):
+                problems.append(f"cycle {c}: {r['line']} trained on {r['train_games']} games, not {q} + {len(sg)}")
+            if r["option"] == "self-play" and c == 1 and abs(float(r["selfplay_budget_s"])
+                                                             - float(tot["data_price_target_s"])) > 0.011:
+                problems.append(f"cycle 1: {r['line']}'s budget {r['selfplay_budget_s']} is not the local data's "
+                                f"price {tot['data_price_target_s']}")
+            if r["option"] == "self-play" and c == 1 and int(r["selfplay_rounds"] or 0) < 1:
+                problems.append(f"cycle 1: {r['line']} played no self-play round")
+    key = ("line", "version", "entry2", "elo2", "champion_entry", "champion_elo", "diff", "z", "decision")
+    a1 = [{k: r[k] for k in key} for r in rd["cycles.csv"] if r["cycle"] == "1"]
+    c1 = [{k: r[k] for k in key} for r in cd["cycles.csv"] if r["cycle"] == "1"]
+    games_c = read_csv(os.path.join(cdir, "tour", "games.csv"))
+    rr = int(cfg["rounds_per_cycle"])
+    if (a1 != c1 or [r for r in rd["history.csv"] if r["cycle"] == "1"] != cd["history.csv"]
+            or [g for g in games if int(g["tournament"]) < rr] != games_c):
+        problems.append("cycle 1's games, ratings or decisions differ from the run without self-games")
+    ta, tc = rd["totals.csv"][0], cd["totals.csv"][0]
+    bud = {r["line"]: float(r["selfplay_budget_s"]) for r in rd["cycles.csv"] if r["cycle"] == "1"
+           and r["option"] == "self-play"}
+    bud_c = {r["line"]: float(r["selfplay_budget_s"]) for r in cd["cycles.csv"] if r["option"] == "self-play"}
+    if not bud or any(abs(bud[x] - bud_c[x] - float(ta["self_games_price_s"])) > 0.011 for x in bud):
+        problems.append(f"cycle 1: self-play budgets {bud} against {bud_c} without self-games (self-games' price "
+                        f"{ta['self_games_price_s']})")
+    if "self_games" in tc or os.path.exists(os.path.join(cdir, "self_games.csv")):
+        problems.append("self-games records in the run without them")
+    if problems:
+        raise AssertionError(f"self-games (ply {ply}): " + "; ".join(problems))
+    n_sg = len(rd["self_games.csv"])
+    print(f"ok  self-games at ply {ply}: an experiment with self-games and a scaled plateau (K {k_want} for "
+          f"{len(cfg['lines'])} lines), run straight and interrupted {injected} times, gives the same games, ratings, "
+          f"models, self-games and records ({len(a)} items compared); {n_sg} self-games over {last} cycles, none in "
+          f"the ratings; cycle 1 as without them except training and the self-play budget (higher by their price "
+          f"{ta['self_games_price_s']} s); done after cycle {last}; CPU {cpu['a']:.0f} s straight, {cpu['b']:.0f} s "
+          f"interrupted, {cpu['c']:.0f} s without")
+
+
+def replay_set_test(dirpath):
+    """Replay training sets ("replay"; 2026-11-11 ~22:00, analyst 6.46 (i)) in an experiment shaped like the ply-2
+    screens (F-P and T-P-Ne local lines, self-games, no references or ply-1 entries) at entry ply 1, share 0.5, window
+    2, 5 cycles, hybrid9 games. Run straight (root a) and interrupted (root b: inside the keep, after the sample is
+    recorded and one line trained, at the start of training and in the records): the same games, ratings, models,
+    records and reports. Root c is the same experiment without replay, 2 cycles: cycle 1 (nothing to replay) gives
+    the same games, models and records as root a's, and cycle 2 the same games but other models. Checks from root
+    a's records: each cycle that trains replays min(round(S / (1 - S) x own), kept) games from the kept games of
+    cycles max(1, c - W) to c - 1 (own: the round-robins' qualifying games and the self-games); the local lines train
+    on own + replayed games, their data price is the cycle's own data price plus the replayed games'; each report
+    states the count and the cycles; replaypool/ keeps the next window's cycles only. From root b, at the
+    interruption after the sample: the state records it, and it is replay_sample from the seed, the cycle and the
+    kept games; the kept games' count and price are the cycle's local data's."""
+    base = os.path.join(dirpath, "replayset")
+    shutil.rmtree(base, ignore_errors=True)
+    os.makedirs(base)
+    cap, share, window = 5, 0.5, 2
+    spec = dict(kind="experiment", name="r", models=["F-P", {"model": "T-P-Ne", "set": {"--split-threshold": "2000"},
+                                                            "to": "train"}],
+                options=["local"], cycles=cap, nice=19, threads=2, jobs=2, rounds_per_cycle=2, min_rounds=2,
+                calibration={"games": 20}, references=[], ply1_entries=False, entry_ply=1, self_games=True,
+                seed=5, replay={"share": share, "window": window},
+                tournament={"binary": os.path.join(BIN, "chessai-hybrid9")})
+    faults_b = {2: ["2:replay-keep-partial", "2:train-one"], 3: ["3:train"], 4: ["4:records-half"]}
+    runs, injected, cpu, mid = {}, 0, {}, {}
+    t0 = os.times()
+    for name in ("a", "b", "c"):
+        root = os.path.join(base, name)
+        sp = os.path.join(base, f"{name}-r.json")
+        write_json(sp, dict(spec, root=root) if name != "c" else dict({k: v for k, v in spec.items()
+                                                                       if k != "replay"}, root=root))
+        driver(["create", sp], check_code=0)
+        ldir = os.path.join(root, "experiments", "r")
+        for k in range(1, (2 if name == "c" else cap) + 1):
+            for f in (faults_b.get(k, []) if name == "b" else []):
+                r = driver(["run", ldir, "--cycles", "1"], {"LEAGUES_FAIL_AT": f})
+                if r.returncode != EXIT_INJECTED:
+                    raise AssertionError(f"replay fault {f}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                         f"{r.stderr[-1500:]}")
+                injected += 1
+                if f == "2:train-one":  # the sample, as recorded, and the kept games it came from
+                    cur = read_json(os.path.join(ldir, "state.json"))["current"]
+                    kept1 = read_csv(os.path.join(ldir, "replaypool", "c000001", "games.csv"))
+                    mid = dict(rec=cur.get("replay"), kept1=kept1, seed=read_json(os.path.join(ldir,
+                                                                                               "config.json"))["seed"])
+            while True:
+                st = read_json(os.path.join(ldir, "state.json"))
+                if st["cycle"] >= k or st["status"] == "done":
+                    break
+                r = driver(["run", ldir, "--cycles", "1"])
+                if r.returncode not in (0, EXIT_DONE):
+                    raise AssertionError(f"replay cycle {k}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                         f"{r.stderr[-1500:]}")
+        reps = {}
+        for f in sorted(os.listdir(ldir)):
+            if f.startswith("cycle-") and f.endswith(".md"):
+                reps[f] = [x for i, x in enumerate(open(os.path.join(ldir, f)).read().splitlines())
+                           if i != 2 and not x.startswith("- Measured CPU")]
+        runs[name] = (snapshot(ldir, root), ldir, reps)
+        t1 = os.times()
+        cpu[name] = (t1.children_user + t1.children_system) - (t0.children_user + t0.children_system)
+        t0 = t1
+    a, b, cc = runs["a"][0], runs["b"][0], runs["c"][0]
+    diff = sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
+    problems = []
+    if diff:
+        problems.append(f"straight and interrupted differ in {diff}")
+    if runs["a"][2] != runs["b"][2]:
+        problems.append("straight and interrupted reports differ")
+    ldir = runs["a"][1]
+    tot = read_csv(os.path.join(ldir, "totals.csv"))
+    cyc = read_csv(os.path.join(ldir, "cycles.csv"))
+    if [r["cycle"] for r in tot] != [str(k) for k in range(1, cap + 1)]:
+        problems.append(f"cycles {[r['cycle'] for r in tot]}")
+    own = {}
+    exercised = {"fewer": 0, "both kinds": 0}
+    for r in tot:
+        c = int(r["cycle"])
+        rows = [x for x in cyc if x["cycle"] == r["cycle"] and x["option"] == "local"]
+        if c == cap:  # the last cycle trains nothing: no local set, no replay
+            if any(r[f] != "" for f in REPLAY_TOTALS_FIELDS):
+                problems.append(f"cycle {c}: replay columns {[r[f] for f in REPLAY_TOTALS_FIELDS]} in the last cycle")
+            continue
+        own[c] = int(r["ply2_games"]) + int(r["self_games"])
+        avail = sum(own.get(k, 0) for k in range(max(1, c - window), c))
+        want = replay_target(share, own[c])
+        n = min(want, avail)
+        exercised["fewer"] += avail < want
+        got = (int(r["replay_games"]), int(r["replay_target"]), int(r["replay_available"]), int(r["replay_from"]),
+               int(r["replay_to"]))
+        if got != (n, want, avail, max(1, c - window), c - 1):
+            problems.append(f"cycle {c}: replay (games, wanted, kept, from, to) {got}, not "
+                            f"{(n, want, avail, max(1, c - window), c - 1)}")
+        if not rows or any(int(x["train_games"]) != own[c] + n for x in rows):
+            problems.append(f"cycle {c}: local lines trained on {[x['train_games'] for x in rows]} games, not "
+                            f"{own[c]} own + {n} replayed")
+        if any(abs(float(x["data_price_s"]) - float(r["data_price_target_s"]) - float(r["replay_price_s"])) > 0.011
+               for x in rows):
+            problems.append(f"cycle {c}: the lines' data price {[x['data_price_s'] for x in rows]} is not the own "
+                            f"{r['data_price_target_s']} plus the replayed {r['replay_price_s']}")
+        if n and not float(r["replay_price_s"]) > 0:
+            problems.append(f"cycle {c}: {n} games replayed at price {r['replay_price_s']}")
+        text = "\n".join(runs["a"][2][f"cycle-{c:03d}.md"])
+        line = [x for x in text.splitlines() if x.startswith(f"- Replay (share {share:g}, window {window})")]
+        if (len(line) != 1 or f": {plural(n, 'game')} replayed (" not in line[0]
+                or (n and f"of the window {max(1, c - window)}-{c - 1}" not in line[0])
+                or (c == 1 and "no earlier cycle to replay from" not in line[0])):
+            problems.append(f"cycle {c}'s report: replay line {line}")
+        if n and "self-game" in line[0] and "(0 self-games)" not in line[0]:
+            exercised["both kinds"] += 1
+    kept = sorted(os.listdir(os.path.join(ldir, "replaypool")))
+    if kept != [f"c{k:06d}" for k in range(cap + 1 - window, cap)]:
+        problems.append(f"replaypool/ keeps {kept} after cycle {cap}")
+    elif len(read_csv(os.path.join(ldir, "replaypool", kept[-1], "games.csv"))) != own[cap - 1]:
+        problems.append(f"replaypool/{kept[-1]} keeps other than cycle {cap - 1}'s {own[cap - 1]} own games")
+    rec, kept1 = mid.get("rec"), mid.get("kept1")
+    if not rec or not kept1:
+        problems.append(f"no sample recorded at the interruption ({rec is not None}, {kept1 is not None})")
+    else:
+        cands = [(1, int(x["t"]), x["white"], x["black"]) for x in kept1]
+        again = replay_sample(mid["seed"], 2, cands, min(rec["target"], len(cands)))
+        if [tuple(g) for g in rec["games"]] != again or len(again) != int(tot[1]["replay_games"]):
+            problems.append(f"cycle 2's recorded sample ({len(rec['games'])}) is not replay_sample's ({len(again)})")
+        if (len(kept1) != own[1] or abs(sum(float(x["price_s"]) for x in kept1)
+                                        - float(tot[0]["data_price_target_s"])) > 0.011):
+            problems.append(f"cycle 1 kept {len(kept1)} games priced {sum(float(x['price_s']) for x in kept1):.3f}, "
+                            f"not its {own[1]} own games priced {tot[0]['data_price_target_s']}")
+    models = {k: v for k, v in a.items() if k.startswith("runs") and k.endswith(".model")}
+    v1 = {k for k in models if re.search(r"[a-z]1\.model$", k)}
+    v2 = {k for k in models if re.search(r"[a-z]2\.model$", k)}
+    ca = [r for r in a["cycles.csv"] if r["cycle"] == "1"]
+    cc1 = [r for r in cc["cycles.csv"] if r["cycle"] == "1"]
+    games = lambda s, t: [g for g in s["tour/games.csv"].splitlines()[1:] if int(g.split(",")[0]) < t]
+    rr = int(spec["rounds_per_cycle"])
+    if (not v1 or any(cc.get(k) != models[k] for k in v1) or ca != cc1 or games(a, rr) != games(cc, rr)
+            or games(a, 2 * rr) != games(cc, 2 * rr)):
+        problems.append("cycle 1 without replay: other games, version-1 models or records")
+    if not v2 or any(cc.get(k) == models[k] for k in v2):
+        problems.append("cycle 2 without replay: a version-2 model the same as with replay")
+    if "replaypool" in os.listdir(runs["c"][1]) or any("replay_games" in r for r in cc["totals.csv"]):
+        problems.append("replay records or replaypool/ in the experiment without replay")
+    if exercised["fewer"] < 1 or exercised["both kinds"] < 1:
+        problems.append(f"too little exercised: {exercised} (a cycle with fewer kept games than wanted, and one "
+                        f"replaying self-games and round-robin games)")
+    if problems:
+        raise AssertionError("replay: " + "; ".join(problems))
+    print(f"ok  replay sets: an experiment with replay (share {share:g}, window {window}), run straight and "
+          f"interrupted {injected} times, gives the same games, ratings, models, records and reports ({len(a)} items "
+          f"compared); per cycle (own, replayed) "
+          f"{[(own[int(r['cycle'])], int(r['replay_games'])) for r in tot if int(r['cycle']) < cap]}; the lines train "
+          f"on both at both prices; the recorded sample is replay_sample's; replaypool/ keeps {kept}; without replay "
+          f"cycle 1 is the same and cycle 2's models differ; CPU {cpu['a']:.0f} s straight, {cpu['b']:.0f} s "
+          f"interrupted, {cpu['c']:.0f} s without")
+
+
+def warmstart_test(dirpath):
+    """Warm starts and entry_ply 4 (2026-11-11 ~03:40), on chessai-hybrid10: experiment src (F-L x2, local, ply 1)
+    runs 2 cycles; experiment w (F-L x2, local, entry_ply 4, self-games, 1 round a cycle) starts from src's version 1
+    with start_forget 8 and runs 3 cycles; experiment bad, made as w, has its first line's recorded md5 changed.
+    Checks: w's lines record the start (path, md5, forget); their version 0 is a byte copy of src's version 1, and
+    the "entered" and "first-champion" events say so; the first training runs `--start <version 0> --init-forget 8`,
+    the second `--start <version 1>` without it; every round-robin game and self-game at ply 4; bad's first cycle
+    fails in calibration on the md5, before any game, with no version 0 made."""
+    base = os.path.join(dirpath, "warmstart")
+    shutil.rmtree(base, ignore_errors=True)
+    os.makedirs(base)
+    t0 = os.times()
+    common = dict(kind="experiment", root=base, options=["local"], nice=19, threads=2, jobs=2, rounds_per_cycle=1,
+                  min_rounds=1, calibration={"games": 20}, references=[],
+                  tournament={"binary": os.path.join(BIN, "chessai-hybrid10")})
+    warm = [{"model": "F-L", "replicates": 2, "start": {"experiment": "src", "version": 1}, "start_forget": 8}]
+    specs = [("src", dict(common, name="src", models=[{"model": "F-L", "replicates": 2}], cycles=2, entry_ply=1,
+                          rounds_per_cycle=2, min_rounds=2)),
+             ("w", dict(common, name="w", models=warm, cycles=3, entry_ply=4, self_games=True)),
+             ("bad", dict(common, name="bad", models=warm, cycles=3, entry_ply=4, self_games=True))]
+    dirs = {}
+    for name, spec in specs:
+        sp = os.path.join(base, f"{name}.json")
+        write_json(sp, spec)
+        driver(["create", sp], check_code=0)
+        dirs[name] = os.path.join(base, "experiments", name)
+        if name == "bad":
+            break
+        for k in range(spec["cycles"]):
+            r = driver(["run", dirs[name], "--cycles", "1"])
+            if r.returncode not in (0, EXIT_DONE):
+                raise AssertionError(f"warm start: {name} cycle {k + 1}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                     f"{r.stderr[-1500:]}")
+    sdir, wdir, bdir = dirs["src"], dirs["w"], dirs["bad"]
+    bc = read_json(os.path.join(bdir, "config.json"))
+    bc["lines"][0]["start"]["md5"] = "0" * 32
+    write_json(os.path.join(bdir, "config.json"), bc)
+    rb = driver(["run", bdir, "--cycles", "1"])
+    t1 = os.times()
+    cpu = (t1.children_user + t1.children_system) - (t0.children_user + t0.children_system)
+    cfg = read_json(os.path.join(wdir, "config.json"))
+    events = read_csv(os.path.join(wdir, "events.csv"))
+    problems = []
+    for lc in cfg["lines"]:
+        line, ws = lc["line"], lc.get("start") or {}
+        sm = os.path.join(sdir, "runs", line, "lr1.model")
+        if ws != dict(experiment="src", dir=sdir, line=line, version=1, path=sm, md5=file_md5(sm), forget=8):
+            problems.append(f"{line}: start {ws}")
+        if file_md5(os.path.join(wdir, "runs", line, "lr0.model")) != file_md5(sm):
+            problems.append(f"{line}: version 0 is not a copy of src's version 1")
+        if file_md5(os.path.join(wdir, "runs", line, "lr1.model")) == file_md5(sm):
+            problems.append(f"{line}: version 1 is version 0")
+        ev = {e["event"]: e["detail"] for e in events if e["line"] == line}
+        if (ev.get("entered") != start_detail(ws) or ev.get("first-champion") != "the warm start (version 0)"
+                or "--init-forget 8" not in ev.get("entered", "")):
+            problems.append(f"{line}: events {ev}")
+        cmds = {}
+        with open(os.path.join(wdir, "runs", line + ".log")) as f:
+            for x in f:
+                m = re.match(r"== cycle (\d+) train \S+ \S+: (.*)$", x.rstrip("\n"))
+                if m:
+                    cmds[int(m.group(1))] = shlex.split(m.group(2))
+        v0, v1 = os.path.join(wdir, "runs", line, "lr0.model"), os.path.join(wdir, "runs", line, "lr1.model")
+        c1, c2 = cmds.get(1, []), cmds.get(2, [])
+        if (sorted(cmds) != [1, 2] or "--start" not in c1 or c1[c1.index("--start"):c1.index("--start") + 4]
+                != ["--start", v0, "--init-forget", "8"] or "--start" not in c2
+                or c2[c2.index("--start"):c2.index("--start") + 2] != ["--start", v1] or "--init-forget" in c2):
+            problems.append(f"{line}: train commands {cmds}")
+    games = read_csv(os.path.join(wdir, "tour", "games.csv"))
+    sg = read_csv(os.path.join(wdir, "self_games.csv"))
+    if not games or any(parse_entry(g["white"])[3] != 4 or parse_entry(g["black"])[3] != 4 for g in games):
+        problems.append("a round-robin game not at ply 4")
+    if {r["cycle"] for r in sg} != {"1", "2"} or any(parse_entry(r["entry"])[3] != 4 for r in sg):
+        problems.append(f"self-games {[(r['cycle'], r['entry']) for r in sg]}")
+    st = read_json(os.path.join(wdir, "state.json"))
+    if st["status"] != "done" or st["cycle"] != 3:
+        problems.append(f"w: status {st['status']}, cycle {st['cycle']}")
+    bst = read_json(os.path.join(bdir, "state.json"))
+    with open(os.path.join(bdir, "driver.log")) as f:
+        blog = f.read()
+    if (rb.returncode == 0 or bst["status"] != "failed" or "changed since create" not in blog
+            or os.path.exists(os.path.join(bdir, "runs", bc["lines"][0]["line"], "lr0.model"))
+            or os.path.exists(os.path.join(bdir, "tour", "games.csv"))):
+        problems.append(f"bad: exit {rb.returncode}, status {bst['status']}")
+    if problems:
+        raise AssertionError("warm start: " + "; ".join(problems))
+    print(f"ok  warm start and entry_ply 4: w's lines start from src's version 1 (byte copies, md5 recorded and in the "
+          f"events), the first training --init-forget 8 and the second without; {len(games)} games and {len(sg)} "
+          f"self-games, all at ply 4, over {st['cycle']} cycles; a changed start model stops the first cycle; "
+          f"CPU {cpu:.0f} s")
+
+
+def warmreset_test(dirpath):
+    """Tree warm starts with a leaf forget and a warm reset (2026-11-12, the ply-2 rung of training standard v1),
+    training on chessai-grow7 (the entries' train_binary), games on chessai-hybrid19: experiment src (ply 1, 3 cycles,
+    2 rounds a cycle) trains a capped LR tree (T-L-Ne, limit 4, windows of 300, forget 10), a growing probit tree
+    (T-P-Ne-grow, the bar off, windows of 300, a leaf credit per 600) and a growing LR DAG (D-L-Ne-ctx-grow, windows of
+    300, leaf and router credits per 600 and 1,200); experiment w (ply 2, self-games, 3 cycles)
+    starts each line from src's version 2 (its last, whose state the run keeps; w's 3 cycles train in 1 and 2): the
+    capped tree with start_forget 10,
+    the growing tree with start_reset, the DAG with both. Checks: w's lines record the starts (forget; reset only when
+    given) and train on chessai-grow7; version 0 is a byte copy of src's version 2, model and state (the version-0
+    log line gives both md5s); cycle 1 trains `--start <version 0's state>` with --warm-reset and --start-leaf-forget
+    10 as given, and the binary's log says what it did; cycle 2 trains `--start <version 1's state>` without either;
+    the entered events give start_detail."""
+    base = os.path.join(dirpath, "warmreset")
+    shutil.rmtree(base, ignore_errors=True)
+    os.makedirs(base)
+    t0 = os.times()
+    common = dict(kind="experiment", root=base, options=["local"], nice=19, threads=2, jobs=2, rounds_per_cycle=2,
+                  min_rounds=1, calibration={"games": 20}, references=[],
+                  tournament={"binary": os.path.join(BIN, "chessai-hybrid19")})
+    fast = {"--split-threshold": "300"}
+    models = [{"model": "T-L-Ne", "set": dict(fast, **{"--split-limit": "4", "--forget-factor": "10"}), "to": "train"},
+              {"model": "T-P-Ne-grow", "set": dict(fast, **{"--grow-credit": "600", "--grow-mdl": "0"}), "to": "train"},
+              {"model": "D-L-Ne-ctx-grow", "set": dict(fast, **{"--grow-credit": "600", "--router-credit": "1200",
+                                                               "--grow-mdl": "0", "--forget-factor": "10"}),
+               "to": "train"}]  # (no chain or trial z here: a line name past ~100 characters breaks game file names)
+    for m in models:
+        m["train_binary"] = "chessai-grow7"
+    first = [{"start_forget": 10}, {"start_reset": True}, {"start_forget": 10, "start_reset": True}]
+    warm = [dict(m, start={"experiment": "src", "version": 2}, **x) for m, x in zip(models, first)]
+    dirs = {}
+    for name, spec in (("src", dict(common, name="src", models=models, cycles=3, entry_ply=1)),
+                       ("w", dict(common, name="w", models=warm, cycles=3, entry_ply=2, self_games=True))):
+        sp = os.path.join(base, f"{name}.json")
+        write_json(sp, spec)
+        driver(["create", sp], check_code=0)
+        dirs[name] = os.path.join(base, "experiments", name)
+        for k in range(spec["cycles"]):
+            r = driver(["run", dirs[name], "--cycles", "1"])
+            if r.returncode not in (0, EXIT_DONE):
+                raise AssertionError(f"warm reset: {name} cycle {k + 1}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                     f"{r.stderr[-1500:]}")
+    t1 = os.times()
+    cpu = (t1.children_user + t1.children_system) - (t0.children_user + t0.children_system)
+    sdir, wdir = dirs["src"], dirs["w"]
+    cfg = read_json(os.path.join(wdir, "config.json"))
+    events = read_csv(os.path.join(wdir, "events.csv"))
+    g7 = os.path.join(BIN, "chessai-grow7")
+    problems, said = [], []
+    for lc, x in zip(cfg["lines"], first):
+        line, kind, ws = lc["line"], lc["kind"], lc.get("start") or {}
+        sm, ss = (os.path.join(sdir, "runs", line, f"{kind}2.{e}") for e in ("model", "state"))
+        want = dict(experiment="src", dir=sdir, line=line, version=2, path=sm, md5=file_md5(sm),
+                    forget=x.get("start_forget", 1), state=ss, state_md5=file_md5(ss))
+        if x.get("start_reset"):
+            want["reset"] = True
+        if ws != want or lc["train_binary"] != g7:
+            problems.append(f"{line}: start {ws}, train binary {lc['train_binary']}")
+        if file_md5(os.path.join(wdir, "runs", line, f"{kind}0.model")) != file_md5(sm):
+            problems.append(f"{line}: version 0 is not a copy of src's version 2")
+        ev = {e["event"]: e["detail"] for e in events if e["line"] == line}
+        if ev.get("entered") != start_detail(ws):
+            problems.append(f"{line}: entered {ev.get('entered')}")
+        with open(os.path.join(wdir, "runs", line + ".log")) as f:
+            log = f.read()
+        if f"its training state a copy of {ss} (md5 {file_md5(ss)})" not in log:
+            problems.append(f"{line}: no version-0 state copy in its log")
+        parts = re.split(r"^== cycle (\d+) train \S+ \S+: (.*)$", log, flags=re.M)
+        cmds = {int(parts[i]): (shlex.split(parts[i + 1]), parts[i + 2]) for i in range(1, len(parts) - 2, 3)}
+        flags1 = (["--warm-reset"] if x.get("start_reset") else []) + (
+            ["--start-leaf-forget", "10"] if x.get("start_forget") else [])
+        v0s, v1s = (os.path.join(wdir, "runs", line, f"{kind}{v}.state") for v in (0, 1))
+        (c1, out1), (c2, out2) = cmds.get(1, ([], "")), cmds.get(2, ([], ""))
+        i1, i2 = (c.index("--start") if "--start" in c else 0 for c in (c1, c2))
+        if (sorted(cmds) != [1, 2] or c1[i1:i1 + 2 + len(flags1)] != ["--start", v0s] + flags1
+                or c2[i2:i2 + 2] != ["--start", v1s] or "--warm-reset" in c2 or "--start-leaf-forget" in c2):
+            problems.append(f"{line}: train commands {cmds}")
+        logged = [x.get("start_reset", False) and "warm reset at N" in out1,
+                  bool(x.get("start_forget")) and "start leaf forget 10:" in out1]
+        if (logged != [bool(x.get("start_reset")), bool(x.get("start_forget"))]
+                or "warm reset at N" in out2 or "start leaf forget" in out2):
+            problems.append(f"{line}: the binary's warm-start log lines {logged}")
+        said += [l for l in out1.splitlines() if l.startswith(("warm reset at N", "start leaf forget"))]
+    st = read_json(os.path.join(wdir, "state.json"))
+    if st["status"] != "done" or st["cycle"] != 3:
+        problems.append(f"w: status {st['status']}, cycle {st['cycle']}")
+    if problems:
+        raise AssertionError("warm reset: " + "; ".join(problems))
+    print(f"ok  warm reset and leaf forget: w's three lines start from src's version 2 (model and state copied, md5s "
+          f"logged), cycle 1 trains with --warm-reset and --start-leaf-forget 10 as given and cycle 2 without; the "
+          f"binary said: {' | '.join(s[:110] for s in said)}; CPU {cpu:.0f} s")
+
+
+def refwindow_test(dirpath):
+    """reference_window (2026-11-12, for diversity-p2c) at entry ply 1, chessai-hybrid9 games: experiment src (F-P x2,
+    3 cycles) makes the references, xA its first line's version 0 (untrained: the lines soon pass it) and xB its
+    version 2; experiment
+    f (F-P x2, local, self-games, no random references, 5 cycles) runs without the key (root a), with a margin no
+    reference falls below (1e9, root b) and with margin 0 (root c). Checks: b is a's league (games, ratings, models
+    and every record, less the window's totals columns, report line and the state's current cycle); c's window cuts in
+    some cycle, and its records agree in every cycle: driver.log logs a cut iff totals.csv has one (the same count,
+    lines and references); a cut line trains on the local set less its cut games (cycles.csv train_games) and the
+    others on the whole set; each cut reference is rated below the line's floor (history.csv: the line's current
+    version's Elo; the margin 0) and every reference not cut at or above it; up to the first cut c is a's league (the
+    same games and the same models up to the version trained before it). Specs refused at create: the window without
+    frozen_references, a malformed window, with replay."""
+    base = os.path.join(os.path.abspath(dirpath), "refwindow")
+    shutil.rmtree(base, ignore_errors=True)
+    os.makedirs(base)
+    t0 = os.times()
+    common = dict(kind="experiment", options=["local"], nice=19, threads=2, jobs=2, rounds_per_cycle=2, min_rounds=2,
+                  calibration={"games": 20}, references=[], ply1_entries=False, entry_ply=1,
+                  tournament={"binary": os.path.join(BIN, "chessai-hybrid9")})
+
+    def run_to(ldir, k, what):
+        while True:
+            st = read_json(os.path.join(ldir, "state.json"))
+            if st["cycle"] >= k or st["status"] == "done":
+                return
+            r = driver(["run", ldir, "--cycles", "1"])
+            if r.returncode not in (0, EXIT_DONE):
+                raise AssertionError(f"reference window: {what} cycle {k}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                     f"{r.stderr[-1500:]}")
+
+    sp = os.path.join(base, "src.json")
+    write_json(sp, dict(common, root=os.path.join(base, "s"), name="src", cycles=3, seed=3,
+                        models=[{"model": "F-P", "replicates": 2}]))
+    driver(["create", sp], check_code=0)
+    sdir = os.path.join(base, "s", "experiments", "src")
+    run_to(sdir, 3, "src")
+    sline = read_json(os.path.join(sdir, "config.json"))["lines"][0]["line"]
+    refs = [{"name": "xA", "version": f"{sdir}:{sline}@0"}, {"name": "xB", "version": f"{sdir}:{sline}@2"}]
+    cap = 5
+    spec = dict(common, name="f", cycles=cap, seed=5, self_games=True, models=[{"model": "F-P", "replicates": 2}],
+                frozen_references=refs)
+    runs = {}
+    for name, rw in (("a", None), ("b", {"margin": 1e9}), ("c", {"margin": 0})):
+        root = os.path.join(base, name)
+        p = os.path.join(base, f"{name}-f.json")
+        write_json(p, dict(spec, root=root, **({"reference_window": rw} if rw else {})))
+        driver(["create", p], check_code=0)
+        ldir = os.path.join(root, "experiments", "f")
+        run_to(ldir, cap, name)
+        runs[name] = (snapshot(ldir, root), ldir, root)
+    problems = []
+    win = set(REFWIN_TOTALS_FIELDS)
+
+    def plain(snap):  # a snapshot without the window's own totals columns
+        return {k: ([{f: v for f, v in r.items() if f not in win} for r in x] if k == "totals.csv" else x)
+                for k, x in snap.items()}
+
+    a, b = runs["a"][0], runs["b"][0]
+    diff = sorted(k for k in set(a) | set(b) if plain(a).get(k) != plain(b).get(k))
+    if diff:
+        problems.append(f"margin 1e9 against no window: {diff}")
+    if (any(r.get("ref_window_lines") != "0" or r.get("ref_window_margin") != "1e+09" for r in b["totals.csv"][:-1])
+            or b["totals.csv"][-1].get("ref_window_lines") != "" or "ref_window_margin" in a["totals.csv"][0]):
+        problems.append(f"margin 1e9: totals "
+                        f"{[(r.get('ref_window_margin'), r.get('ref_window_lines')) for r in b['totals.csv']]}")
+
+    def reps(ldir, drop_window):
+        return {f: [x for i, x in enumerate(open(os.path.join(ldir, f)).read().splitlines())
+                    if i != 2 and not x.startswith("- Measured CPU")
+                    and not (drop_window and x.startswith("- Reference window"))]
+                for f in sorted(os.listdir(ldir)) if f.startswith("cycle-") and f.endswith(".md")}
+
+    ra, rb = reps(runs["a"][1], False), reps(runs["b"][1], True)
+    if ra != rb:
+        problems.append("margin 1e9: the reports differ from no window's beyond the window's line: "
+                        + ", ".join(f for f in sorted(set(ra) | set(rb)) if ra.get(f) != rb.get(f)))
+    if not all(any(x.startswith("- Reference window (margin 1e+09") for x in open(os.path.join(runs["b"][1], f)))
+               for f in rb):
+        problems.append("margin 1e9: a report without the reference window's line")
+    c, cdir = runs["c"][0], runs["c"][1]
+    tot = {r["cycle"]: r for r in c["totals.csv"]}
+    cyc = {}
+    for r in c["cycles.csv"]:
+        cyc.setdefault(r["cycle"], {})[r["line"]] = r
+    hist = {}
+    for r in c["history.csv"]:
+        if r["elo"]:
+            hist[(r["cycle"], r["entry"])] = float(r["elo"])
+    logged = {}
+    dlog = open(os.path.join(cdir, "driver.log")).read()
+    for m in re.finditer(r"cycle (\d+): reference window \(margin 0\): (.*)$", dlog, re.M):
+        per = {}
+        for part in m.group(2).split("; "):
+            mm = re.fullmatch(r"(\S+) \(floor (-?[\d.]+)\) (\d+) games? cut, (.*) below", part)
+            if not mm:
+                problems.append(f"driver.log: a cut line not understood: {part!r}")
+                continue
+            per[mm.group(1)] = (float(mm.group(2)), int(mm.group(3)),
+                                [x.rsplit(" ", 1)[0] for x in mm.group(4).split(", ")])
+        logged[m.group(1)] = per
+    fz = {f"{x['name']}@{x['version'].rsplit('@', 1)[1]}F-1" for x in refs}
+    cuts, first = 0, None
+    for k in sorted(tot, key=int):
+        t = tot[k]
+        if t["local_games"] == "":  # the last cycle: no local set
+            if t["ref_window_lines"] != "" or k in logged:
+                problems.append(f"cycle {k}: a cut without a local set")
+            continue
+        n, per = int(t["local_games"]), logged.get(k, {})
+        if int(t["ref_window_lines"]) != len(per) or int(t["ref_window_excluded"]) != sum(x[1] for x in per.values()):
+            problems.append(f"cycle {k}: totals {t['ref_window_lines']} lines {t['ref_window_excluded']} games, "
+                            f"driver.log {per}")
+        if t["ref_window_below"] != ";".join(sorted({e for x in per.values() for e in x[2]})):
+            problems.append(f"cycle {k}: totals below {t['ref_window_below']!r}, driver.log {per}")
+        for line, r in cyc.get(k, {}).items():
+            want = n - per[line][1] if line in per else n
+            if r["train_games"] != str(want):
+                problems.append(f"cycle {k} {line}: trained on {r['train_games']} games, not {want}")
+            cur_entry = f"{line}@{int(r['version'])}-1"
+            elo = hist.get((k, cur_entry))
+            if elo is None:
+                problems.append(f"cycle {k} {line}: no rating for {cur_entry}")
+                continue
+            for e in fz:
+                re_ = hist.get((k, e))
+                if re_ is None:
+                    continue
+                if line in per and e in per[line][2] and not re_ < elo + 0.05:
+                    problems.append(f"cycle {k} {line}: {e} cut at {re_} against the line's {elo}")
+                if (line not in per or e not in per[line][2]) and not re_ > elo - 0.05:
+                    problems.append(f"cycle {k} {line}: {e} kept at {re_} against the line's {elo}")
+        if per:
+            cuts += 1
+            first = first or int(k)
+    if not cuts:
+        problems.append("margin 0: the window never cut (too little exercised)")
+    else:  # up to the first cut, c is a's league: the same games, and the same models before the first cut's training
+        ga = [x for x in open(os.path.join(runs["a"][1], "tour", "games.csv")).read().splitlines()[1:]]
+        gc = [x for x in open(os.path.join(cdir, "tour", "games.csv")).read().splitlines()[1:]]
+        rounds_upto = sum(int(tot[str(j)]["rounds"]) for j in range(1, first + 1))
+        early_games = [[x for x in g if int(x.split(",")[0]) < rounds_upto] for g in (ga, gc)]
+        if early_games[0] != early_games[1]:
+            problems.append(f"up to cycle {first} (the first cut) c's games differ from a's")
+        mods = [k for k in c if k.startswith("runs/") and k.endswith(".model")]
+        early = [k for k in mods if int(re.search(r"(\d+)\.model$", k).group(1)) < first]
+        if not early or any(a.get(k) != c[k] for k in early):
+            problems.append(f"models before version {first}: {[k for k in early if a.get(k) != c[k]] or 'none'}")
+        if not any(a.get(k) != c[k] for k in mods):
+            problems.append("c's models are all a's: the cut changed no training")
+    refused = [("no frozen references", {"frozen_references": None}, "for experiments with frozen_references"),
+               ("not a dict", {"reference_window": 30}, 'reference_window must be {"margin": M}'),
+               ("unknown key", {"reference_window": {"margin": 30, "x": 1}}, 'reference_window must be {"margin": M}'),
+               ("negative", {"reference_window": {"margin": -1}}, "margin must be a number from 0"),
+               ("string", {"reference_window": {"margin": "30"}}, "margin must be a number from 0"),
+               ("replay", {"reference_window": {"margin": 30}, "replay": {"share": 0.5, "window": 2}},
+                "with replay: not built")]
+    for tag, extra, msg in refused:
+        p = os.path.join(base, f"refused-{tag.replace(' ', '-')}.json")
+        sp2 = dict(spec, root=os.path.join(base, "refused"), reference_window={"margin": 30})
+        sp2.update(extra)
+        if sp2.get("frozen_references") is None:
+            sp2.pop("frozen_references")
+        write_json(p, sp2)
+        r = driver(["create", p])
+        if r.returncode == 0 or msg not in r.stdout + r.stderr:
+            problems.append(f"create with {tag}: exit {r.returncode}, {(r.stdout + r.stderr).strip()[-200:]!r}")
+    t1 = os.times()
+    cpu = (t1.children_user + t1.children_system) - (t0.children_user + t0.children_system)
+    if problems:
+        raise AssertionError("reference window: " + "; ".join(problems))
+    print(f"ok  reference window: margin 1e9 gives no window's league ({len(a)} items compared, the reports the same "
+          f"but the window's line); margin 0 cut in {cuts} of {cap - 1} training cycles (first in cycle {first}), "
+          f"its records agree (driver.log, totals.csv, cycles.csv train_games, history.csv ratings against the "
+          f"floors), and up to the first cut it is no window's league; {len(refused)} specs refused at create; CPU "
+          f"{cpu:.0f} s")
+
+
+def frozenref_test(dirpath):
+    """Frozen external references ("frozen_references"; 2026-11-12, for diversity-p2) at entry ply 1, chessai-hybrid9
+    games: experiment src (F-P and T-P-Ne local lines, 2 cycles) makes the versions; experiment f (F-P x2, local,
+    self-games, no random references) has src's F-P and T-P-Ne version 1 as frozen references xA and xB (src given
+    by its absolute dir) and runs 4 cycles, straight (root a) and interrupted (root b: at the tournament's start, in
+    the tournament after one round, after one line trained, in the self-games, in the records): the same games,
+    ratings, models, records and reports. Checks from root a's records: the references are in every cycle's field
+    at the entry ply (role frozen-reference, line empty, version 1) and play 2 (N - 1) games every round; never in
+    self-games, cycles.csv, lines.csv or the events; every round-robin game qualifies (reference against reference
+    too); totals.csv's local_* columns are the cycle's games and self-games by kind (each kind present), the lines'
+    train_games their sum, and blank in the last cycle; the references' own games' result lines are src's, and every
+    report finds the tournament's fits on them the same as src's; their copies are src's models (md5), and
+    entries.csv points at them. Root bad: a changed copy stops the first cycle in calibration, before any game.
+    Specs refused at create: a random reference's, a line's or a repeated name, a malformed version, a missing line
+    or model, an empty list, with replay."""
+    base = os.path.join(os.path.abspath(dirpath), "frozenref")  # src by its absolute dir
+    shutil.rmtree(base, ignore_errors=True)
+    os.makedirs(base)
+    t0 = os.times()
+    common = dict(kind="experiment", options=["local"], nice=19, threads=2, jobs=2, rounds_per_cycle=2, min_rounds=2,
+                  calibration={"games": 20}, references=[], ply1_entries=False, entry_ply=1,
+                  tournament={"binary": os.path.join(BIN, "chessai-hybrid9")})
+
+    def run_to(ldir, k, what):
+        while True:
+            st = read_json(os.path.join(ldir, "state.json"))
+            if st["cycle"] >= k or st["status"] == "done":
+                return
+            r = driver(["run", ldir, "--cycles", "1"])
+            if r.returncode not in (0, EXIT_DONE):
+                raise AssertionError(f"frozen references: {what} cycle {k}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                     f"{r.stderr[-1500:]}")
+
+    sp = os.path.join(base, "src.json")
+    write_json(sp, dict(common, root=os.path.join(base, "s"), name="src", cycles=2, seed=3,
+                        models=["F-P", {"model": "T-P-Ne", "set": {"--split-threshold": "2000"}, "to": "train"}]))
+    driver(["create", sp], check_code=0)
+    sdir = os.path.join(base, "s", "experiments", "src")
+    run_to(sdir, 2, "src")
+    slines = [lc["line"] for lc in read_json(os.path.join(sdir, "config.json"))["lines"]]
+    refs = [{"name": "xA", "version": f"{sdir}:{slines[0]}@1"}, {"name": "xB", "version": f"{sdir}:{slines[1]}@1"}]
+    cap = 4
+    spec = dict(common, name="f", cycles=cap, seed=5, self_games=True, models=[{"model": "F-P", "replicates": 2}],
+                frozen_references=refs)
+    faults_b = {1: ["1:tournament"], 2: ["2:tournament-partial", "2:train-one"],
+                3: ["3:self-games-partial", "3:records-half"]}
+    runs, injected = {}, 0
+    for name in ("a", "b", "bad"):
+        root = os.path.join(base, name)
+        p = os.path.join(base, f"{name}-f.json")
+        write_json(p, dict(spec, root=root))
+        driver(["create", p], check_code=0)
+        ldir = os.path.join(root, "experiments", "f")
+        if name == "bad":
+            break
+        for k in range(1, cap + 1):
+            for flt in (faults_b.get(k, []) if name == "b" else []):
+                r = driver(["run", ldir, "--cycles", "1"], {"LEAGUES_FAIL_AT": flt})
+                if r.returncode != EXIT_INJECTED:
+                    raise AssertionError(f"frozen references: fault {flt}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                         f"{r.stderr[-1500:]}")
+                injected += 1
+            run_to(ldir, k, name)
+        reps = {f: [x for i, x in enumerate(open(os.path.join(ldir, f)).read().splitlines())
+                    if i != 2 and not x.startswith("- Measured CPU")]
+                for f in sorted(os.listdir(ldir)) if f.startswith("cycle-") and f.endswith(".md")}
+        own = {f: arena_results(open(os.path.join(ldir, "frozenref", f)).read())
+               for f in sorted(os.listdir(os.path.join(ldir, "frozenref"))) if f.endswith(".arena")}
+        runs[name] = (snapshot(ldir, root), ldir, reps, own)
+    bdir = ldir
+    cfgb = read_json(os.path.join(bdir, "config.json"))
+    with open(frozen_model_path(League(bdir), frozen_refs(cfgb)[0]), "ab") as f:
+        f.write(b"\n")
+    rb = driver(["run", bdir, "--cycles", "1"])
+    problems = []
+    refused = [("random", [{"name": "random", "version": refs[0]["version"]}], {}, "is a random reference's name"),
+               ("line", [{"name": "F-P.loc", "version": refs[0]["version"]}], {"models": ["F-P"]}, "is a line's name"),
+               ("twice", [refs[0], dict(refs[1], name="xA")], {}, "is given twice"),
+               ("malformed", [{"name": "xA", "version": f"{sdir}-{slines[0]}@1"}], {}, "version must be"),
+               ("no line", [{"name": "xA", "version": f"{sdir}:F-L.loc@1"}], {}, "has no line"),
+               ("no model", [{"name": "xA", "version": f"{sdir}:{slines[0]}@7"}], {}, "no model"),
+               ("empty", [], {}, "frozen_references must be"),
+               ("replay", refs, {"replay": {"share": 0.5, "window": 2}}, "with replay: not built")]
+    for tag, fr, extra, msg in refused:
+        p = os.path.join(base, f"refused-{tag.replace(' ', '-')}.json")
+        write_json(p, dict(spec, root=os.path.join(base, "refused"), frozen_references=fr, **extra))
+        r = driver(["create", p])
+        if r.returncode == 0 or msg not in r.stdout + r.stderr:
+            problems.append(f"create with {tag}: exit {r.returncode}, {(r.stdout + r.stderr).strip()[-200:]!r}")
+    t1 = os.times()
+    cpu = (t1.children_user + t1.children_system) - (t0.children_user + t0.children_system)
+    a, b = runs["a"][0], runs["b"][0]
+    diff = sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
+    if diff:
+        problems.append(f"straight and interrupted differ in {diff}")
+    if runs["a"][2] != runs["b"][2]:
+        problems.append("straight and interrupted reports differ")
+    if runs["a"][3] != runs["b"][3]:
+        problems.append("straight and interrupted own games' results differ")
+    ldir = runs["a"][1]
+    cfg = read_json(os.path.join(ldir, "config.json"))
+    fz = frozen_by_entry(cfg)
+    names = {x["name"] for x in frozen_refs(cfg)}
+    games = read_csv(os.path.join(ldir, "tour", "games.csv"))
+    sg = read_csv(os.path.join(ldir, "self_games.csv"))
+    hist = read_csv(os.path.join(ldir, "history.csv"))
+    tot = read_csv(os.path.join(ldir, "totals.csv"))
+    cyc = read_csv(os.path.join(ldir, "cycles.csv"))
+    rounds = read_csv(os.path.join(ldir, "rounds.csv"))
+    if sorted(fz) != ["xA@1F-1", "xB@1F-1"]:
+        problems.append(f"entries {sorted(fz)}")
+    if [r["cycle"] for r in tot] != [str(k) for k in range(1, cap + 1)]:
+        problems.append(f"cycles {[r['cycle'] for r in tot]}")
+    mixes = []
+    for r in tot:
+        c = r["cycle"]
+        h = [x for x in hist if x["cycle"] == c]
+        got = [(x["entry"], x["role"], x["line"], x["version"], x["ply"]) for x in h if x["entry"] in fz]
+        if got != [(e, FROZEN_ROLE, "", "1", "1") for e in sorted(fz)]:
+            problems.append(f"cycle {c}: the references in history.csv: {got}")
+        ts = {int(x["t"]) for x in rounds if x["cycle"] == c}
+        for t in sorted(ts):
+            for e in fz:
+                k = sum(1 for g in games if int(g["tournament"]) == t and e in (g["white"], g["black"]))
+                if k != 2 * (len(h) - 1):
+                    problems.append(f"cycle {c} round {t}: {e} played {k} games in a field of {len(h)}")
+        if not ts or r["games"] != r["ply2_games"]:
+            problems.append(f"cycle {c}: {r['ply2_games']} of {r['games']} games qualify")
+        if int(c) == cap:  # the last cycle trains nothing: no local set
+            if any(r[f] != "" for f in FROZEN_TOTALS_FIELDS):
+                problems.append(f"cycle {c}: local columns {[r[f] for f in FROZEN_TOTALS_FIELDS]} in the last cycle")
+            continue
+        gs = ([(int(g["tournament"]), g["white"], g["black"], "") for g in games if int(g["tournament"]) in ts]
+              + [(int(x["t"]), x["white"], x["black"], "") for x in sg if x["cycle"] == c])
+        mix = local_mix(cfg, gs)
+        mixes.append(tuple(mix[k] for k in MIX_KINDS))
+        want = dict({f"local_{k}": str(mix[k]) for k in MIX_KINDS}, local_games=str(len(gs)),
+                    **{f"local_{k}_share": f"{mix[k] / len(gs):.4f}" for k in MIX_KINDS})
+        if {k: r[k] for k in want} != want:
+            problems.append(f"cycle {c}: local columns {[r[f] for f in FROZEN_TOTALS_FIELDS]}, not {want}")
+        if min(mix[k] for k in ("line_line", "self_games", "line_ref", "ref_ref")) == 0 or mix["random"]:
+            problems.append(f"cycle {c}: local set by kind {mix}")
+        trained = [x["train_games"] for x in cyc if x["cycle"] == c and x["option"] == "local"]
+        if len(trained) != 2 or any(int(x) != len(gs) for x in trained):
+            problems.append(f"cycle {c}: lines trained on {trained} games, not {len(gs)}")
+    if any(x["entry"] in fz or x["white"] in fz or x["black"] in fz for x in sg):
+        problems.append("a reference in the self-games")
+    if any(x["line"] in names for x in cyc + read_csv(os.path.join(ldir, "lines.csv"))
+           + read_csv(os.path.join(ldir, "events.csv"))):
+        problems.append("a reference in cycles.csv, lines.csv or events.csv")
+    ent = {x["entry"]: x for x in read_csv(os.path.join(ldir, "entries.csv"))}
+    La = League(ldir)
+    for x in frozen_refs(cfg):
+        with open(os.path.join(sdir, "owncal", own_key(x["line"], 1) + ".arena")) as f:
+            src_res = arena_results(f.read())
+        if len(src_res) != 1 or runs["a"][3].get(x["name"] + ".arena") != src_res:
+            problems.append(f"{x['name']}: own games {runs['a'][3].get(x['name'] + '.arena')}, src's {src_res}")
+        mp = frozen_model_path(La, x)
+        e = ent.get(frozen_entry_name(cfg, x), {})
+        if (file_md5(mp) != file_md5(x["source_model"]) or e.get("model_file") != mp or e.get("role") != FROZEN_ROLE
+                or e.get("in_field") != "0" or e.get("left_cycle") != str(cap)):
+            problems.append(f"{x['name']}: copy or entries.csv row {e}")
+    for f, lines_ in runs["a"][2].items():
+        if not any("the tournament's fit the same as there for 2 of 2" in x for x in lines_):
+            problems.append(f"{f}: no calibration check line")
+    bst = read_json(os.path.join(bdir, "state.json"))
+    with open(os.path.join(bdir, "driver.log")) as f:
+        blog = f.read()
+    if (rb.returncode == 0 or bst["status"] != "failed" or "has md5" not in blog
+            or os.path.exists(os.path.join(bdir, "tour", "games.csv"))):
+        problems.append(f"bad: exit {rb.returncode}, status {bst['status']}")
+    if problems:
+        raise AssertionError("frozen references: " + "; ".join(problems))
+    print(f"ok  frozen references: f's references xA and xB (src's version 1) play every round-robin at the entry ply "
+          f"and nothing else; run straight and interrupted {injected} times, the same games, ratings, models, records "
+          f"and reports ({len(a)} items compared); per training cycle (line-line, self-games, line-ref, ref-ref, "
+          f"random) {mixes}, the lines trained on all of them; own games and calibrations as in src; a changed copy "
+          f"stops the first cycle; {len(refused)} bad specs refused; CPU {cpu:.0f} s")
+
+
+def gpc_test(dirpath):
+    """games_per_cycle (T; the user, 2026-11-12 ~01:15; analyst 6.53's rule) at ply 1. Experiment g (F-P and F-L local
+    lines, the references random and random-1, self-games, T 45, 3 cycles, chessai-hybrid9 games: a field of 4
+    entries, then 6, so 4 rounds (3.75), then 2 (1.5 rounds up)) run straight (root a) and interrupted (root b: at
+    the tournament's start with its rounds planned, in the tournament after one round, in the self-games, in the
+    records): the same games, ratings, models, records and reports. Checks from root a: config.json has
+    games_per_cycle and neither rounds_per_cycle nor min_rounds; each cycle plays rounds_for_cycle_games(T, N)
+    rounds for its field of N (totals.csv field and rounds; rounds.csv), N (N - 1) games a round, the references'
+    games among them (they count toward T; the two references' games against each other not in training); N - 2
+    self-games a round (the references play none; none in the last cycle); totals.csv's games_per_cycle and
+    gpc_bound, and train_games and train_positions the lines' (the qualifying games plus self-games; blank in the
+    last cycle, which trains nothing); the reports' rule and training-batch lines.
+    Global league h (F-L at ply 1, T 30; F-P added before cycle 2): the rounds from each cycle's field (5 entries:
+    2 rounds; 7: 1), the self-games and the records' rules (global11_record_checks). run refuses games_per_cycle 0,
+    and games_per_cycle with games_per_entry, before touching the league."""
+    base = os.path.join(os.path.abspath(dirpath), "gpc")
+    shutil.rmtree(base, ignore_errors=True)
+    os.makedirs(base)
+    t0 = os.times()
+    T = 45
+    spec = dict(kind="experiment", name="g", options=["local"], nice=19, threads=2, jobs=2, calibration={"games": 20},
+                references=["random", "random-1"], ply1_entries=False, entry_ply=1, self_games=True, cycles=3, seed=7,
+                games_per_cycle=T, models=["F-P", "F-L"], tournament={"binary": os.path.join(BIN, "chessai-hybrid9")})
+    cap = spec["cycles"]
+    faults_b = {1: ["1:tournament"], 2: ["2:tournament", "2:tournament-partial", "2:self-games-partial"],
+                3: ["3:records-half"]}
+
+    def run_to(ldir, k, what):
+        while True:
+            st = read_json(os.path.join(ldir, "state.json"))
+            if st["cycle"] >= k or st["status"] == "done":
+                return
+            r = driver(["run", ldir, "--cycles", "1"])
+            if r.returncode not in (0, EXIT_DONE):
+                raise AssertionError(f"games_per_cycle: {what} cycle {k}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                     f"{r.stderr[-1500:]}")
+
+    runs, injected = {}, 0
+    for name in ("a", "b"):
+        root = os.path.join(base, name)
+        p = os.path.join(base, f"{name}-g.json")
+        write_json(p, dict(spec, root=root))
+        driver(["create", p], check_code=0)
+        ldir = os.path.join(root, "experiments", "g")
+        for k in range(1, cap + 1):
+            for flt in (faults_b.get(k, []) if name == "b" else []):
+                r = driver(["run", ldir, "--cycles", "1"], {"LEAGUES_FAIL_AT": flt})
+                if r.returncode != EXIT_INJECTED:
+                    raise AssertionError(f"games_per_cycle: fault {flt}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                         f"{r.stderr[-1500:]}")
+                injected += 1
+            run_to(ldir, k, name)
+        reps = {f: [x for i, x in enumerate(open(os.path.join(ldir, f)).read().splitlines())
+                    if i != 2 and not x.startswith("- Measured CPU")]
+                for f in sorted(os.listdir(ldir)) if f.startswith("cycle-") and f.endswith(".md")}
+        runs[name] = (snapshot(ldir, root), ldir, reps)
+    problems = []
+    a, b = runs["a"][0], runs["b"][0]
+    diff = sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
+    if diff:
+        problems.append(f"straight and interrupted differ in {diff}")
+    if runs["a"][2] != runs["b"][2]:
+        problems.append("straight and interrupted reports differ")
+    ldir = runs["a"][1]
+    cfg = read_json(os.path.join(ldir, "config.json"))
+    if cfg.get("games_per_cycle") != T or "rounds_per_cycle" in cfg or "min_rounds" in cfg:
+        problems.append(f"config.json: games_per_cycle {cfg.get('games_per_cycle')}, rounds_per_cycle "
+                        f"{cfg.get('rounds_per_cycle')}, min_rounds {cfg.get('min_rounds')}")
+    games = read_csv(os.path.join(ldir, "tour", "games.csv"))
+    sg = read_csv(os.path.join(ldir, "self_games.csv"))
+    tot = read_csv(os.path.join(ldir, "totals.csv"))
+    cyc = read_csv(os.path.join(ldir, "cycles.csv"))
+    rounds = read_csv(os.path.join(ldir, "rounds.csv"))
+    if [r["cycle"] for r in tot] != [str(k) for k in range(1, cap + 1)]:
+        problems.append(f"cycles {[r['cycle'] for r in tot]}")
+    seen = []
+    for r in tot:
+        c = r["cycle"]
+        n, k = int(r["field"]), int(r["rounds"])
+        want, bound = rounds_for_cycle_games(T, n)
+        ts = {int(x["t"]) for x in rounds if x["cycle"] == c}
+        g = [x for x in games if int(x["tournament"]) in ts]
+        ref = [x for x in g if {x["white"], x["black"]} & {"random", "random-1"}]
+        rr = [x for x in g if {x["white"], x["black"]} == {"random", "random-1"}]
+        s = [x for x in sg if x["cycle"] == c]
+        seen.append((n, k, len(g), len(s), r["train_games"], r["train_positions"]))
+        if k != want or len(ts) != k or r["games_per_cycle"] != str(T) or r["gpc_bound"] != bound:
+            problems.append(f"cycle {c}: {k} rounds ({len(ts)} in rounds.csv) with {n} entries, not {want}; "
+                            f"games_per_cycle {r['games_per_cycle']}, gpc_bound {r['gpc_bound']!r}")
+        if (len(g) != n * (n - 1) * k or int(r["games"]) != len(g) or len(ref) != 2 * (2 * n - 3) * k
+                or len(rr) != 2 * k):
+            problems.append(f"cycle {c}: {len(g)} games ({r['games']} in totals.csv), {len(ref)} with a reference, "
+                            f"{len(rr)} between them; not {n * (n - 1) * k}, {2 * (2 * n - 3) * k} and {2 * k}")
+        text = open(os.path.join(ldir, f"cycle-{int(c):03d}.md")).read()
+        per = n * (n - 1)
+        if f"; games_per_cycle {T} over {n} entries: round({T} / {per}) = {plural(want, 'round')})" not in text:
+            problems.append(f"cycle {c}'s report: no rule text for {n} entries")
+        lines_ = [x for x in cyc if x["cycle"] == c and x["option"] == "local"]
+        if int(c) == cap:  # the last cycle trains nothing and plays no self-games
+            if s or r["train_games"] != "" or r["train_positions"] != "" or any(x["train_games"] for x in lines_):
+                problems.append(f"cycle {c}: {len(s)} self-games, training {r['train_games']!r} in the last cycle")
+            if "- Training batch: none" not in text:
+                problems.append(f"cycle {c}'s report: no empty training batch")
+            continue
+        q = sum(1 for x in g if qualifies(x["white"], x["black"], 1))
+        if len(s) != (n - 2) * k or q != len(g) - len(rr) or int(r["ply2_games"]) != q:
+            problems.append(f"cycle {c}: {len(s)} self-games, not {(n - 2) * k}; {q} of {len(g)} games qualify "
+                            f"({r['ply2_games']} in totals.csv)")
+        tg = [int(x["train_games"]) for x in lines_]
+        tp = [int(x["train_positions"]) for x in lines_]
+        if (len(tg) != 2 or set(tg) != {q + len(s)} or r["train_games"] != str(q + len(s))
+                or r["train_positions"] != str(mean_half_up(tp))):
+            problems.append(f"cycle {c}: lines trained on {tg} games ({tp} positions), totals.csv "
+                            f"{r['train_games']} and {r['train_positions']}; not {q + len(s)}")
+        if not any(x.startswith("- Training batch: ") and f"{q + len(s):,} games" in x for x in text.splitlines()):
+            problems.append(f"cycle {c}'s report: training batch line")
+    if [x[:2] for x in seen] != [(4, 4), (6, 2), (6, 2)]:
+        problems.append(f"(entries, rounds) by cycle {[x[:2] for x in seen]}, not [(4, 4), (6, 2), (6, 2)]")
+    # the global league
+    gp = os.path.join(base, "h.json")
+    write_json(gp, dict(kind="global", root=os.path.join(base, "h"), models=[{"recipe": "F-L", "ply": 1}], nice=19,
+                        threads=2, jobs=2, calibration={"games": 20}, games_per_cycle=30))
+    driver(["create", gp], check_code=0)
+    gdir = os.path.join(base, "h", "global")
+    driver(["run", gdir, "--cycles", "1"], check_code=0)
+    driver(["add", gdir, "--ply", "1", "F-P"], check_code=0)
+    driver(["run", gdir, "--cycles", "1"], check_code=0)
+    gtot = read_csv(os.path.join(gdir, "totals.csv"))
+    gsg = read_csv(os.path.join(gdir, "self_games.csv"))
+    nref = len(DEFAULTS["references"])
+    gseen = []
+    for r in gtot:
+        c, n, k = r["cycle"], int(r["field"]), int(r["rounds"])
+        gseen.append((n, k))
+        if k != rounds_for_cycle_games(30, n)[0] or int(r["games"]) != n * (n - 1) * k:
+            problems.append(f"global cycle {c}: {k} rounds, {r['games']} games with {n} entries")
+        if sum(1 for x in gsg if x["cycle"] == c) != (n - nref) * k:
+            problems.append(f"global cycle {c}: {sum(1 for x in gsg if x['cycle'] == c)} self-games, not "
+                            f"{(n - nref) * k}")
+        gtext = open(os.path.join(gdir, f"cycle-{int(c):03d}.md")).read()
+        if f"; games_per_cycle 30 over {n} entries" not in gtext or "- Training batch: " not in gtext:
+            problems.append(f"global cycle {c}'s report: the rule or training batch line")
+    if gseen != [(5, 2), (7, 1)]:
+        problems.append(f"global (entries, rounds) by cycle {gseen}, not [(5, 2), (7, 1)]")
+    rp, summ = global11_record_checks(gdir)
+    problems += rp
+    cpath, spath = os.path.join(gdir, "config.json"), os.path.join(gdir, "state.json")
+    good = read_json(cpath)
+    for bad_cfg, says in ((dict(good, games_per_cycle=0), "games_per_cycle must be a whole number from 1"),
+                          (dict(good, games_per_entry=600), "both set")):
+        write_json(cpath, bad_cfg)
+        st = read_json(spath)
+        r = driver(["run", gdir, "--cycles", "1"])
+        if r.returncode == 0 or says not in r.stderr or read_json(spath) != st:
+            problems.append(f"run with {says!r}: exit {r.returncode} {r.stderr[-300:]}")
+    write_json(cpath, good)
+    t1 = os.times()
+    cpu = (t1.children_user + t1.children_system) - (t0.children_user + t0.children_system)
+    if problems:
+        raise AssertionError("games_per_cycle: " + "; ".join(problems))
+    print(f"ok  games_per_cycle: experiment g (T {T}) run straight and interrupted {injected} times, the same games, "
+          f"ratings, models, records and reports ({len(a)} items compared); (entries, rounds, games, self-games, "
+          f"train games, train positions) by cycle {seen}; the global league's (entries, rounds) {gseen}, its records "
+          f"as the rules give ({summ['games']} games, {summ['self_games']} self-games, {summ['checked']} training "
+          f"sets recomputed); run refuses games_per_cycle 0 and with games_per_entry; CPU {cpu:.0f} s")
+
+
+def observers_test(dirpath):
+    """Observers (observers_option; the user, 2026-11-12 ~10:15: models of other types train on a field's games
+    without playing in it). Experiment o: T-P-Ne capped (split limit 4, threshold 1M, noise 0.03) x2 playing at ply 1,
+    no references, self-games, games_per_cycle 45, 3 cycles, chessai-hybrid17 games. Root a has no observers; roots
+    b (straight) and c (interrupted: at cycle 1's tournament start and after its first observer's training; in cycle
+    2's tournament, self-games, after its first participant's and its first observer's training, and in its records;
+    in cycle 3's records) have the observers F-P and the participants' own recipe x2. Checks: b's games, ratings,
+    models and records are a's but for the observers (their lines.csv rows, state and runs/, observers.csv,
+    totals.csv's observer columns, the reports' Observers line); c is b, reports too; observers T-P-Ne capped #1 and
+    #2 hold participants #1 and #2's models and states byte for byte (the same recipe, replicate and seeds); no
+    observer plays a tournament game or self-game, enters, is rated or calibrated, or has a cycles.csv or events.csv
+    row, and none is crowned; in each cycle every observer trains on exactly the participants' local set
+    (observers.csv train_games and train_positions are cycles.csv's), versions on, and the last cycle trains none;
+    totals.csv's field and rounds count the participants only. create refuses observers in a global league, without
+    the local option, with a warm start, given twice, and an empty list, making nothing."""
+    base = os.path.join(os.path.abspath(dirpath), "observers")
+    shutil.rmtree(base, ignore_errors=True)
+    os.makedirs(base)
+    t0 = os.times()
+    problems = []
+    # create's refusals
+    small = dict(kind="experiment", name="o", options=["local"], models=["F-P"], references=[], entry_ply=1, cycles=3,
+                 seed=7)
+    bad = {"global": (dict(kind="global", models=[{"recipe": "F-L", "ply": 1}], games_per_cycle=30,
+                           observers=["F-P"]), "observers are for experiments"),
+           "no local option": (dict(small, options=["self-play"], observers=["F-P"]), "needs the local option"),
+           "warm start": (dict(small, observers=[{"model": "F-L", "start": "x"}]), "a warm start"),
+           "given twice": (dict(small, observers=["F-L", "F-L"]), "given twice"),
+           "empty list": (dict(small, observers=[]), "observers must be a list")}
+    for what, (s, says) in bad.items():
+        root = os.path.join(base, "refused-" + what.replace(" ", "-"))
+        p = root + ".json"
+        write_json(p, dict(s, root=root))
+        r = driver(["create", p])
+        if r.returncode == 0 or os.path.exists(root) or says not in r.stderr:
+            problems.append(f"create with observers ({what}): exit {r.returncode}, {r.stderr.strip()[-200:]!r}")
+    capped = {"model": "T-P-Ne", "set": {"--split-limit": "4", "--split-threshold": "1000000", "--split-noise": "0.03"},
+              "to": "train"}
+    spec = dict(kind="experiment", name="o", options=["local"], nice=19, threads=2, jobs=2, calibration={"games": 20},
+                references=[], entry_ply=1, self_games=True, cycles=3, seed=59, train={"seed": 59},
+                games_per_cycle=45, models=[dict(capped, replicates=2)],
+                tournament={"binary": os.path.join(BIN, "chessai-hybrid17")})
+    observers = [{"model": "F-P"}, dict(capped, replicates=2)]
+    cap = spec["cycles"]
+    faults_c = {1: ["1:tournament", "1:train-observer"],
+                2: ["2:tournament-partial", "2:self-games-partial", "2:train-one", "2:train-observer",
+                    "2:records-half"],
+                3: ["3:records-half"]}
+
+    def run_to(ldir, k, what):
+        while True:
+            st = read_json(os.path.join(ldir, "state.json"))
+            if st["cycle"] >= k or st["status"] == "done":
+                return
+            r = driver(["run", ldir, "--cycles", "1"])
+            if r.returncode not in (0, EXIT_DONE):
+                raise AssertionError(f"observers: {what} cycle {k}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                     f"{r.stderr[-1500:]}")
+
+    runs, injected = {}, 0
+    for name in ("a", "b", "c"):
+        root = os.path.join(base, name)
+        p = os.path.join(base, f"{name}-o.json")
+        write_json(p, dict(spec, root=root, **({} if name == "a" else {"observers": observers})))
+        driver(["create", p], check_code=0)
+        ldir = os.path.join(root, "experiments", "o")
+        for k in range(1, cap + 1):
+            for flt in (faults_c.get(k, []) if name == "c" else []):
+                r = driver(["run", ldir, "--cycles", "1"], {"LEAGUES_FAIL_AT": flt})
+                if r.returncode != EXIT_INJECTED:
+                    raise AssertionError(f"observers: fault {flt}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                         f"{r.stderr[-1500:]}")
+                injected += 1
+            run_to(ldir, k, name)
+        reps = {f: [x for i, x in enumerate(open(os.path.join(ldir, f)).read().splitlines())
+                    if i != 2 and not x.startswith("- Measured CPU")]
+                for f in sorted(os.listdir(ldir)) if f.startswith("cycle-") and f.endswith(".md")}
+        runs[name] = (snapshot(ldir, root), ldir, reps)
+    ldir = runs["b"][1]
+    cfg = read_json(os.path.join(ldir, "config.json"))
+    names = [lc["line"] for lc in observer_lines(cfg)]
+    parts = [lc["line"] for lc in cfg["lines"] if not lc.get("observer")]
+    if len(names) != 3 or len(parts) != 2:
+        problems.append(f"lines {parts}, observers {names}")
+
+    def strip(snap):  # without the observers
+        out = {}
+        for k, v in snap.items():
+            if k == "observers.csv" or any(k.startswith(f"runs/{n}/") for n in names):
+                continue
+            if k == "lines.csv":
+                v = [r for r in csv.DictReader(io.StringIO(v)) if r["line"] not in names]
+            elif k == "totals.csv":
+                v = [{x: y for x, y in r.items() if x not in OBSERVER_TOTALS_FIELDS} for r in v]
+            elif k == "state":
+                v = dict(v, lines={ln: s for ln, s in v["lines"].items() if ln not in names})
+            out[k] = v
+        return out
+
+    a, b, c = runs["a"][0], runs["b"][0], runs["c"][0]
+    sa, sb = strip(a), strip(b)
+    diff = sorted(k for k in set(sa) | set(sb) if sa.get(k) != sb.get(k))
+    if diff:
+        problems.append(f"with and without observers, the participants' records differ in {diff}")
+    rb = {f: [x for x in v if not x.startswith("- Observers")] for f, v in runs["b"][2].items()}
+    if rb != runs["a"][2]:
+        problems.append("with and without observers, the reports differ beyond the Observers line")
+    diff = sorted(k for k in set(b) | set(c) if b.get(k) != c.get(k))
+    if diff:
+        problems.append(f"straight and interrupted differ in {diff}")
+    if runs["b"][2] != runs["c"][2]:
+        problems.append("straight and interrupted reports differ")
+    twins = 0
+    for ob in names:  # an observer of a participant's model and replicate trains as that participant
+        tw = ob[:-len(OBSERVER_SUFFIX)] + "loc"
+        if tw not in parts:
+            continue
+        twins += 1
+        mp = {k.split("/", 2)[2]: v for k, v in b.items() if k.startswith(f"runs/{tw}/")}
+        mo = {k.split("/", 2)[2]: v for k, v in b.items() if k.startswith(f"runs/{ob}/")}
+        if not mp or mp != mo:
+            problems.append(f"{ob}'s models {sorted(mo)} are not {tw}'s {sorted(mp)} byte for byte")
+    if twins != 2:
+        problems.append(f"{twins} observers of a participant's recipe, not 2")
+    for f in ("tour/games.csv", "tour/players.txt", "tour/ratings.csv", "self_games.csv", "entries.csv",
+              "history.csv", "cycles.csv", "events.csv", "rounds.csv"):
+        p = os.path.join(ldir, f)
+        text = open(p).read() if os.path.exists(p) else ""
+        if any(n in text for n in names):
+            problems.append(f"an observer in {f}")
+    for dp, _, files in os.walk(os.path.join(ldir, "owncal")):
+        for fn in files:
+            if any(n in fn for n in names) or any(n in open(os.path.join(dp, fn), errors="replace").read()
+                                                  for n in names):
+                problems.append(f"an observer in owncal/{fn}")
+    st = read_json(os.path.join(ldir, "state.json"))
+    for n in names:
+        s = st["lines"][n]
+        if (s["status"], s["version"], s["crowned"], s["champion"], s["major"]) != (OBSERVER_STATUS, cap - 1, [0],
+                                                                                     0, 0):
+            problems.append(f"{n}'s state {s}")
+    orows = read_csv(os.path.join(ldir, "observers.csv"))
+    cyc = read_csv(os.path.join(ldir, "cycles.csv"))
+    tot = read_csv(os.path.join(ldir, "totals.csv"))
+    hist = read_csv(os.path.join(ldir, "history.csv"))
+    seen = []
+    for k in range(1, cap + 1):
+        ks = str(k)
+        o = {r["line"]: r for r in orows if r["cycle"] == ks}
+        pr = [r for r in cyc if r["cycle"] == ks]
+        t = next((r for r in tot if r["cycle"] == ks), {})
+        want = {(r["train_games"], r["train_positions"]) for r in pr}
+        seen.append((t.get("field"), t.get("rounds"), sorted(want)))
+        if sorted(o) != sorted(names) or len(pr) != 2:
+            problems.append(f"cycle {k}: observers.csv lines {sorted(o)}, cycles.csv {len(pr)} rows")
+            continue
+        nf = len({r["entry"] for r in hist if r["cycle"] == ks})  # the participants' entries (no references)
+        if (t.get("field"), t.get("rounds"), t.get("observers")) != (str(nf), str(rounds_for_cycle_games(45, nf)[0]),
+                                                                     "3"):
+            problems.append(f"cycle {k}: totals.csv field {t.get('field')}, rounds {t.get('rounds')}, observers "
+                            f"{t.get('observers')}")
+        for n, r in o.items():
+            if r["version"] != str(k - 1):
+                problems.append(f"cycle {k} {n}: version {r['version']}")
+            if k == cap:  # the last cycle trains nothing
+                if r["train_games"] != "" or r["next_version"] != r["version"]:
+                    problems.append(f"cycle {k} {n}: trained ({r['train_games']!r}, next {r['next_version']})")
+            elif (len(want) != 1 or (r["train_games"], r["train_positions"]) not in want
+                  or r["next_version"] != str(k) or int(r["train_games"] or 0) <= 0):
+                problems.append(f"cycle {k} {n}: trained on ({r['train_games']}, {r['train_positions']}), the "
+                                f"participants on {sorted(want)}; next version {r['next_version']}")
+    t1 = os.times()
+    cpu = (t1.children_user + t1.children_system) - (t0.children_user + t0.children_system)
+    if problems:
+        raise AssertionError("observers: " + "; ".join(problems))
+    print(f"ok  observers: experiment o without observers, with 3 straight, and with them interrupted {injected} "
+          f"times: the participants' games, ratings, models and records are the same with and without them "
+          f"({len(sa)} items), straight and interrupted the same ({len(b)} items, reports too); the 2 observers of "
+          f"the participants' recipe trained byte for byte as their twins; no observer plays, enters, is rated or "
+          f"calibrated; (field, rounds, the participants' and observers' (train games, positions)) by cycle {seen}; "
+          f"create refuses {len(bad)} bad specs; CPU {cpu:.0f} s")
+
+
+def cold_games_test(dirpath):
+    """cold_games (cold_games_option; the user's decision, 2026-11-12 10:54). Experiment k: T-P-Ne capped (split limit
+    4, threshold 1M, noise 0.03) x2 playing at ply 1, an F-P observer, no references, self-games, games_per_cycle 45,
+    3 cycles, chessai-hybrid17 games. Roots: a without cold_games; r with {0.02, 0.25, train false}; t with train true,
+    straight, and u the same interrupted (at cycle 1's cold-games start and in its cold round-robins; in cycle 2's cold
+    round-robins, after its first participant's and its observer's training, and in its records; at cycle 3's
+    cold-games start). Checks: r's round-robin games, self-games and models (participants' and observer's) through
+    cycle 2 are a's (cycle 1 decides nothing, so the fields part only when a cold rating changes a decision); t's cycle
+    1 round-robin games and cold games are r's, and its lines and observer train on r's local set plus the cycle's cold
+    games; u is t, reports too; the in-run ratings (history.csv, cycles.csv) are cold/'s fit with cold games and tour/'s
+    without; each cycle plays cold_rounds_for's rounds of the field (cold_rounds.csv, totals.csv) and the round-robins'
+    rounds as without the key; coldpool/ is gone after each cycle; a has no cold files or columns. create refuses
+    cold_games in the global league, without games_per_cycle, with self-play lines, with replay, and malformed."""
+    base = os.path.join(os.path.abspath(dirpath), "cold")
+    shutil.rmtree(base, ignore_errors=True)
+    os.makedirs(base)
+    t0 = os.times()
+    problems = []
+    cg = dict(temperature=0.02, share=0.25, train=True)
+    small = dict(kind="experiment", name="k", options=["local"], models=["F-P"], references=[], entry_ply=1, cycles=3,
+                 seed=7, games_per_cycle=20)
+    bad = {"global": (dict(kind="global", models=[{"recipe": "F-L", "ply": 1}], games_per_cycle=30, cold_games=cg),
+                      "cold_games is for experiments"),
+           "no games_per_cycle": (dict({k: v for k, v in small.items() if k != "games_per_cycle"}, cold_games=cg),
+                                  "needs games_per_cycle"),
+           "self-play lines": (dict(small, options=["local", "self-play"], cold_games=cg), "experiments of local lines"),
+           "replay": (dict(small, replay={"share": 0.5, "window": 2}, cold_games=cg), "with replay"),
+           "a key missing": (dict(small, cold_games=dict(temperature=0.02, share=0.25)), "cold_games must be"),
+           "share 0": (dict(small, cold_games=dict(cg, share=0)), "share must be"),
+           "temperature as text": (dict(small, cold_games=dict(cg, temperature="0.02")), "temperature must be"),
+           "train as text": (dict(small, cold_games=dict(cg, train="yes")), "train must be")}
+    for what, (s, says) in bad.items():
+        root = os.path.join(base, "refused-" + what.replace(" ", "-"))
+        p = root + ".json"
+        write_json(p, dict(s, root=root))
+        r = driver(["create", p])
+        if r.returncode == 0 or os.path.exists(root) or says not in r.stderr:
+            problems.append(f"create with cold_games ({what}): exit {r.returncode}, {r.stderr.strip()[-200:]!r}")
+    capped = {"model": "T-P-Ne", "set": {"--split-limit": "4", "--split-threshold": "1000000", "--split-noise": "0.03"},
+              "to": "train"}
+    spec = dict(kind="experiment", name="k", options=["local"], nice=19, threads=2, jobs=2, calibration={"games": 20},
+                references=[], entry_ply=1, self_games=True, cycles=3, seed=59, train={"seed": 59},
+                games_per_cycle=45, models=[dict(capped, replicates=2)], observers=[{"model": "F-P"}],
+                tournament={"binary": os.path.join(BIN, "chessai-hybrid17")})
+    variants = {"a": {}, "r": dict(cold_games=dict(cg, train=False)), "t": dict(cold_games=cg),
+                "u": dict(cold_games=cg)}
+    cap = spec["cycles"]
+    faults_u = {1: ["1:cold-games", "1:cold-games-partial"],
+                2: ["2:cold-games-partial", "2:train-one", "2:train-observer", "2:records-half"],
+                3: ["3:cold-games"]}
+
+    def run_to(ldir, k, what):
+        while True:
+            st = read_json(os.path.join(ldir, "state.json"))
+            if st["cycle"] >= k or st["status"] == "done":
+                return
+            r = driver(["run", ldir, "--cycles", "1"])
+            if r.returncode not in (0, EXIT_DONE):
+                raise AssertionError(f"cold games: {what} cycle {k}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                     f"{r.stderr[-1500:]}")
+
+    runs, injected, gone = {}, 0, True
+    for name, extra in variants.items():
+        root = os.path.join(base, name)
+        p = os.path.join(base, f"{name}-k.json")
+        write_json(p, dict(spec, root=root, **extra))
+        driver(["create", p], check_code=0)
+        ldir = os.path.join(root, "experiments", "k")
+        for k in range(1, cap + 1):
+            for flt in (faults_u.get(k, []) if name == "u" else []):
+                r = driver(["run", ldir, "--cycles", "1"], {"LEAGUES_FAIL_AT": flt})
+                if r.returncode != EXIT_INJECTED:
+                    raise AssertionError(f"cold games: fault {flt}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                         f"{r.stderr[-1500:]}")
+                injected += 1
+            run_to(ldir, k, name)
+            gone = gone and not os.path.exists(os.path.join(ldir, COLD_POOL))
+        reps = {f: [x for i, x in enumerate(open(os.path.join(ldir, f)).read().splitlines())
+                    if i != 2 and not x.startswith("- Measured CPU")]
+                for f in sorted(os.listdir(ldir)) if f.startswith("cycle-") and f.endswith(".md")}
+        runs[name] = (snapshot(ldir, root), ldir, reps)
+    if not gone:
+        problems.append("coldpool/ outlived a cycle")
+    snaps = {n: v[0] for n, v in runs.items()}
+    dirs = {n: v[1] for n, v in runs.items()}
+    cfg = read_json(os.path.join(dirs["t"], "config.json"))
+    obs = [lc["line"] for lc in observer_lines(cfg)]
+    parts = [lc["line"] for lc in cfg["lines"] if not lc.get("observer")]
+
+    def rounds_of(n, f="rounds.csv"):  # {cycle: [t, ...]} of a run's round-robins (or cold rounds)
+        out = {}
+        for r in read_csv(os.path.join(dirs[n], f)):
+            out.setdefault(int(r["cycle"]), []).append(int(r["t"]))
+        return out
+
+    def games_of(n, ts, f="tour/games.csv"):
+        return [x for x in open(os.path.join(dirs[n], f)).read().splitlines()[1:] if int(x.split(",", 1)[0]) in ts]
+
+    def models(n, upto):
+        return {k: v for k, v in snaps[n].items() if k.startswith("runs/") and k.endswith(".model")
+                and int(re.search(r"(\d+)\.model$", k).group(1)) <= upto}
+
+    # r (rating only) is a until a cold rating changes a decision: cycles 1-2 at least
+    ra, rr = rounds_of("a"), rounds_of("r")
+    ts12 = set(ra[1] + ra[2])
+    if ra[1] != rr[1] or ra[2] != rr[2] or games_of("a", ts12) != games_of("r", ts12) or not games_of("a", ts12):
+        problems.append("rating only: the round-robins of cycles 1-2 differ from the run without cold games")
+    sg = [[r for r in snaps[n]["self_games.csv"] if int(r["cycle"]) <= 2] for n in ("a", "r")]
+    if sg[0] != sg[1] or not sg[0]:
+        problems.append("rating only: the self-games of cycles 1-2 differ")
+    ma, mr = models("a", 2), models("r", 2)
+    if ma != mr or len(ma) != 3 * (len(parts) + len(obs)):
+        problems.append(f"rating only: versions 0-2 differ from the run without cold games ({len(ma)}, {len(mr)} "
+                        f"models)")
+    # t (train) plays r's games in cycle 1, cold games too, and trains on them as well
+    rt = rounds_of("t")
+    if rt[1] != rr[1] or games_of("t", set(rt[1])) != games_of("r", set(rr[1])):
+        problems.append("train: cycle 1's round-robins differ from the rating-only run's")
+    ct, cr = rounds_of("t", "cold_rounds.csv"), rounds_of("r", "cold_rounds.csv")
+    if ct[1] != cr[1] or games_of("t", set(ct[1]), "cold/games.csv") != games_of("r", set(cr[1]), "cold/games.csv") \
+            or not games_of("t", set(ct[1]), "cold/games.csv"):
+        problems.append("train: cycle 1's cold games differ from the rating-only run's")
+    tot = {n: {int(x["cycle"]): x for x in read_csv(os.path.join(dirs[n], "totals.csv"))} for n in variants}
+    cyc = {n: read_csv(os.path.join(dirs[n], "cycles.csv")) for n in variants}
+    orow = {n: read_csv(os.path.join(dirs[n], "observers.csv")) for n in variants}
+    for k in (1, 2):
+        tg = {n: {x["line"]: int(x["train_games"]) for x in cyc[n] if x["cycle"] == str(k)} for n in ("r", "t")}
+        og = {n: {x["line"]: int(x["train_games"]) for x in orow[n] if x["cycle"] == str(k)} for n in ("r", "t")}
+        cold_k = int(tot["t"][k]["cold_games"])
+        if (sorted(tg["t"]) != sorted(parts) or k == 1 and any(tg["t"][x] != tg["r"][x] + cold_k for x in parts)
+                or any(og["t"][x] != tg["t"][parts[0]] for x in obs) or any(og["r"][x] != tg["r"][parts[0]] for x in obs)
+                or int(tot["t"][k]["cold_in_local"]) != cold_k or tot["r"][k]["cold_in_local"] != "0"
+                or len(set(tg["t"].values())) != 1):
+            problems.append(f"train: cycle {k}'s sets: lines {tg}, observers {og}, cold games {cold_k}, in the local "
+                            f"set {tot['t'][k]['cold_in_local']} (rating only {tot['r'][k]['cold_in_local']})")
+    if models("t", 1) == models("r", 1) or models("t", 0) != models("r", 0):
+        problems.append("train: version 1 is the rating-only run's (the cold games didn't train) or version 0 isn't")
+    # u (interrupted) is t (straight)
+    diff = sorted(k for k in set(snaps["t"]) | set(snaps["u"]) if snaps["t"].get(k) != snaps["u"].get(k))
+    if diff:
+        problems.append(f"straight and interrupted differ in {diff}")
+    if runs["t"][2] != runs["u"][2]:
+        problems.append("straight and interrupted reports differ")
+    # the in-run ratings: cold/'s fit with cold games, tour/'s without; the records
+    seen = []
+    for n in variants:
+        ldir = dirs[n]
+        c3 = read_csv(os.path.join(ldir, "history.csv"))
+        last = max(int(x["cycle"]) for x in c3)
+        fit = read_ratings(os.path.join(ldir, "cold" if n != "a" else "tour"))
+        z = read_json(os.path.join(ldir, "config.json")).get("rating_zero")
+        z0 = fit[z][0] if z in fit else 0.0
+        want = {e: e1(r[0] - z0) for e, r in fit.items()}
+        got = {x["entry"]: x["elo"] for x in c3 if x["cycle"] == str(last)}
+        if not got or any(want.get(e, "") != v for e, v in got.items()):
+            problems.append(f"{n}: history.csv's cycle {last} Elo {got} is not {'cold' if n != 'a' else 'tour'}/'s "
+                            f"fit {want}")
+        hist = read_csv(os.path.join(ldir, "history.csv"))
+        for k in range(1, cap + 1):
+            nf = len({x["entry"] for x in hist if x["cycle"] == str(k)})
+            t = tot[n][k]
+            if t["rounds"] != str(rounds_for_cycle_games(45, nf)[0]):
+                problems.append(f"{n} cycle {k}: {t['rounds']} round-robins for {nf} entries")
+            if n == "a":
+                continue
+            want_r = cold_rounds_for(cg, 45, nf)[0]
+            crs = [x for x in read_csv(os.path.join(ldir, "cold_rounds.csv")) if x["cycle"] == str(k)]
+            if (len(crs) != want_r or t["cold_rounds"] != str(want_r)
+                    or t["cold_games"] != str(want_r * nf * (nf - 1))
+                    or any(x["players"] != str(nf) or x["games"] != str(nf * (nf - 1)) for x in crs)
+                    or t["cold_train"] != ("0" if n == "r" else "1")
+                    or (k == cap and t["cold_in_local"] != "0")):
+                problems.append(f"{n} cycle {k}: cold rounds {len(crs)} of {nf} entries, totals {t}")
+            seen.append((n, k, nf, t["cold_rounds"], t["cold_games"], t["cold_in_local"]))
+    for f in ("cold/games.csv", "cold_rounds.csv", "cold/ratings.csv"):
+        if os.path.exists(os.path.join(dirs["a"], f)):
+            problems.append(f"a run without cold games has {f}")
+    if any(x in tot["a"][1] for x in COLD_TOTALS_FIELDS):
+        problems.append("a run without cold games has cold columns")
+    t1 = os.times()
+    cpu = (t1.children_user + t1.children_system) - (t0.children_user + t0.children_system)
+    if problems:
+        raise AssertionError("cold games: " + "; ".join(problems))
+    print(f"ok  cold games: experiment k (2 lines, an observer) without them, with them rating only, and training on "
+          f"them straight and interrupted {injected} times: rating only plays and trains as without them through "
+          f"cycle 2 ({len(ma)} models of versions 0-2); training on them, cycle 1's round-robins and cold games are the "
+          f"rating-only run's and the lines and observer train on its set plus the cold games; straight and interrupted "
+          f"the same ({len(snaps['t'])} items, reports too); the in-run ratings are cold/'s fit (tour/'s without); "
+          f"(run, cycle, entries, cold rounds, cold games, in the local set) {seen}; create refuses {len(bad)} bad specs; "
+          f"CPU {cpu:.0f} s")
+
+
+def train_filter_test(dirpath):
+    """train_filter and self_games_topup (2026-11-12, the Elo-filtered multi-kind experiment; the rule as the user set
+    it at 13:22-13:24). Experiment k: F-L, F-P and T-P-Ne capped (split limit 4, threshold 1M, noise 0.03) playing at
+    ply 1, no references, self-games, games_per_cycle 45, cold_games {0.02, 0.25, train true}, 4 cycles,
+    chessai-hybrid17 games. Roots: c without the new keys; f with train_filter {"margin": "se"} (each line's floor its
+    current version's cold Elo minus that rating's standard error); g with {"margin": 0} (the strictest floor: the
+    line's own rating) and self_games_topup, straight, and h the same interrupted (at cycle 1's top-up start and after
+    its top-up games are saved; in cycle 2 after a line's training and in its records; in cycle 3 after a line's
+    training; at cycle 4's top-up start, which plays none: the last cycle trains nothing); r with {"margin": "se"},
+    the top-up and cold games that rate only; s with {"margin": 0, "smooth": 2} and the top-up. Checks: config.json
+    keeps the smoothing (1 by default); f's and g's round-robins, cold games and self-games of cycle 1 are c's (the
+    filter and the top-up change training only); the top-up games are never rated (each cycle's tour/ games are its
+    rounds' round-robins); in every cycle that trains, each line's rating, SE and floor recomputed from cycles.csv and
+    history.csv (its current version's Elo and 95% interval over 1.96; with smoothing its versions' mean), every
+    other player's rating likewise, and each line kept exactly the games whose players are all rated at or above its
+    floor (its own games too: no exemption; its current version's self-games always), with its own games and those it
+    kept counted, and with the top-up played min(45, the set's games less its kept ones) top-up games against its
+    champion, or itself when the champion is its current version or is rated below its floor; its training games and
+    the trainer's positions are the kept ones plus the top-up ones; totals.csv's columns are the lines' sums;
+    topuppool/ and trainsets/ are gone after each cycle; h is g (snapshot and reports); c has no filter columns.
+    create refuses train_filter without cold_games, with observers, in the global league, or malformed (another text
+    margin, "se" smoothed, a smoothing of 0 too), and self_games_topup without train_filter, without self_games, or
+    not true."""
+    base = os.path.join(os.path.abspath(dirpath), "filter")
+    shutil.rmtree(base, ignore_errors=True)
+    os.makedirs(base)
+    t0 = os.times()
+    problems = []
+    cg = dict(temperature=0.02, share=0.25, train=True)
+    tf_se, tf0, tf2 = {"margin": "se"}, {"margin": 0}, {"margin": 0, "smooth": 2}
+    small = dict(kind="experiment", name="k", options=["local"], models=["F-P"], references=[], entry_ply=1, cycles=3,
+                 seed=7, games_per_cycle=20, self_games=True, cold_games=cg)
+    bad = {"without cold_games": (dict({k: v for k, v in small.items() if k != "cold_games"}, train_filter=tf_se),
+                                  "needs cold_games"),
+           "with observers": (dict(small, train_filter=tf_se, observers=["F-L"]), "with observers"),
+           "in the global league": (dict(kind="global", models=[{"recipe": "F-L", "ply": 1}], games_per_cycle=30,
+                                         train_filter=tf_se), "train_filter is for experiments"),
+           "a negative margin": (dict(small, train_filter={"margin": -5}), "margin must be"),
+           "a margin as text": (dict(small, train_filter={"margin": "50"}), "margin must be"),
+           "another text margin": (dict(small, train_filter={"margin": "SE"}), "margin must be"),
+           "se smoothed": (dict(small, train_filter={"margin": "se", "smooth": 2}), "smooth 1"),
+           "a smoothing of 0": (dict(small, train_filter={"margin": 50, "smooth": 0}), "smooth must be"),
+           "another key": (dict(small, train_filter={"margin": 50, "share": 0.5}), "train_filter must be"),
+           "top-up without the filter": (dict(small, self_games_topup=True), "needs train_filter"),
+           "top-up without self-games": (dict(small, self_games=False, train_filter=tf_se, self_games_topup=True),
+                                         "needs self_games"),
+           "top-up as text": (dict(small, train_filter=tf_se, self_games_topup="yes"), "must be true")}
+    for what, (s, says) in bad.items():
+        root = os.path.join(base, "refused-" + what.replace(" ", "-"))
+        p = root + ".json"
+        write_json(p, dict(s, root=root))
+        r = driver(["create", p])
+        if r.returncode == 0 or os.path.exists(root) or says not in r.stderr:
+            problems.append(f"create ({what}): exit {r.returncode}, {r.stderr.strip()[-200:]!r}")
+    capped = {"model": "T-P-Ne", "set": {"--split-limit": "4", "--split-threshold": "1000000", "--split-noise": "0.03"},
+              "to": "train"}
+    spec = dict(kind="experiment", name="k", options=["local"], nice=19, threads=2, jobs=2, calibration={"games": 20},
+                references=[], entry_ply=1, self_games=True, cycles=4, seed=61, train={"seed": 61},
+                games_per_cycle=45, models=["F-L", "F-P", capped], cold_games=cg,
+                tournament={"binary": os.path.join(BIN, "chessai-hybrid17")})
+    variants = {"c": {}, "f": dict(train_filter=tf_se), "g": dict(train_filter=tf0, self_games_topup=True),
+                "h": dict(train_filter=tf0, self_games_topup=True),
+                "r": dict(train_filter=tf_se, self_games_topup=True, cold_games=dict(cg, train=False)),
+                "s": dict(train_filter=tf2, self_games_topup=True)}
+    want_cfg = {"f": {"margin": "se", "smooth": 1}, "g": {"margin": 0, "smooth": 1}, "h": {"margin": 0, "smooth": 1},
+                "r": {"margin": "se", "smooth": 1}, "s": {"margin": 0, "smooth": 2}}
+    cap = spec["cycles"]
+    faults_h = {1: ["1:topup-games", "1:topup-partial"], 2: ["2:train-one", "2:records-half"], 3: ["3:train-one"],
+                4: ["4:topup-games"]}
+
+    def run_to(ldir, k, what):
+        while True:
+            st = read_json(os.path.join(ldir, "state.json"))
+            if st["cycle"] >= k or st["status"] == "done":
+                return
+            r = driver(["run", ldir, "--cycles", "1"])
+            if r.returncode not in (0, EXIT_DONE):
+                raise AssertionError(f"train filter: {what} cycle {k}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                     f"{r.stderr[-1500:]}")
+
+    runs, injected, gone = {}, 0, True
+    for name, extra in variants.items():
+        root = os.path.join(base, name)
+        p = os.path.join(base, f"{name}-k.json")
+        write_json(p, dict(spec, root=root, **extra))
+        driver(["create", p], check_code=0)
+        ldir = os.path.join(root, "experiments", "k")
+        for k in range(1, cap + 1):
+            for flt in (faults_h.get(k, []) if name == "h" else []):
+                r = driver(["run", ldir, "--cycles", "1"], {"LEAGUES_FAIL_AT": flt})
+                if r.returncode != EXIT_INJECTED:
+                    raise AssertionError(f"train filter: fault {flt}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                         f"{r.stderr[-1500:]}")
+                injected += 1
+            run_to(ldir, k, name)
+            gone = gone and not any(os.path.exists(os.path.join(ldir, d)) for d in (TOPUP_POOL, "trainsets"))
+        reps = {f: [x for i, x in enumerate(open(os.path.join(ldir, f)).read().splitlines())
+                    if i != 2 and not x.startswith("- Measured CPU")]
+                for f in sorted(os.listdir(ldir)) if f.startswith("cycle-") and f.endswith(".md")}
+        runs[name] = (snapshot(ldir, root), ldir, reps)
+    if not gone:
+        problems.append("topuppool/ or trainsets/ outlived a cycle")
+    snaps = {n: v[0] for n, v in runs.items()}
+    dirs = {n: v[1] for n, v in runs.items()}
+
+    def rows_of(n, f):
+        return read_csv(os.path.join(dirs[n], f))
+
+    def games_of(n, ts, f):
+        return [x for x in open(os.path.join(dirs[n], f)).read().splitlines()[1:] if int(x.split(",", 1)[0]) in ts]
+
+    def ts_of(n, f, k):
+        return {int(r["t"]) for r in rows_of(n, f) if r["cycle"] == str(k)}
+
+    # the filter and the top-up change training only: cycle 1's games are c's
+    for n in ("f", "g"):
+        for f, rf in (("tour/games.csv", "rounds.csv"), ("cold/games.csv", "cold_rounds.csv")):
+            ta, tb = ts_of("c", rf, 1), ts_of(n, rf, 1)
+            if ta != tb or games_of("c", ta, f) != games_of(n, tb, f) or not games_of(n, tb, f):
+                problems.append(f"{n}: cycle 1's {f} differs from the run without the filter's")
+        sa, sb = ([r for r in rows_of(x, "self_games.csv") if r["cycle"] == "1"] for x in ("c", n))
+        if sa != sb or not sa:
+            problems.append(f"{n}: cycle 1's self-games differ from the run without the filter's")
+
+    def mean(vals):
+        xs = [v for v in vals if v is not None]
+        return sum(xs) / len(xs) if xs else None
+
+    # each training cycle's sets, recomputed from the records
+    seen, opponents, cuts, tops, others_cut, own_cut, se_cut = [], set(), 0, 0, 0, 0, 0
+    for n in ("f", "g", "h", "r", "s"):
+        cfg = read_json(os.path.join(dirs[n], "config.json"))
+        if cfg.get("train_filter") != want_cfg[n]:
+            problems.append(f"{n}: config.json's train_filter is {cfg.get('train_filter')}")
+            continue
+        m, ks = cfg["train_filter"]["margin"], cfg["train_filter"]["smooth"]
+        cold_train, topup = cfg["cold_games"]["train"], bool(cfg.get("self_games_topup"))
+        cyc, hist = rows_of(n, "cycles.csv"), rows_of(n, "history.csv")
+        tot = {int(x["cycle"]): x for x in rows_of(n, "totals.csv")}
+        sgs = rows_of(n, "self_games.csv")
+        elo2 = {(x["line"], int(x["cycle"])): float(x["elo2"]) if x["elo2"] != "" else None for x in cyc}
+        helo = {(x["entry"], int(x["cycle"])): float(x["elo"]) if x["elo"] != "" else None for x in hist}
+        hci = {(x["entry"], int(x["cycle"])): float(x["ci95"]) if x["ci95"] != "" else None for x in hist}
+
+        def parsed(f):
+            out = []
+            for x in open(os.path.join(dirs[n], f)).read().splitlines()[1:]:
+                t, w, b, _, pl = x.split(",")[:5]
+                out.append((int(t), w, b, int(pl)))
+            return out
+
+        tour, cold = parsed("tour/games.csv"), parsed("cold/games.csv")
+        for k in range(1, cap + 1):
+            rows_k = [x for x in cyc if x["cycle"] == str(k)]
+            ts, cts = ts_of(n, "rounds.csv", k), ts_of(n, "cold_rounds.csv", k)
+            field = {x["entry"] for x in hist if x["cycle"] == str(k)}
+            nr = len([g for g in tour if g[0] in ts])
+            if nr != len(ts) * len(field) * (len(field) - 1):
+                problems.append(f"{n} cycle {k}: {nr} rated games in {len(ts)} rounds of {len(field)} entries")
+            if tot[k]["filter_margin"] != ("se" if m == "se" else "0") or tot[k]["filter_smooth"] != str(ks):
+                problems.append(f"{n} cycle {k}: totals.csv's margin and smoothing {tot[k]['filter_margin']}, "
+                                f"{tot[k]['filter_smooth']}")
+            if k == cap:  # the last cycle trains nothing
+                if any(x.get(f) != "" for x in rows_k for f in FILTER_CYCLES_FIELDS) \
+                        or tot[k]["filter_set_games"] != "":
+                    problems.append(f"{n}: the last cycle's filter columns aren't blank")
+                continue
+            games = ([(w, b, pl) for t, w, b, pl in tour if t in ts]
+                     + [(x["white"], x["black"], int(x["plies"])) for x in sgs if x["cycle"] == str(k)]
+                     + ([(w, b, pl) for t, w, b, pl in cold if t in cts] if cold_train else []))
+            win = range(max(1, k - ks + 1), k + 1)
+            rl = {x["line"]: mean([elo2.get((x["line"], j)) for j in win]) for x in rows_k}
+            main = {x["entry2"]: x["line"] for x in rows_k}
+
+            def rated(e):
+                return rl[main[e]] if e in main else mean([helo.get((e, j)) for j in win])
+
+            u, pu = len(games), sum(g[2] for g in games)
+            t = tot[k]
+            if (t["filter_set_games"], t["filter_set_positions"]) != (str(u), str(pu)):
+                problems.append(f"{n} cycle {k}: the local set is {u} games, {pu} positions; totals.csv "
+                                f"{t['filter_set_games']}, {t['filter_set_positions']}")
+            sum_cut = sum_top = ncut = 0
+            for x in rows_k:
+                r_l = rl[x["line"]]
+                ci = hci.get((x["entry2"], k))
+                se = None if ci is None else ci / 1.96
+                floor = None if r_l is None else (r_l - m if m != "se" else None if se is None else r_l - se)
+                if (x["filter_rating"], x["filter_se"], x["filter_floor"]) != (e1(r_l), e1(se), e1(floor)):
+                    problems.append(f"{n} cycle {k} {x['line']}: rating, SE and floor {x['filter_rating']}, "
+                                    f"{x['filter_se']}, {x['filter_floor']}, not {e1(r_l)}, {e1(se)}, {e1(floor)}")
+                own = {h["entry"] for h in hist if h["cycle"] == str(k) and h["line"] == x["line"]}
+
+                def ok(e):
+                    s = rated(e)
+                    return floor is None or s is None or s >= floor
+
+                kept = [g for g in games if ok(g[0]) and ok(g[1])]
+                ours = [g for g in games if g[0] in own or g[1] in own]
+                ours_kept = [g for g in ours if ok(g[0]) and ok(g[1])]
+                if any(not (ok(g[0]) and ok(g[1])) for g in games if g[0] == g[1] == x["entry2"]):
+                    problems.append(f"{n} cycle {k} {x['line']}: a self-game of its current version was cut")
+                top = min(45, u - len(kept)) if topup else 0
+                ch = x["champion_entry"]
+                opp = "" if not top else ("self" if x["decision"] in ("first-champion", "new-champion")
+                                          or ch == x["entry2"] or not ok(ch) else ch)
+                got = (int(x["filter_kept_games"]), int(x["filter_kept_positions"]), int(x["filter_own_games"]),
+                       int(x["filter_own_kept"]), int(x["topup_games"]), x["topup_opponent"], x["filter_kept_share"])
+                want = (len(kept), sum(g[2] for g in kept), len(ours), len(ours_kept), top, opp,
+                        f"{len(kept) / u:.4f}")
+                if got != want:
+                    problems.append(f"{n} cycle {k} {x['line']}: (kept, positions, own, own kept, top-up, opponent, "
+                                    f"share) {got}, not {want}")
+                if (int(x["train_games"]) != len(kept) + top
+                        or int(x["train_positions"]) != int(x["filter_kept_positions"]) + int(x["topup_positions"])
+                        or (top > 0) != (int(x["topup_positions"]) > 0)):
+                    problems.append(f"{n} cycle {k} {x['line']}: trained on {x['train_games']} games, "
+                                    f"{x['train_positions']} positions; kept {len(kept)}, top-up {top} "
+                                    f"({x['topup_positions']} positions)")
+                sum_cut += u - len(kept)
+                sum_top += top
+                ncut += len(kept) < u
+                cuts += len(kept) < u
+                tops += top > 0
+                others_cut += len(kept) < u and len(ours_kept) < len(kept)
+                own_cut += len(ours_kept) < len(ours)
+                se_cut += m == "se" and len(kept) < u
+                if top:
+                    opponents.add("self" if opp == "self" else "champion")
+                seen.append((n, k, x["line"].split(".")[0][:6], len(kept), len(ours_kept), len(ours), u, top, opp[:4]))
+            if (t["filter_cut_games"], t["topup_games"], t["filter_lines_cut"]) != (str(sum_cut), str(sum_top),
+                                                                                       str(ncut)):
+                problems.append(f"{n} cycle {k}: totals.csv cut {t['filter_cut_games']} games of "
+                                f"{t['filter_lines_cut']} lines and topped up {t['topup_games']}, not {sum_cut} of "
+                                f"{ncut} and {sum_top}")
+    if not cuts or not tops or not own_cut:
+        problems.append(f"the filter cut {cuts} lines' sets ({own_cut} of them some of their own games) and topped up "
+                        f"{tops}: the test is vacuous")
+    # straight and interrupted
+    diff = sorted(k for k in set(snaps["g"]) | set(snaps["h"]) if snaps["g"].get(k) != snaps["h"].get(k))
+    if diff:
+        problems.append(f"straight and interrupted differ in {diff}")
+    if runs["g"][2] != runs["h"][2]:
+        problems.append("straight and interrupted reports differ")
+    # without the keys: no filter columns
+    if any(f in rows_of("c", "cycles.csv")[0] for f in FILTER_CYCLES_FIELDS) \
+            or any(f in rows_of("c", "totals.csv")[0] for f in FILTER_TOTALS_FIELDS):
+        problems.append("a run without train_filter has its columns")
+    t1 = os.times()
+    cpu = (t1.children_user + t1.children_system) - (t0.children_user + t0.children_system)
+    if problems:
+        raise AssertionError("train filter: " + "; ".join(problems))
+    print(f"ok  train filter: experiment k (F-L, F-P, a capped tree) without it, filtered on each line's current cold "
+          f"Elo minus its SE, at margin 0 topped up straight and interrupted {injected} times, on the SE topped up "
+          f"with cold games that rate only, and at margin 0 smoothed over 2 cycles: cycle 1's games are the unfiltered "
+          f"run's; every line's rating, SE and floor, kept set (no exemption for its own games; its current version's "
+          f"self-games always), own games kept, top-up games and opponent ({sorted(opponents)}), and its training "
+          f"games and positions, recomputed from the records; straight and interrupted the same ({len(snaps['g'])} "
+          f"items, reports too); (run, cycle, line, kept, own kept, own, set, top-up, opponent) {seen}; create "
+          f"refuses {len(bad)} bad specs; {own_cut} sets cut some of their own games, {others_cut} cut sets kept some "
+          f"of the others' games, {se_cut} cut on the SE; CPU {cpu:.0f} s")
+
+
 # ---------------------------------------------------------------- main
+
+def openings_test(dirpath):
+    """openings (openings_option; 2026-11-12). Experiment k: T-P-Ne capped (split limit 4, threshold 1M, noise 0.03)
+    x2 playing at ply 1, self-games, round-robins and self-games at T 0.02, rating-only cold games (T 0.02, share 0.25),
+    games_per_cycle 45, 2 cycles, chessai-hybrid19 games. Roots: a without openings; o with {"plies": 4}, straight; u
+    the same interrupted (in cycle 1's round-robins, self-games and training, in cycle 2's cold games and records); f
+    with openings, train_filter at margin 0 and self_games_topup, its first cycle. Checks: every round-robin, self-game and
+    top-up command opens (--opening-plies 4), no cold-games or own-calibration command does, nor any of a's; cycle 1's
+    cold games and version 0's own calibration games are a's, its round-robins and self-games are not; every line's
+    training positions are its set's plies (round-robins and self-games), so the opening plies train; u is o, reports
+    too; the config and the index carry the key, a's config has none. create refuses openings in the global league,
+    malformed, with a tournament binary that lacks the flags, and the flags in tournament.flags."""
+    base = os.path.join(os.path.abspath(dirpath), "openings")
+    shutil.rmtree(base, ignore_errors=True)
+    os.makedirs(base)
+    t0 = os.times()
+    problems = []
+    h19 = os.path.join(BIN, "chessai-hybrid19")
+    t002 = ["--reports-last", "--sparse-fit", "--policy", "log-odds-softmax", "--temperature", "0.02"]
+    small = dict(kind="experiment", name="k", options=["local"], models=["F-P"], references=[], entry_ply=1, cycles=3,
+                 seed=7, games_per_cycle=20, tournament={"binary": h19, "flags": t002})
+    bad = {"global": (dict(kind="global", models=[{"recipe": "F-L", "ply": 1}], games_per_cycle=30,
+                           tournament={"binary": h19}, openings={"plies": 4}), "openings is for experiments"),
+           "plies 0": (dict(small, openings={"plies": 0}), "openings.plies must be"),
+           "plies as text": (dict(small, openings={"plies": "4"}), "openings.plies must be"),
+           "no plies": (dict(small, openings={"temperature": 1}), "openings must be"),
+           "an unknown key": (dict(small, openings={"plies": 4, "t": 1}), "openings must be"),
+           "temperature 0": (dict(small, openings={"plies": 4, "temperature": 0}), "openings.temperature must be"),
+           "an old binary": (dict(small, tournament={"binary": os.path.join(BIN, "chessai-hybrid17"), "flags": t002},
+                                  openings={"plies": 4}), "lacks them"),
+           "flags in tournament.flags": (dict(small, tournament={"binary": h19, "flags": t002 + ["--opening-plies", "4"]}),
+                                         "give openings, not --opening-plies")}
+    for what, (s, says) in bad.items():
+        root = os.path.join(base, "refused-" + what.replace(" ", "-"))
+        p = root + ".json"
+        write_json(p, dict(s, root=root))
+        r = driver(["create", p])
+        if r.returncode == 0 or os.path.exists(root) or says not in r.stderr:
+            problems.append(f"create with openings ({what}): exit {r.returncode}, {r.stderr.strip()[-200:]!r}")
+    capped = {"model": "T-P-Ne", "set": {"--split-limit": "4", "--split-threshold": "1000000", "--split-noise": "0.03"},
+              "to": "train"}
+    spec = dict(kind="experiment", name="k", options=["local"], nice=19, threads=2, jobs=2, calibration={"games": 20},
+                references=[], entry_ply=1, self_games=True, cycles=2, seed=59, train={"seed": 59},
+                games_per_cycle=45, models=[dict(capped, replicates=2)],
+                cold_games=dict(temperature=0.02, share=0.25, train=False), tournament={"binary": h19, "flags": t002})
+    op = {"plies": 4}
+    variants = {"a": ({}, 2), "o": (dict(openings=op), 2), "u": (dict(openings=op), 2),
+                "f": (dict(openings=op, train_filter={"margin": 0}, self_games_topup=True), 1)}
+    faults_u = {1: ["1:tournament-partial", "1:self-games-partial", "1:train-one"],
+                2: ["2:cold-games-partial", "2:records-half"]}
+
+    def run_to(ldir, k, what):
+        while True:
+            st = read_json(os.path.join(ldir, "state.json"))
+            if st["cycle"] >= k or st["status"] == "done":
+                return
+            r = driver(["run", ldir, "--cycles", "1"])
+            if r.returncode not in (0, EXIT_DONE):
+                raise AssertionError(f"openings: {what} cycle {k}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                     f"{r.stderr[-1500:]}")
+
+    runs, injected = {}, 0
+    for name, (extra, cap) in variants.items():
+        root = os.path.join(base, name)
+        p = os.path.join(base, f"{name}-k.json")
+        write_json(p, dict(spec, root=root, **extra))
+        driver(["create", p], check_code=0)
+        ldir = os.path.join(root, "experiments", "k")
+        for k in range(1, cap + 1):
+            for flt in (faults_u.get(k, []) if name == "u" else []):
+                r = driver(["run", ldir, "--cycles", "1"], {"LEAGUES_FAIL_AT": flt})
+                if r.returncode != EXIT_INJECTED:
+                    raise AssertionError(f"openings: fault {flt}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                         f"{r.stderr[-1500:]}")
+                injected += 1
+            run_to(ldir, k, name)
+        reps = {f: [x for i, x in enumerate(open(os.path.join(ldir, f)).read().splitlines())
+                    if i != 2 and not x.startswith("- Measured CPU")]
+                for f in sorted(os.listdir(ldir)) if f.startswith("cycle-") and f.endswith(".md")}
+        runs[name] = (snapshot(ldir, root), ldir, reps, root)
+    snaps = {n: v[0] for n, v in runs.items()}
+    dirs = {n: v[1] for n, v in runs.items()}
+
+    def commands(n, rel):  # the binary's command lines in logs (run_measured's "== title date: command" lines)
+        d, f = os.path.split(os.path.join(dirs[n], rel))
+        files = [os.path.join(d, x) for x in sorted(os.listdir(d)) if x.endswith(f[1:])] if f.startswith("*") \
+            else [os.path.join(d, f)]
+        out = []
+        for x in files:
+            if os.path.exists(x):
+                out += [y for y in open(x).read().splitlines() if y.startswith("== ") and ": exit " not in y]
+        return out
+
+    seen = {}
+    for n in variants:
+        opens = n != "a"
+        for what, rel, want in (("round-robins", "tour/tournament.log", opens), ("self-games", "self_games.log", opens),
+                                ("top-up games", "topup_games.log", opens), ("cold games", "cold/tournament.log", False),
+                                ("own calibration", "owncal/*.arena", False)):
+            cs = commands(n, rel)
+            seen[(n, what)] = len(cs)
+            if any(("--opening-plies 4" in c) != want or ("--opening-temperature" in c) for c in cs):
+                problems.append(f"{n}: {what} commands {'without' if want else 'with'} the opening: {cs[:1]}")
+            if not cs and what != "top-up games":
+                problems.append(f"{n}: no {what} commands")
+        cfg = read_json(os.path.join(dirs[n], "config.json"))
+        if cfg.get("openings", "none") != (op if opens else "none"):
+            problems.append(f"{n}: config.json's openings {cfg.get('openings', 'none')}")
+        idx = [x for x in read_json(os.path.join(runs[n][3], "index.json"))["leagues"] if x["name"] == "k"]
+        if len(idx) != 1 or idx[0].get("openings", "none") != (op if opens else "none"):
+            problems.append(f"{n}: index.json's openings {idx}")
+    if not seen[("f", "top-up games")]:
+        problems.append("f: no top-up games played (the test needs a cut)")
+
+    def rows(n, f):
+        return read_csv(os.path.join(dirs[n], f))
+
+    def games_of(n, cycle, f="tour/games.csv", rounds="rounds.csv"):
+        ts = {r["t"] for r in rows(n, rounds) if r["cycle"] == str(cycle)}
+        return [x for x in read_csv(os.path.join(dirs[n], f)) if x["tournament"] in ts]
+
+    if games_of("a", 1, "cold/games.csv", "cold_rounds.csv") != games_of("o", 1, "cold/games.csv", "cold_rounds.csv") \
+            or not games_of("a", 1, "cold/games.csv", "cold_rounds.csv"):
+        problems.append("cycle 1's cold games differ from the run without openings")
+    if games_of("a", 1) == games_of("o", 1) or len(games_of("a", 1)) != len(games_of("o", 1)):
+        problems.append("cycle 1's round-robins are the run without openings' (or their number differs)")
+    sg = {n: [{k: v for k, v in r.items() if k != "price_s"} for r in rows(n, "self_games.csv") if r["cycle"] == "1"]
+          for n in ("a", "o")}
+    if sg["a"] == sg["o"] or len(sg["a"]) != len(sg["o"]) or not sg["a"]:
+        problems.append("cycle 1's self-games are the run without openings'")
+    own0 = {}  # version 0's own games (gone with the version: their results and model md5) and calibration fits
+    for n in ("a", "o"):
+        oc = os.path.join(dirs[n], "owncal")
+        own0[n] = {x: (arena_results(open(os.path.join(oc, x)).read()),
+                       read_json(os.path.join(oc, x[:-len(".arena")] + ".json"))["md5"])
+                   for x in sorted(os.listdir(oc)) if x.endswith("@0.arena")}
+        own0[n]["fits"] = sorted({(os.path.basename(m["path"]), m["params"], m["n"]) for m in CAL_LINE_RE.finditer(
+            open(os.path.join(dirs[n], "tour", "tournament.log")).read()) if m["path"].endswith("@0")})
+    if own0["a"] != own0["o"] or len(own0["a"]) != 3 or len(own0["a"]["fits"]) != 2 \
+            or not all(v[0] for k, v in own0["a"].items() if k != "fits"):
+        problems.append(f"version 0's own calibration games or fits differ: {own0}")
+    trained = []
+    for n in ("a", "o", "f"):
+        for c in sorted({r["cycle"] for r in rows(n, "rounds.csv")}, key=int):
+            plies = sum(int(x["plies"]) for x in games_of(n, c)) + sum(
+                int(x["plies"]) for x in rows(n, "self_games.csv") if x["cycle"] == c)
+            for x in rows(n, "cycles.csv"):
+                if x["cycle"] != c or x["train_positions"] in ("", None):
+                    continue
+                trained.append((n, int(c), x["line"].split("#")[-1], int(x["train_positions"]), plies))
+                if n != "f" and int(x["train_positions"]) != plies:
+                    problems.append(f"{n} cycle {c} {x['line']}: {x['train_positions']} training positions, the "
+                                    f"set's plies {plies}")
+    diff = sorted(k for k in set(snaps["o"]) | set(snaps["u"]) if snaps["o"].get(k) != snaps["u"].get(k))
+    if diff:
+        problems.append(f"straight and interrupted differ in {diff}")
+    if runs["o"][2] != runs["u"][2]:
+        problems.append("straight and interrupted reports differ")
+    t1 = os.times()
+    cpu = (t1.children_user + t1.children_system) - (t0.children_user + t0.children_system)
+    if problems:
+        raise AssertionError("openings: " + "; ".join(problems))
+    print(f"ok  openings: experiment k (2 lines, cold games rating only) without them, with 4 random plies straight "
+          f"and interrupted {injected} times, and with them, train_filter at margin 0 and top-up games: the "
+          f"round-robins, self-games and top-up games open, the cold games and own calibration games don't (commands "
+          f"by run and kind {sorted((k[0], k[1], v) for k, v in seen.items() if v)}); cycle 1's cold games and "
+          f"version 0's own calibration games are the run without openings', its round-robins and self-games are not; "
+          f"every line's training positions are its set's plies {trained}; straight and interrupted the same "
+          f"({len(snaps['o'])} items, reports too); create refuses {len(bad)} bad specs; CPU {cpu:.0f} s")
+
+
+def rate_every_test(dirpath):
+    """rate_every (rate_every_option; 2026-11-12, the user's sub-cycles). Experiment k: F-L, F-P and T-P-Ne capped
+    (split limit 4, threshold 1M, noise 0.03) at ply 1, no references, self-games, games_per_cycle 45, cold games that
+    rate only (T 0.02, share 0.25), train_filter at margin 0 (the strictest floor: a line's own rating) and
+    self_games_topup, 9 cycles, chessai-hybrid19 games. Roots: n without the key (2 cycles); r with rate_every 4,
+    straight; i the same interrupted (in cycle 1's top-up games, cycle 2's cold-games phase, decisions and top-up
+    games, cycle 3's training and records, cycle 5's cold games and decisions, cycle 6's training); p with rate_every
+    4, F-L and F-P, no filter, plateau {"cycles": 1, "min_cycles": 2} (without the key it would stop in cycle 2).
+    Checks: cycles 1, 5 and 9 rate (cycles.csv's and totals.csv's rated, the cold rounds, cold games only there);
+    every other cycle's decisions are UNRATED_DECISION with blank Elo columns in cycles.csv and history.csv; champions
+    change and new-champion events happen on rated cycles only; each line's champion_age is the cycle less its
+    champion's crowning cycle; in every cycle that trains, each line's rating, SE and floor are the last rated
+    cycle's, and its kept games, top-up games and opponent recomputed from the records with the last rated cycle's
+    ratings (an entry rated then keeps its Elo, a line's current version takes its line's rating, any other entry is
+    unrated) match; cycle 1 is n's (games, cold games, self-games, records, version 1's models) and so are cycle 2's
+    round-robins and self-games; r ends in cycle 9 (rated) without training in it; i is r (snapshot and reports); p
+    ends on a rated cycle (5 or 9), not in cycle 2; the reports carry the Rated/Unrated cycle line; config.json and the
+    index carry rate_every, n's config has none and rate_every 1 gives n's config; state.json keeps champion_cycle and
+    rate_carry; a scaled plateau's K is times 2, 4 or 1 for rate_scale sqrt, linear or none. create refuses rate_every
+    malformed, a cap that isn't a rated cycle, without cold_games, with cold games that train, in the global league,
+    with a smoothed train_filter, a scaled plateau without rate_scale or with another, rate_scale with an explicit
+    plateau, and rate_scale without rate_every (or with 1)."""
+    base = os.path.join(os.path.abspath(dirpath), "rateevery")
+    shutil.rmtree(base, ignore_errors=True)
+    os.makedirs(base)
+    t0 = os.times()
+    problems = []
+    h19 = os.path.join(BIN, "chessai-hybrid19")
+    cg = dict(temperature=0.02, share=0.25, train=False)
+    small = dict(kind="experiment", name="k", options=["local"], models=["F-P"], references=[], entry_ply=1, cycles=9,
+                 seed=7, games_per_cycle=20, self_games=True, cold_games=cg, tournament={"binary": h19})
+    scaled = {"scaled": True, "min_cycles": 5}
+    bad = {"rate_every 0": (dict(small, rate_every=0), "rate_every must be"),
+           "rate_every as text": (dict(small, rate_every="4"), "rate_every must be"),
+           "rate_every 2.5": (dict(small, rate_every=2.5), "rate_every must be"),
+           "rate_every true": (dict(small, rate_every=True), "rate_every must be"),
+           "a cap that doesn't rate": (dict(small, rate_every=4, cycles=10), "e.g. 9 or 13, not 10"),
+           "without cold_games": (dict({k: v for k, v in small.items() if k != "cold_games"}, rate_every=4),
+                                  "needs cold_games"),
+           "cold games that train": (dict(small, rate_every=4, cold_games=dict(cg, train=True)), "that train"),
+           "in the global league": (dict(kind="global", models=[{"recipe": "F-L", "ply": 1}], games_per_cycle=30,
+                                         rate_every=4), "rate_every is for experiments"),
+           "a smoothed filter": (dict(small, rate_every=4, train_filter={"margin": 50, "smooth": 2}), "smoothed"),
+           "scaled without rate_scale": (dict(small, rate_every=4, plateau=scaled), 'needs "rate_scale"'),
+           "another rate_scale": (dict(small, rate_every=4, plateau=dict(scaled, rate_scale="cube")),
+                                  'needs "rate_scale"'),
+           "rate_scale with explicit cycles": (dict(small, rate_every=4,
+                                                    plateau={"cycles": 3, "min_cycles": 0, "rate_scale": "sqrt"}),
+                                               "for scaled plateaus"),
+           "rate_scale without rate_every": (dict(small, plateau=dict(scaled, rate_scale="sqrt")),
+                                             "with rate_every above 1"),
+           "rate_scale with rate_every 1": (dict(small, rate_every=1, plateau=dict(scaled, rate_scale="sqrt")),
+                                            "with rate_every above 1")}
+    for what, (s, says) in bad.items():
+        root = os.path.join(base, "refused-" + what.replace(" ", "-"))
+        p = root + ".json"
+        write_json(p, dict(s, root=root))
+        r = driver(["create", p])
+        if r.returncode == 0 or os.path.exists(root) or says not in r.stderr:
+            problems.append(f"create ({what}): exit {r.returncode}, {r.stderr.strip()[-200:]!r}")
+    made = {}  # created only: the configs
+    for what, s in {"nokey": dict(small, models=["F-L", "F-P"]),
+                    "one": dict(small, models=["F-L", "F-P"], rate_every=1),
+                    "unscaled": dict(small, models=["F-L", "F-P"], plateau=scaled),
+                    **{"scale-" + x: dict(small, models=["F-L", "F-P"], rate_every=4, plateau=dict(scaled, rate_scale=x))
+                       for x in RATE_SCALES}}.items():
+        root = os.path.join(base, "made-" + what)
+        p = root + ".json"
+        write_json(p, dict(s, root=root))
+        driver(["create", p], check_code=0)
+        made[what] = {k: v for k, v in read_json(os.path.join(root, "experiments", "k", "config.json")).items()
+                      if k not in ("created", "root")}
+    if made["one"] != made["nokey"] or "rate_every" in made["nokey"]:
+        problems.append("rate_every 1 doesn't give the config without the key")
+    k50 = made["unscaled"]["plateau"]
+    if k50 != dict(cycles=50, min_cycles=5, scaled=dict(k2=PLATEAU_K2_DEFAULT, lines=2)):
+        problems.append(f"the scaled plateau without rate_every is {k50}")
+    for x, f in zip(RATE_SCALES, (2, 4, 1)):
+        want = dict(cycles=50 * f, min_cycles=5, scaled=dict(k2=PLATEAU_K2_DEFAULT, lines=2, rate_every=4,
+                                                             rate_scale=x))
+        if made["scale-" + x]["plateau"] != want or made["scale-" + x].get("rate_every") != 4:
+            problems.append(f"rate_scale {x}: plateau {made['scale-' + x]['plateau']}, not {want}")
+    capped = {"model": "T-P-Ne", "set": {"--split-limit": "4", "--split-threshold": "1000000", "--split-noise": "0.03"},
+              "to": "train"}
+    spec = dict(kind="experiment", name="k", options=["local"], nice=19, threads=2, jobs=2, calibration={"games": 20},
+                references=[], entry_ply=1, self_games=True, cycles=9, seed=67, train={"seed": 67},
+                games_per_cycle=45, models=["F-L", "F-P", capped], cold_games=cg, tournament={"binary": h19},
+                train_filter={"margin": 0}, self_games_topup=True)
+    variants = {"n": ({}, 2), "r": (dict(rate_every=4), 9), "i": (dict(rate_every=4), 9),
+                "p": (dict(rate_every=4, models=["F-L", "F-P"], plateau={"cycles": 1, "min_cycles": 2},
+                           train_filter=None, self_games_topup=None), 9)}
+    faults_i = {1: ["1:topup-games"], 2: ["2:cold-games", "2:decide", "2:topup-partial"], 3: ["3:train-one",
+                                                                                           "3:records-half"],
+                5: ["5:cold-games-partial", "5:decide"], 6: ["6:train-one"]}
+
+    def run_to(ldir, k, what):
+        while True:
+            st = read_json(os.path.join(ldir, "state.json"))
+            if st["cycle"] >= k or st["status"] == "done":
+                return
+            r = driver(["run", ldir, "--cycles", "1"])
+            if r.returncode not in (0, EXIT_DONE):
+                raise AssertionError(f"rate_every: {what} cycle {k}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                     f"{r.stderr[-1500:]}")
+
+    runs, injected = {}, 0
+    for name, (extra, cap) in variants.items():
+        root = os.path.join(base, name)
+        p = os.path.join(base, f"{name}-k.json")
+        write_json(p, {k: v for k, v in dict(spec, root=root, **extra).items() if v is not None})
+        driver(["create", p], check_code=0)
+        ldir = os.path.join(root, "experiments", "k")
+        for k in range(1, cap + 1):
+            for flt in (faults_i.get(k, []) if name == "i" else []):
+                r = driver(["run", ldir, "--cycles", "1"], {"LEAGUES_FAIL_AT": flt})
+                if r.returncode != EXIT_INJECTED:
+                    raise AssertionError(f"rate_every: fault {flt}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                         f"{r.stderr[-1500:]}")
+                injected += 1
+            run_to(ldir, k, name)
+        reps = {f: [x for i, x in enumerate(open(os.path.join(ldir, f)).read().splitlines())
+                    if i != 2 and not x.startswith("- Measured CPU")]
+                for f in sorted(os.listdir(ldir)) if f.startswith("cycle-") and f.endswith(".md")}
+        runs[name] = (snapshot(ldir, root), ldir, reps, root)
+    snaps = {n: v[0] for n, v in runs.items()}
+    dirs = {n: v[1] for n, v in runs.items()}
+
+    def rows_of(n, f):
+        return read_csv(os.path.join(dirs[n], f))
+
+    def ts_of(n, f, k):
+        return {int(r["t"]) for r in rows_of(n, f) if r["cycle"] == str(k)}
+
+    def games_of(n, f, ts):
+        return [x for x in open(os.path.join(dirs[n], f)).read().splitlines()[1:] if int(x.split(",", 1)[0]) in ts]
+
+    rated = [1, 5, 9]
+    # the schedule
+    cyc, tot, hist = rows_of("r", "cycles.csv"), rows_of("r", "totals.csv"), rows_of("r", "history.csv")
+    if sorted({int(x["cycle"]) for x in cyc}) != list(range(1, 10)):
+        problems.append(f"r ran cycles {sorted({int(x['cycle']) for x in cyc})}")
+    if any(x["rated"] != ("1" if int(x["cycle"]) in rated else "0") for x in cyc + tot):
+        problems.append("r: cycles.csv's or totals.csv's rated column is off the schedule")
+    if sorted({int(x["cycle"]) for x in rows_of("r", "cold_rounds.csv")}) != rated \
+            or any((int(x["cold_games"]) > 0) != (int(x["cycle"]) in rated) for x in tot):
+        problems.append("r: cold games outside the rated cycles (or none in one)")
+    elo_cols = ("elo1", "ci1", "elo2", "ci2", "champion_elo", "champion_ci", "diff", "se_diff", "z")
+    for x in cyc:
+        k = int(x["cycle"])
+        if k in rated:
+            if x["decision"] == UNRATED_DECISION or x["elo2"] == "":
+                problems.append(f"r cycle {k} {x['line']}: rated cycle, decision {x['decision']}, Elo {x['elo2']!r}")
+        elif x["decision"] != UNRATED_DECISION or any(x[f] != "" for f in elo_cols):
+            problems.append(f"r cycle {k} {x['line']}: unrated cycle, decision {x['decision']}, "
+                            f"{[x[f] for f in elo_cols]}")
+    if any((h["elo"] == "" and h["ci95"] == "" and h["games"] == "") == (int(h["cycle"]) in rated) for h in hist):
+        problems.append("r: history.csv's Elo blank in a rated cycle or set in an unrated one")
+    # champions change on rated cycles only; their age
+    ev = rows_of("r", "events.csv")
+    if any(e["event"] == "new-champion" and int(e["cycle"]) not in rated for e in ev):
+        problems.append("r: a crowning in an unrated cycle")
+    crowned_at, ages, crowns = {}, [], 0
+    for k in range(1, 10):
+        for x in [y for y in cyc if y["cycle"] == str(k)]:
+            line = x["line"]
+            if k == 1:
+                crowned_at[line] = 1
+            ages.append(int(x["champion_age"]))
+            if int(x["champion_age"]) != k - crowned_at[line]:
+                problems.append(f"r cycle {k} {line}: champion_age {x['champion_age']}, not {k - crowned_at[line]}")
+            if k > 1:
+                prev = [y for y in cyc if y["cycle"] == str(k - 1) and y["line"] == line][0]
+                if prev["champion"] != x["champion"] and k - 1 not in rated:
+                    problems.append(f"r cycle {k} {line}: the champion changed after unrated cycle {k - 1}")
+            if x["decision"] == "new-champion":
+                crowned_at[line] = k
+                crowns += 1
+    # the train filter in every cycle that trains: the last rated cycle's floors and ratings
+    tour = [x.split(",")[:5] for x in open(os.path.join(dirs["r"], "tour", "games.csv")).read().splitlines()[1:]]
+    sgs = rows_of("r", "self_games.csv")
+    helo = {(h["entry"], int(h["cycle"])): float(h["elo"]) if h["elo"] != "" else None for h in hist}
+    seen, carried, opponents, cut = [], 0, set(), 0
+    for k in range(1, 9):
+        last = k - (k - 1) % 4
+        rows_k = [x for x in cyc if x["cycle"] == str(k)]
+        rows_l = {x["line"]: x for x in cyc if x["cycle"] == str(last)}
+        ts = ts_of("r", "rounds.csv", k)
+        games = ([(w, b, int(pl)) for t, w, b, _, pl in tour if int(t) in ts]
+                 + [(x["white"], x["black"], int(x["plies"])) for x in sgs if x["cycle"] == str(k)])
+        main = {x["entry2"]: x["line"] for x in rows_k}
+        field_l = {h["entry"] for h in hist if h["cycle"] == str(last)}
+
+        def rating(e):
+            if e in field_l:
+                return helo[(e, last)]
+            if e in main:
+                v = rows_l[main[e]]["filter_rating"]
+                return float(v) if v != "" else None
+            return None
+
+        u = len(games)
+        for x in rows_k:
+            if k in rated:  # this cycle's fit: margin 0, the floor is the rating; the SE its 95% interval / 1.96
+                bad3 = (x["filter_rating"], x["filter_floor"]) != (x["elo2"], x["elo2"]) or x["ci2"] == "" \
+                    or abs(float(x["filter_se"]) - float(x["ci2"]) / 1.96) > 0.06
+                want3 = (x["elo2"], f"~{x['ci2']}/1.96", x["elo2"])
+            else:  # the last rated cycle's, as it recorded them
+                want3 = (rows_l[x["line"]]["filter_rating"], rows_l[x["line"]]["filter_se"],
+                         rows_l[x["line"]]["filter_floor"])
+                bad3 = (x["filter_rating"], x["filter_se"], x["filter_floor"]) != want3
+            if bad3:
+                problems.append(f"r cycle {k} {x['line']}: rating, SE and floor {x['filter_rating']}, "
+                                f"{x['filter_se']}, {x['filter_floor']}, not {want3}")
+            floor = float(x["filter_floor"]) if x["filter_floor"] != "" else None
+
+            def ok(e):
+                s = rating(e)
+                return floor is None or s is None or s >= floor
+
+            kept = [g for g in games if ok(g[0]) and ok(g[1])]
+            top = min(45, u - len(kept))
+            ch = x["champion_entry"]
+            opp = "" if not top else ("self" if x["decision"] in ("first-champion", "new-champion")
+                                      or ch == x["entry2"] or not ok(ch) else ch)
+            got = (int(x["filter_kept_games"]), int(x["topup_games"]), x["topup_opponent"])
+            if got != (len(kept), top, opp):
+                problems.append(f"r cycle {k} {x['line']}: (kept, top-up, opponent) {got}, not {(len(kept), top, opp)}")
+            if int(x["train_games"]) != len(kept) + top:
+                problems.append(f"r cycle {k} {x['line']}: trained on {x['train_games']} games, not "
+                                f"{len(kept) + top}")
+            carried += k not in rated
+            cut += len(kept) < u and k not in rated
+            if top:
+                opponents.add("self" if opp == "self" else "champion" + ("" if k in rated else " (carried)"))
+            seen.append((k, x["line"].split(".")[0][:6], len(kept), u, top, opp[:6]))
+    last9 = [x for x in cyc if x["cycle"] == "9"]
+    if any(x["train_games"] != "" for x in last9) or read_json(os.path.join(dirs["r"], "state.json"))["status"] != "done":
+        problems.append("r: cycle 9 trained, or the experiment isn't done")
+    st = read_json(os.path.join(dirs["r"], "state.json"))
+    if (st.get("rate_carry") or {}).get("cycle") != 9 or any("champion_cycle" not in ls for ls in st["lines"].values()):
+        problems.append(f"r: state.json's rate_carry cycle {(st.get('rate_carry') or {}).get('cycle')}, champion_cycle "
+                        f"{[ls.get('champion_cycle') for ls in st['lines'].values()]}")
+    if not cut or "champion (carried)" not in opponents:
+        problems.append(f"the carried filter cut {cut} sets, opponents {sorted(opponents)}: the test is vacuous")
+    # cycle 1 is n's; cycle 2's round-robins and self-games too
+    for f, rf in (("tour/games.csv", "rounds.csv"), ("cold/games.csv", "cold_rounds.csv")):
+        for k in ((1, 2) if f == "tour/games.csv" else (1,)):
+            ta, tb = ts_of("n", rf, k), ts_of("r", rf, k)
+            if ta != tb or games_of("n", f, ta) != games_of("r", f, tb) or not games_of("r", f, tb):
+                problems.append(f"r: cycle {k}'s {f} differs from n's")
+    if ts_of("r", "cold_rounds.csv", 2) or not ts_of("n", "cold_rounds.csv", 2):
+        problems.append("cycle 2's cold games: r plays some, or n none")
+    for k in (1, 2):
+        sa, sb = ([r for r in rows_of(x, "self_games.csv") if r["cycle"] == str(k)] for x in ("n", "r"))
+        if sa != sb or not sa:
+            problems.append(f"r: cycle {k}'s self-games differ from n's")
+    ca = [{f: v for f, v in x.items() if f not in MEASURED} for x in rows_of("n", "cycles.csv") if x["cycle"] == "1"]
+    cb = [{f: v for f, v in x.items() if f not in MEASURED and f not in RATE_CYCLES_FIELDS}
+          for x in rows_of("r", "cycles.csv") if x["cycle"] == "1"]
+    if ca != cb or any(f in rows_of("n", "cycles.csv")[0] for f in RATE_CYCLES_FIELDS) \
+            or any(f in rows_of("n", "totals.csv")[0] for f in RATE_TOTALS_FIELDS):
+        problems.append("r: cycle 1's cycles.csv rows differ from n's, or n has the rate columns")
+    v1 = sorted((k, v) for k, v in snaps["n"].items() if re.search(r"(lr|probit|bdt)1\.model$", k))
+    if len(v1) != 3 or v1 != sorted((k, v) for k, v in snaps["r"].items() if re.search(r"(lr|probit|bdt)1\.model$", k)):
+        problems.append(f"version 1's models differ from n's: {v1}")
+    # straight and interrupted
+    diff = sorted(k for k in set(snaps["r"]) | set(snaps["i"]) if snaps["r"].get(k) != snaps["i"].get(k))
+    if diff:
+        problems.append(f"straight and interrupted differ in {diff}")
+    if runs["r"][2] != runs["i"][2]:
+        problems.append("straight and interrupted reports differ")
+    rep2, rep5 = runs["r"][2]["cycle-002.md"], runs["r"][2]["cycle-005.md"]
+    if not any(x.startswith("- Unrated cycle (rate_every 4: cycle 2 doesn't rate, cycle 5 does)") for x in rep2) \
+            or not any(x.startswith("- Cold games (temperature 0.02): none") for x in rep2) \
+            or not any(x.startswith("- Rated cycle (rate_every 4") for x in rep5):
+        problems.append("the reports lack the Rated/Unrated cycle lines")
+    # configs and the index
+    for n, want in (("n", None), ("r", 4)):
+        if read_json(os.path.join(dirs[n], "config.json")).get("rate_every") != want:
+            problems.append(f"{n}: config.json's rate_every")
+        idx = [x for x in read_json(os.path.join(runs[n][3], "index.json"))["leagues"] if x["name"] == "k"]
+        if len(idx) != 1 or idx[0].get("rate_every") != want:
+            problems.append(f"{n}: index.json's rate_every {idx}")
+    # the plateau on rated cycles only
+    pc, pe = rows_of("p", "cycles.csv"), rows_of("p", "events.csv")
+    end = max(int(x["cycle"]) for x in pc)
+    done = [e for e in pe if e["event"] == "done"]
+    if read_json(os.path.join(dirs["p"], "config.json"))["plateau"] != {"cycles": 1, "min_cycles": 2} \
+            or end not in (5, 9) or len(done) != 1 or int(done[0]["cycle"]) != end \
+            or (end == 5) != done[0]["detail"].startswith("plateau"):
+        problems.append(f"p: ended in cycle {end}, {done}")
+    t1 = os.times()
+    cpu = (t1.children_user + t1.children_system) - (t0.children_user + t0.children_system)
+    if problems:
+        raise AssertionError("rate_every: " + "; ".join(problems))
+    print(f"ok  rate_every: experiment k (F-L, F-P, a capped tree; cold games rating only; train filter at margin 0 "
+          f"and top-up games) without it (2 cycles), with rate_every 4 straight and interrupted {injected} times, and "
+          f"2 lines with a 1-cycle plateau from cycle 2: cycles 1, 5 and 9 rate (cold games, decisions, Elo), the "
+          f"others decide nothing (blank Elo, {UNRATED_DECISION}); {crowns} crownings, all on rated cycles; champion "
+          f"ages {sorted(set(ages))}; every training cycle's floors, kept sets, top-up games and opponents "
+          f"({sorted(opponents)}) recomputed from the last rated cycle's records ({carried} carried line-cycles, "
+          f"{cut} cut); cycle 1 and cycle 2's round-robins and self-games are the run without the key's; straight and "
+          f"interrupted the same ({len(snaps['r'])} items, reports too); the plateau run ended in cycle {end} (rated); "
+          f"rate_every 1 is no key; plateau K x2/x4/x1 by rate_scale; (cycle, line, kept, set, top-up, opponent) "
+          f"{seen}; create refuses {len(bad)} bad specs; CPU {cpu:.0f} s")
+
+
+def extend_test(dirpath):
+    """leagues.py extend (cmd_extend; 2026-11-12, the user: "For the experiments which didn't meet the plateau rule for
+    termination can we keep running them?"), on scratch experiments k, chessai-hybrid20 games. Three pairs, each a run
+    made with the higher cap from the start (fresh) and a run made with a lower cap, run to it (done: its last cycle
+    trains nothing), extended and run on (extended):
+    a: F-L, F-P, T-P-Ne capped, T-P-Ne-grow and D-P-Ne-ctx-grow (chessai-grow7, the training standard's overrides) at
+       ply 1 without ply-1 entries, self-games, games_per_cycle 45, cold games rating only (T 0.02, share 0.25),
+       rate_every 4, the draw-aware champion test at 2, plateau {"cycles": 4, "min_cycles": 9, "guard_z": 1}; fresh
+       cap 13; extended: cap 5, owncal/ and scan-cache/ deleted (as the tier-1 cleanup does), then 13, with cycle 5
+       (it runs again) interrupted 6 times;
+    b: F-L, F-P and an observer (T-P-Ne capped) at ply 1 without ply-1 entries, self-games, games_per_cycle 30, cold
+       games that train, openings of 2 random plies, champion_se 0.05, a scaled plateau from cycle 6; fresh cap 6;
+       extended twice: cap C1 (the first cycle from 2 in which fresh crowned), then C2 (the next one), then 6;
+    c: F-L (start_forget 4) and F-P warm from fresh b's version 1 at ply 3, rounds_per_cycle 1, self-games; fresh cap
+       4; extended: cap 2, then 4.
+    Checks: each extended run is its fresh run: the snapshot (games, cold games, ratings, every model's and training
+    state's md5, every record but the measured columns; totals.csv's cal_made aside in the cycles that ran again,
+    whose own calibration games are made again: the same games), the tournaments' other files (ratings.md,
+    head_to_head, elo_history), the reports (the Extended line aside, which exactly the cycles that ran again have),
+    config.json (cap_history aside) and state.json; the end (cycle, status, done event); cap_history, the backups
+    (extend/cap-C/: redo.json and the originals), driver.log's and status's lines; some cycle that ran again had
+    crowned (the undo is tested). The redo check (extend_check) stops a cycle that runs again on a changed original
+    (its games, then its decisions; the run fails), and the cycle runs on once the original is back. Refused, changing
+    nothing (config.json, state.json, games.csv, extend/): a stopped experiment, one that ended on its plateau before
+    its cap and one at its cap, the same cap, a lower cap, a cap that isn't a rated cycle (rate_every), train_filter
+    (not covered: refused), extend/cap-C/ there already, a league a driver holds (its lock). A dry run (--dry-run)
+    says what it would do and changes nothing, scan-cache/ included; the backup keeps the finals' models and training
+    states (a: 5 and 3; the run's cleanup deletes its states) and is a warm start's source (create from it)."""
+    base = os.path.join(os.path.abspath(dirpath), "extend")
+    shutil.rmtree(base, ignore_errors=True)
+    os.makedirs(base)
+    t0 = os.times()
+    problems, refusals, injected = [], [], [0]
+    h20 = os.path.join(BIN, "chessai-hybrid20")
+    common = dict(kind="experiment", name="k", options=["local"], nice=19, threads=2, jobs=2,
+                  calibration={"games": 20}, references=[], tournament={"binary": h20})
+    capped = {"model": "T-P-Ne", "set": {"--split-limit": "4", "--split-threshold": "1000000",
+                                         "--split-noise": "0.03"}, "to": "train"}
+    growt = {"model": "T-P-Ne-grow", "set": {"--grow-mdl": "1", "--grow-gate": "age", "--grow-priority": "snapshot"},
+             "to": "train", "train_binary": "chessai-grow7"}
+    growd = {"model": "D-P-Ne-ctx-grow", "set": {"--router-chain": "2", "--router-trial-z": "-2"}, "to": "train",
+             "train_binary": "chessai-grow7"}
+    spec_a = dict(common, models=["F-L", "F-P", capped, growt, growd], entry_ply=1, ply1_entries=False,
+                  self_games=True, games_per_cycle=45, cold_games=dict(temperature=0.02, share=0.25, train=False),
+                  rate_every=4, champion_se_kind="draw-aware", champion_se=2.0,
+                  plateau={"cycles": 4, "min_cycles": 9, "guard_z": 1.0}, seed=71, train={"seed": 71})
+    spec_b = dict(common, models=["F-L", "F-P"], observers=[capped], entry_ply=1, ply1_entries=False,
+                  self_games=True, games_per_cycle=30, cold_games=dict(temperature=0.02, share=0.25, train=True),
+                  openings={"plies": 2}, champion_se=0.05, plateau={"scaled": {"k2": 2}, "min_cycles": 6}, seed=72,
+                  train={"seed": 72})
+    spec_p = dict(common, models=["F-L", "F-P"], entry_ply=1, games_per_cycle=20, champion_se=1000,
+                  plateau={"cycles": 1, "min_cycles": 2}, seed=74, train={"seed": 74})
+
+    def make(name, spec, cap):
+        root = os.path.join(base, name)
+        p = os.path.join(base, name + ".json")
+        write_json(p, dict(spec, root=root, cycles=cap))
+        driver(["create", p], check_code=0)
+        return root, os.path.join(root, "experiments", "k")
+
+    def run(ldir, what, upto=None, faults=None):
+        """Cycles, one driver process each (as repeat.sh), until the experiment is done (or has run cycle upto);
+        faults: {cycle: [LEAGUES_FAIL_AT points]}, injected in turn before the cycle's straight run."""
+        faults = {k: list(v) for k, v in (faults or {}).items()}
+        while True:
+            st = read_json(os.path.join(ldir, "state.json"))
+            if st["status"] == "done" or (upto is not None and st["cycle"] >= upto):
+                return
+            k = st["cycle"] + 1
+            for flt in faults.pop(k, []):
+                r = driver(["run", ldir, "--cycles", "1"], {"LEAGUES_FAIL_AT": flt})
+                if r.returncode != EXIT_INJECTED:
+                    raise AssertionError(f"extend: {what}: fault {flt}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                         f"{r.stderr[-1500:]}")
+                injected[0] += 1
+            r = driver(["run", ldir, "--cycles", "1"])
+            if r.returncode not in (0, EXIT_DONE):
+                raise AssertionError(f"extend: {what}: cycle {k}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                     f"{r.stderr[-1500:]}")
+
+    def extend(ldir, n, what):
+        r = driver(["extend", ldir, "--cycles", str(n)])
+        if r.returncode != 0:
+            raise AssertionError(f"extend: {what}: extend to {n}: exit {r.returncode}\n{r.stdout[-1500:]}\n"
+                                 f"{r.stderr[-1500:]}")
+        return r.stdout
+
+    def fingerprint(ldir):
+        xd = os.path.join(ldir, EXTEND_DIR)
+        return ([file_md5(os.path.join(ldir, f)) if os.path.exists(os.path.join(ldir, f)) else None
+                 for f in ("config.json", "state.json", "tour/games.csv", "cold/games.csv")],
+                sorted((os.path.relpath(os.path.join(b, f), xd) for b, _, fs in os.walk(xd) for f in fs + [""]))
+                if os.path.isdir(xd) else None)
+
+    def refused(ldir, n, says, what):
+        """extend to n refused, with says in its message, changing nothing."""
+        before = fingerprint(ldir)
+        r = driver(["extend", ldir, "--cycles", str(n)])
+        if r.returncode == 0 or says not in r.stderr or fingerprint(ldir) != before:
+            problems.append(f"extend refusal ({what}): exit {r.returncode}, {r.stderr.strip()[-240:]!r}, changed "
+                            f"{fingerprint(ldir) != before}")
+        refusals.append(what)
+
+    def rel_of(ldir, root):
+        return lambda s: s.replace(ldir, "<league>").replace(root, "<root>")
+
+    def everything(ldir, root, redo):
+        """What an extended run shares with its fresh run (redo: the cycles that ran again; their cal_made apart)."""
+        rel = rel_of(ldir, root)
+        snap = snapshot(ldir, root)
+        cal = {}
+        for r in snap["totals.csv"]:
+            if int(r["cycle"]) in redo:
+                cal[int(r["cycle"])] = r.pop("cal_made")
+        for d in ("tour", COLD_DIR):
+            for f in ("games.csv", "ratings.md", "head_to_head.csv", "head_to_head.md", "elo_history.csv",
+                      "elo_history.key"):
+                p = os.path.join(ldir, d, f)
+                if os.path.exists(p):
+                    snap[f"{d}/{f}"] = rel(open(p).read())
+        snap["reports"] = {f: [x for i, x in enumerate(open(os.path.join(ldir, f)).read().splitlines())
+                               if i != 2 and not x.startswith(("- Measured CPU", "- Extended ("))]
+                           for f in sorted(os.listdir(ldir)) if re.fullmatch(r"cycle-\d+\.md", f)}
+        snap["config.json"] = rel(json.dumps({k: v for k, v in read_json(os.path.join(ldir, "config.json")).items()
+                                              if k not in ("created", "root", "cap_history")}, sort_keys=True))
+        snap["state.json"] = rel(json.dumps({k: v for k, v in read_json(os.path.join(ldir, "state.json")).items()
+                                             if k not in ("updated", "pid", "last_round_ply2_cpu_s")},
+                                            sort_keys=True))
+        return snap, cal
+
+    def first_diff(a, b):
+        if isinstance(a, dict) and isinstance(b, dict):
+            ks = sorted(k for k in set(a) | set(b) if a.get(k) != b.get(k))
+            return f"{ks[:4]}: " + (first_diff(a.get(ks[0]), b.get(ks[0])) if ks else "")
+        if isinstance(a, str) and isinstance(b, str):
+            a, b = a.splitlines(), b.splitlines()
+        if isinstance(a, list) and isinstance(b, list):
+            for i, (x, y) in enumerate(zip(a, b)):
+                if x != y:
+                    return f"item {i}: " + first_diff(x, y)
+            return f"lengths {len(a)} and {len(b)}"
+        return f"{str(a)[:160]!r} and {str(b)[:160]!r}"
+
+    def done_of(ldir):
+        st = read_json(os.path.join(ldir, "state.json"))
+        ev = [e for e in read_csv(os.path.join(ldir, "events.csv")) if e["event"] == "done"]
+        return st["cycle"], st["status"], (ev[-1]["detail"] if ev else None)
+
+    # a: five lines, rate_every, the draw-aware test, the guard; owncal/ and scan-cache/ gone; interrupted
+    fa_root, fa = make("a-fresh", spec_a, 13)
+    run(fa, "a fresh")
+    xa_root, xa = make("a-extended", spec_a, 5)
+    run(xa, "a extended")
+    if done_of(xa) != (5, "done", "5 cycles"):
+        problems.append(f"a extended: ended {done_of(xa)}, not at its cap 5")
+    refused(xa, 5, "must be above the old one, 5", "the same cap")
+    refused(xa, 3, "must be above the old one, 5", "a lower cap")
+    refused(xa, 7, "--cycles 7: rate_every 4", "a cap that isn't a rated cycle")
+    lk = FileLock(os.path.join(xa, ".lock"), block=False)
+    lk.__enter__()
+    try:
+        refused(xa, 13, "a driver runs this league", "a league a driver holds")
+    finally:
+        lk.__exit__(None, None, None)
+    os.makedirs(os.path.join(xa, EXTEND_DIR, "cap-5"))
+    refused(xa, 13, "is there already", "extend/cap-5/ there already")
+    shutil.rmtree(os.path.join(xa, EXTEND_DIR))
+    cp = os.path.join(xa, "config.json")
+    keep = open(cp).read()
+    write_json(cp, dict(json.loads(keep), train_filter={"margin": 0}))
+    refused(xa, 13, "train_filter: not supported", "train_filter")
+    atomic_write(cp, keep)
+    cfg_a, st_a, fin_states = read_json(cp), read_json(os.path.join(xa, "state.json")), {}
+    for lc in cfg_a["lines"]:  # the finals' training states: the backup keeps them (the cleanup deletes them)
+        sp = os.path.join(xa, "runs", lc["line"], f"{lc['kind']}{st_a['lines'][lc['line']]['version']}.state")
+        if os.path.exists(sp):
+            fin_states[os.path.relpath(sp, xa)] = file_md5(sp)
+    gone = [d for d in ("owncal", SCAN_CACHE) if os.path.isdir(os.path.join(xa, d))]
+    for d in gone:  # the tier-1 cleanup's deletions: an extension needs neither
+        shutil.rmtree(os.path.join(xa, d))
+    before = fingerprint(xa)
+    r = driver(["extend", xa, "--cycles", "13", "--dry-run"])
+    if r.returncode != 0 or "extend would raise the cap from 5 to 13" not in r.stdout or fingerprint(xa) != before \
+            or any(os.path.exists(os.path.join(xa, d)) for d in gone):
+        problems.append(f"a: the dry run: exit {r.returncode}, {(r.stdout + r.stderr).strip()[-300:]!r}, changed "
+                        f"{fingerprint(xa) != before}")
+    out_a = extend(xa, 13, "a")
+    run(xa, "a extended", faults={5: ["5:tournament-partial", "5:cold-games-partial", "5:decide", "5:self-games",
+                                      "5:train-one", "5:records-half"]})
+    if "the cap went from 5 to 13" not in out_a:
+        problems.append(f"a: extend's output {out_a.strip()[-300:]!r}")
+    bk_a = os.path.join(xa, EXTEND_DIR, "cap-5")
+    rj = read_json(os.path.join(bk_a, "redo.json")) or {}
+    kept = {f: file_md5(os.path.join(bk_a, f)) for f in rj.get("states", [])}
+    if kept != fin_states or len(kept) != 3 or any(os.path.exists(os.path.join(xa, f)) for f in kept):
+        problems.append(f"a: the backup's training states {sorted(kept)}, the finals' {sorted(fin_states)} (the run's "
+                        f"own copies deleted: {not any(os.path.exists(os.path.join(xa, f)) for f in kept)})")
+    if len(rj.get("models", [])) != 5 or any(file_md5(os.path.join(bk_a, f)) != file_md5(os.path.join(xa, f))
+                                               for f in rj.get("models", [])):
+        problems.append(f"a: the backup's models {rj.get('models')}")
+    # the backup is a warm start's source: a tree from its final at the old cap (model and state)
+    wr = os.path.join(base, "w-from-backup")
+    write_json(wr + ".json", dict(common, root=wr, models=[dict(capped, start={"experiment": bk_a, "version": 4})],
+                                  entry_ply=1, self_games=True, games_per_cycle=45, cycles=2, seed=75,
+                                  train={"seed": 75}))
+    r = driver(["create", wr + ".json"])
+    ws = ((read_json(os.path.join(wr, "experiments", "k", "config.json")) or {}).get("lines") or [{}])[0].get("start")
+    cl = [f for f in rj.get("models", []) if "T-P-Ne+" in f]
+    if r.returncode != 0 or not ws or not cl or ws.get("md5") != file_md5(os.path.join(xa, cl[0])) \
+            or ws.get("state_md5") != fin_states.get(cl[0][:-len(".model")] + ".state"):
+        problems.append(f"a: a warm start from the backup: exit {r.returncode}, {r.stderr.strip()[-200:]!r}, {ws}")
+    if sorted(gone) != sorted(["owncal", SCAN_CACHE]):
+        problems.append(f"a: before the extension only {gone} were there to delete: the test is weaker")
+    # b: an observer, cold games that train, openings, a scaled plateau; extended twice
+    fb_root, fb = make("b-fresh", spec_b, 6)
+    run(fb, "b fresh")
+    crowned = sorted({int(r["cycle"]) for r in read_csv(os.path.join(fb, "cycles.csv"))
+                      if r["decision"] == "new-champion"})
+    c1 = next((k for k in crowned if 2 <= k <= 4), 2)
+    c2 = next((k for k in crowned if c1 < k <= 5), c1 + 1)
+    xb_root, xb = make("b-extended", spec_b, c1)
+    run(xb, "b extended", upto=1)
+    refused(xb, 6, "it isn't done (status stopped)", "a stopped experiment")
+    run(xb, "b extended")
+    extend(xb, c2, "b")
+    run(xb, "b extended")
+    if done_of(xb) != (c2, "done", f"{c2} cycles"):
+        problems.append(f"b extended: ended {done_of(xb)}, not at its second cap {c2}")
+    extend(xb, 6, "b")
+    run(xb, "b extended")
+    # the redo check: a changed original stops the cycle that runs again (games, then decisions), and it runs on
+    _, nb = make("b-check", spec_b, c1)
+    run(nb, "b check")
+    extend(nb, c1 + 1, "b check")
+    bk = os.path.join(nb, EXTEND_DIR, f"cap-{c1}")
+    for f, says in (("tour-games.csv", "games.csv rows from round"), ("cycles.csv", "decision isn't the original's")):
+        p = os.path.join(bk, f)
+        keep = open(p).read()
+        if f == "cycles.csv":
+            rows = read_csv(p)
+            rows[0]["z"] = "9.99" if rows[0]["z"] != "9.99" else "9.98"
+            write_csv(p, list(rows[0]), rows)
+        else:
+            lines = keep.splitlines(True)
+            lines[1] = lines[1].rstrip("\n") + "9\n"
+            atomic_write(p, "".join(lines))
+        r = driver(["run", nb, "--cycles", "1"])
+        st = read_json(os.path.join(nb, "state.json"))
+        if r.returncode in (0, EXIT_DONE) or says not in r.stdout + r.stderr or st["status"] != "failed" \
+                or st["cycle"] != c1 - 1:
+            problems.append(f"b check ({f} changed): exit {r.returncode}, status {st['status']}, cycle {st['cycle']}, "
+                            f"{(r.stdout + r.stderr).strip()[-300:]!r}")
+        atomic_write(p, keep)
+    r = driver(["run", nb, "--cycles", "1"])
+
+    def rows_c1(d):
+        return [{k: v for k, v in x.items() if k not in MEASURED} for x in read_csv(os.path.join(d, "cycles.csv"))
+                if x["cycle"] == str(c1)]
+
+    if r.returncode not in (0, EXIT_DONE) or read_json(os.path.join(nb, "state.json"))["cycle"] != c1 \
+            or not rows_c1(nb) or rows_c1(nb) != rows_c1(xb):
+        problems.append(f"b check: the originals back, cycle {c1} didn't run on as b extended's: exit {r.returncode}")
+    # c: warm starts at ply 3, rounds_per_cycle
+    spec_c = dict(common, models=[{"model": "F-L", "start": {"experiment": fb, "version": 1}, "start_forget": 4},
+                                  {"model": "F-P", "start": {"experiment": fb, "version": 1}}],
+                  entry_ply=3, ply1_entries=False, self_games=True, rounds_per_cycle=1, min_rounds=1, seed=73,
+                  train={"seed": 73})
+    fc_root, fc = make("c-fresh", spec_c, 4)
+    run(fc, "c fresh")
+    xc_root, xc = make("c-extended", spec_c, 2)
+    run(xc, "c extended")
+    extend(xc, 4, "c")
+    run(xc, "c extended")
+    # refused: ended on the plateau rule, before its cap and at it
+    _, p1 = make("p-early", spec_p, 4)
+    run(p1, "p early")
+    _, p2 = make("p-at-cap", spec_p, 2)
+    run(p2, "p at cap")
+    if done_of(p1)[:2] != (2, "done") or not (done_of(p2)[2] or "").startswith("plateau"):
+        problems.append(f"the plateau runs ended {done_of(p1)} and {done_of(p2)}: the refusals are untested")
+    refused(p1, 8, "before its cap 4: on its plateau rule", "ended on its plateau rule before its cap")
+    refused(p2, 8, "it ended on its plateau rule in cycle 2", "ended on its plateau rule at its cap")
+    # the extended runs against the fresh ones
+    pairs = {"a": (fa, fa_root, xa, xa_root, [(5, 13)]), "b": (fb, fb_root, xb, xb_root, [(c1, c2), (c2, 6)]),
+             "c": (fc, fc_root, xc, xc_root, [(2, 4)])}
+    items, undone, ends, cals = 0, 0, {}, {}
+    for name, (fd, fr, xd, xr, caps) in pairs.items():
+        redo = {old for old, _ in caps}
+        fs, fcal = everything(fd, fr, redo)
+        xs, xcal = everything(xd, xr, redo)
+        items += len(xs)
+        cals[name] = (fcal, xcal)
+        diff = sorted(k for k in set(fs) | set(xs) if fs.get(k) != xs.get(k))
+        if diff:
+            problems.append(f"{name}: the extended run isn't the fresh one: {diff[:10]}; {diff[0]}: "
+                            f"{first_diff(fs.get(diff[0]), xs.get(diff[0]))}")
+        if done_of(fd) != done_of(xd):
+            problems.append(f"{name}: the fresh run ended {done_of(fd)}, the extended one {done_of(xd)}")
+        ends[name] = done_of(xd)
+        cfg = read_json(os.path.join(xd, "config.json"))
+        hist = cfg.get("cap_history") or []
+        if [(h["old"], h["new"], h["redo_cycle"], h["backup"]) for h in hist] \
+                != [(o, n, o, f"{EXTEND_DIR}/cap-{o}") for o, n in caps]:
+            problems.append(f"{name}: cap_history {hist}")
+        log = open(os.path.join(xd, "driver.log")).read()
+        status = driver(["status", xd]).stdout
+        for h in hist:
+            b = os.path.join(xd, h["backup"])
+            redo_j = read_json(os.path.join(b, "redo.json")) or {}
+            orig = read_csv(os.path.join(b, "cycles.csv"))
+            if redo_j.get("cycle") != h["old"] or not orig or any(x["cycle"] != str(h["old"]) for x in orig) \
+                    or not os.path.exists(os.path.join(b, "tour-games.csv")) \
+                    or (read_json(os.path.join(b, "config.json")) or {}).get("cycles") != h["old"] \
+                    or (read_json(os.path.join(b, "state.json")) or {}).get("cycle") != h["old"]:
+                problems.append(f"{name}: the backup {h['backup']} is incomplete")
+            undone += sum(1 for x in orig if x["decision"] == "new-champion")
+            if f"extend: cap {h['old']} -> {h['new']}" not in log:
+                problems.append(f"{name}: driver.log lacks the extend line ({h['old']} -> {h['new']})")
+            if f"cap raised from {h['old']} to {h['new']}" not in status:
+                problems.append(f"{name}: status lacks the cap line: {status.strip()[-300:]!r}")
+            m = re.search(r"^- Extended \(.*$", open(os.path.join(xd, f"cycle-{h['old']:03d}.md")).read(), re.M)
+            if not m or "?" in m.group(0) or f"the cap went from {h['old']} to {h['new']}" not in m.group(0):
+                problems.append(f"{name}: cycle {h['old']}'s Extended line {m.group(0) if m else None!r}")
+        for d in (fd, xd):
+            for f in sorted(os.listdir(d)):
+                if re.fullmatch(r"cycle-\d+\.md", f):
+                    has = "\n- Extended (" in open(os.path.join(d, f)).read()
+                    if has != (d == xd and int(f[6:9]) in redo):
+                        problems.append(f"{name} {'extended' if d == xd else 'fresh'}: {f}: Extended line {has}")
+    if not undone:
+        problems.append("no cycle that ran again had crowned: the undone crowning is untested")
+    t1 = os.times()
+    cpu = (t1.children_user + t1.children_system) - (t0.children_user + t0.children_system)
+    if problems:
+        raise AssertionError("extend: " + "; ".join(problems))
+    print(f"ok  extend: each extended run is the run made with its final cap ({items} items: games, cold games, "
+          f"ratings, models and states, records, reports, config, state): a (5 lines with a growing tree and DAG, "
+          f"rate_every 4, draw-aware test, guard) cap 5 -> 13 with owncal/ and scan-cache/ deleted and the cycle "
+          f"that runs again interrupted {injected[0]} times, ended {ends['a'][0]} ({ends['a'][2]}); b (observer, "
+          f"cold games that train, openings) cap {c1} -> {c2} -> 6, ended {ends['b'][0]} ({ends['b'][2]}); c (warm, "
+          f"ply 3) cap 2 -> 4, ended {ends['c'][0]} ({ends['c'][2]}); a's finals' 5 models and {len(kept)} training "
+          f"states kept in the backup (the run's own states deleted by its cleanup), a warm start from it; {undone} "
+          f"crownings of the old last cycles "
+          f"undone and made again; cal_made of the cycles that ran again (fresh / extended) "
+          f"{ {n: (v[0], v[1]) for n, v in cals.items()} }; the redo check stopped a changed original's games and "
+          f"decisions, then ran on; a dry run changed nothing; refused, changing nothing: {', '.join(refusals)}; CPU "
+          f"{cpu:.0f} s")
+
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -3081,9 +10898,14 @@ def main():
     a = sub.add_parser("add")
     a.add_argument("league")
     a.add_argument("recipes", nargs="+")
+    a.add_argument("--ply", type=int, required=True, help="the new models' ply (each plays at its own ply only)")
     a = sub.add_parser("run")
     a.add_argument("league")
     a.add_argument("--cycles", type=int)
+    a = sub.add_parser("extend")
+    a.add_argument("league")
+    a.add_argument("--cycles", type=int, required=True, help="the new cap, above the old one")
+    a.add_argument("--dry-run", action="store_true", help="check it and say what it would do, changing nothing")
     a = sub.add_parser("status")
     a.add_argument("path", nargs="?", default=HERE)
     a = sub.add_parser("stop")
@@ -3106,9 +10928,11 @@ def main():
     if args.cmd == "create":
         cmd_create(args.spec)
     elif args.cmd == "add":
-        cmd_add(args.league, args.recipes)
+        cmd_add(args.league, args.recipes, args.ply)
     elif args.cmd == "run":
         sys.exit(cmd_run(args.league, args.cycles))
+    elif args.cmd == "extend":
+        cmd_extend(args.league, args.cycles, args.dry_run)
     elif args.cmd == "status":
         cmd_status(args.path)
     elif args.cmd == "stop":

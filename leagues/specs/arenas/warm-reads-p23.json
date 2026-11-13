@@ -1,0 +1,137 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid11",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 5,
+  "min_rounds": 30,
+  "max_rounds": 30
+ },
+ "name": "warm-reads-p23",
+ "dir": "leagues/arenas/diag/warm-reads-p23",
+ "plies": [
+  2,
+  3
+ ],
+ "description": "Warm-start reads at plies 2 and 3: W4, W3 and the ladder rung flat-p2-w3 against their starts (flat-p3 v199, flat-p2 v244).",
+ "entries": [
+  {
+   "version": "flat-p3-w4:F-L#1.loc@99",
+   "name": "w4.F-L#1@99",
+   "label": "flat-p3-w4 F-L#1.loc final version v99"
+  },
+  {
+   "version": "flat-p3-w4:F-L#2.loc@99",
+   "name": "w4.F-L#2@99",
+   "label": "flat-p3-w4 F-L#2.loc final version v99"
+  },
+  {
+   "version": "flat-p3-w4:F-L#3.loc@99",
+   "name": "w4.F-L#3@99",
+   "label": "flat-p3-w4 F-L#3.loc final version v99"
+  },
+  {
+   "version": "flat-p3-w4:F-L#4.loc@99",
+   "name": "w4.F-L#4@99",
+   "label": "flat-p3-w4 F-L#4.loc final version v99"
+  },
+  {
+   "version": "flat-p3-w3:F-L#1.loc@78",
+   "name": "w3.F-L#1@78",
+   "label": "flat-p3-w3 F-L#1.loc final version v78"
+  },
+  {
+   "version": "flat-p3-w3:F-L#2.loc@78",
+   "name": "w3.F-L#2@78",
+   "label": "flat-p3-w3 F-L#2.loc final version v78"
+  },
+  {
+   "version": "flat-p3-w3:F-L#3.loc@78",
+   "name": "w3.F-L#3@78",
+   "label": "flat-p3-w3 F-L#3.loc final version v78"
+  },
+  {
+   "version": "flat-p3-w3:F-L#4.loc@78",
+   "name": "w3.F-L#4@78",
+   "label": "flat-p3-w3 F-L#4.loc final version v78"
+  },
+  {
+   "version": "flat-p2-w3:F-L#1.loc@99",
+   "name": "l3.F-L#1@99",
+   "label": "flat-p2-w3 F-L#1.loc final version v99"
+  },
+  {
+   "version": "flat-p2-w3:F-L#2.loc@99",
+   "name": "l3.F-L#2@99",
+   "label": "flat-p2-w3 F-L#2.loc final version v99"
+  },
+  {
+   "version": "flat-p2-w3:F-L#3.loc@99",
+   "name": "l3.F-L#3@99",
+   "label": "flat-p2-w3 F-L#3.loc final version v99"
+  },
+  {
+   "version": "flat-p2-w3:F-L#4.loc@99",
+   "name": "l3.F-L#4@99",
+   "label": "flat-p2-w3 F-L#4.loc final version v99"
+  },
+  {
+   "version": "flat-p3:F-L#1.loc@199",
+   "name": "fp3.F-L#1@199",
+   "label": "flat-p3 F-L#1.loc final version v199"
+  },
+  {
+   "version": "flat-p3:F-L#2.loc@199",
+   "name": "fp3.F-L#2@199",
+   "label": "flat-p3 F-L#2.loc final version v199"
+  },
+  {
+   "version": "flat-p3:F-L#3.loc@199",
+   "name": "fp3.F-L#3@199",
+   "label": "flat-p3 F-L#3.loc final version v199"
+  },
+  {
+   "version": "flat-p3:F-L#4.loc@199",
+   "name": "fp3.F-L#4@199",
+   "label": "flat-p3 F-L#4.loc final version v199"
+  },
+  {
+   "version": "flat-p2:F-L#1.loc@244",
+   "name": "fp2.F-L#1@244",
+   "label": "flat-p2 F-L#1.loc final version v244"
+  },
+  {
+   "version": "flat-p2:F-L#2.loc@244",
+   "name": "fp2.F-L#2@244",
+   "label": "flat-p2 F-L#2.loc final version v244"
+  },
+  {
+   "version": "flat-p2:F-L#3.loc@244",
+   "name": "fp2.F-L#3@244",
+   "label": "flat-p2 F-L#3.loc final version v244"
+  },
+  {
+   "version": "flat-p2:F-L#4.loc@244",
+   "name": "fp2.F-L#4@244",
+   "label": "flat-p2 F-L#4.loc final version v244"
+  }
+ ]
+}

@@ -1,0 +1,183 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 30,
+  "min_rounds": 30,
+  "max_rounds": 30
+ },
+ "name": "panel-fponly-p2b",
+ "dir": "leagues/arenas/diag/panel-fponly-p2b",
+ "plies": [
+  2
+ ],
+ "description": "Cold read panel-fponly-p2b: ply 2, version 299, only the contrast's lines, near argmax (T 0.02), 30 round-robins. Tags: n=fponly-p2b:^F-P@299, x=fponly-p2:^F-P@299, xf=fponly-p2:^F-P@320, bfp=base-probit-p2:^F-P@299, yfp=replay-p2:^F-P, ytr=replay-p2:^T-P-Ne\\+, vfp=diversity-p2:^F-P, vtr=diversity-p2:^T-P-Ne\\+, lfp=probit-late-p2:^F-P, ltr=probit-late-p2:^T-P-Ne\\+, nf=fponly-p2b:^F-P@352",
+ "entries": [
+  {
+   "version": "fponly-p2b:F-P#1.loc@299",
+   "name": "n299.L1@299",
+   "label": "fponly-p2b F-P#1.loc version v299"
+  },
+  {
+   "version": "fponly-p2b:F-P#2.loc@299",
+   "name": "n299.L2@299",
+   "label": "fponly-p2b F-P#2.loc version v299"
+  },
+  {
+   "version": "fponly-p2b:F-P#3.loc@299",
+   "name": "n299.L3@299",
+   "label": "fponly-p2b F-P#3.loc version v299"
+  },
+  {
+   "version": "fponly-p2b:F-P#4.loc@299",
+   "name": "n299.L4@299",
+   "label": "fponly-p2b F-P#4.loc version v299"
+  },
+  {
+   "version": "fponly-p2:F-P#1.loc@299",
+   "name": "x299.L1@299",
+   "label": "fponly-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "fponly-p2:F-P#2.loc@299",
+   "name": "x299.L2@299",
+   "label": "fponly-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "fponly-p2:F-P#3.loc@299",
+   "name": "x299.L3@299",
+   "label": "fponly-p2 F-P#3.loc version v299"
+  },
+  {
+   "version": "fponly-p2:F-P#4.loc@299",
+   "name": "x299.L4@299",
+   "label": "fponly-p2 F-P#4.loc version v299"
+  },
+  {
+   "version": "fponly-p2:F-P#1.loc@320",
+   "name": "xf320.L1@320",
+   "label": "fponly-p2 F-P#1.loc version v320"
+  },
+  {
+   "version": "fponly-p2:F-P#2.loc@320",
+   "name": "xf320.L2@320",
+   "label": "fponly-p2 F-P#2.loc version v320"
+  },
+  {
+   "version": "fponly-p2:F-P#3.loc@320",
+   "name": "xf320.L3@320",
+   "label": "fponly-p2 F-P#3.loc version v320"
+  },
+  {
+   "version": "fponly-p2:F-P#4.loc@320",
+   "name": "xf320.L4@320",
+   "label": "fponly-p2 F-P#4.loc version v320"
+  },
+  {
+   "version": "base-probit-p2:F-P#1.loc@299",
+   "name": "bfp299.L1@299",
+   "label": "base-probit-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "base-probit-p2:F-P#2.loc@299",
+   "name": "bfp299.L2@299",
+   "label": "base-probit-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "replay-p2:F-P#1.loc@299",
+   "name": "yfp299.L1@299",
+   "label": "replay-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "replay-p2:F-P#2.loc@299",
+   "name": "yfp299.L2@299",
+   "label": "replay-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299",
+   "name": "ytr299.L1@299",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v299"
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@299",
+   "name": "ytr299.L2@299",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v299"
+  },
+  {
+   "version": "diversity-p2:F-P#1.loc@299",
+   "name": "vfp299.L1@299",
+   "label": "diversity-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "diversity-p2:F-P#2.loc@299",
+   "name": "vfp299.L2@299",
+   "label": "diversity-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "diversity-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299",
+   "name": "vtr299.L1@299",
+   "label": "diversity-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v299"
+  },
+  {
+   "version": "diversity-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@299",
+   "name": "vtr299.L2@299",
+   "label": "diversity-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@299",
+   "name": "lfp299.L1@299",
+   "label": "probit-late-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@299",
+   "name": "lfp299.L2@299",
+   "label": "probit-late-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299",
+   "name": "ltr299.L1@299",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@299",
+   "name": "ltr299.L2@299",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v299"
+  },
+  {
+   "version": "fponly-p2b:F-P#1.loc@352",
+   "name": "nf352.L1@352",
+   "label": "fponly-p2b F-P#1.loc version v352"
+  },
+  {
+   "version": "fponly-p2b:F-P#2.loc@352",
+   "name": "nf352.L2@352",
+   "label": "fponly-p2b F-P#2.loc version v352"
+  },
+  {
+   "version": "fponly-p2b:F-P#3.loc@352",
+   "name": "nf352.L3@352",
+   "label": "fponly-p2b F-P#3.loc version v352"
+  },
+  {
+   "version": "fponly-p2b:F-P#4.loc@352",
+   "name": "nf352.L4@352",
+   "label": "fponly-p2b F-P#4.loc version v352"
+  }
+ ]
+}

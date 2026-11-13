@@ -1,0 +1,9 @@
+line,model,option,kind,archetype,status,version,version_name,champion,champion_name,patience,entered_cycle,retired_cycle,train_binary,train_args,selfplay_binary,selfplay_args,label,base_model,train_overrides,selfplay_overrides,replicate,seed_offset
+F-L#1.sp,F-L#1,self-play,lr,F-L,active,319,E.S.12.319,263,E.S.12.263,,1,,models/from-scratch/bin/chessai-hybrid6,--use-probs,models/from-scratch/bin/chessai-hybrid4gfx,--model lr --use-probs --seed 21 --vs-previous --no-games,F-L #1,F-L,,,1,0
+F-L#1.loc,F-L#1,local,lr,F-L,active,319,E.L.12.319,105,E.L.12.105,,1,,models/from-scratch/bin/chessai-hybrid6,--use-probs,,,F-L #1,F-L,,,1,0
+F-L#2.sp,F-L#2,self-play,lr,F-L,active,319,E.S.12.319,166,E.S.12.166,,1,,models/from-scratch/bin/chessai-hybrid6,--use-probs,models/from-scratch/bin/chessai-hybrid4gfx,--model lr --use-probs --seed 22 --vs-previous --no-games,F-L #2,F-L,,,2,1
+F-L#2.loc,F-L#2,local,lr,F-L,active,319,E.L.13.319,144,E.L.13.144,,1,,models/from-scratch/bin/chessai-hybrid6,--use-probs,,,F-L #2,F-L,,,2,1
+F-P.sp,F-P,self-play,probit,F-P,active,319,E.S.9.319,63,E.S.9.63,,1,,models/from-scratch/bin/chessai-hybrid6,--use-probs,models/from-scratch/bin/chessai-hybrid4gfx,--model probit --use-probs --seed 21 --vs-previous --no-games,F-P,F-P,,,1,0
+F-P.loc,F-P,local,probit,F-P,active,319,E.L.13.319,43,E.L.13.43,,1,,models/from-scratch/bin/chessai-hybrid6,--use-probs,,,F-P,F-P,,,1,0
+F-N.sp,F-N,self-play,cnbp,F-N,active,319,E.S.13.319,269,E.S.13.269,,1,,models/from-scratch/bin/chessai-hybrid6,--use-probs,models/from-scratch/bin/chessai-hybrid4gfx,--model cnbp --use-probs --seed 21 --vs-previous --no-games,F-N,F-N,,,1,0
+F-N.loc,F-N,local,cnbp,F-N,active,319,E.L.14.319,148,E.L.14.148,,1,,models/from-scratch/bin/chessai-hybrid6,--use-probs,,,F-N,F-N,,,1,0

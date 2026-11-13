@@ -1,0 +1,3 @@
+line,model,option,kind,archetype,status,version,version_name,champion,champion_name,patience,entered_cycle,retired_cycle,train_binary,train_args,selfplay_binary,selfplay_args,label,base_model,train_overrides,selfplay_overrides,replicate,seed_offset
+F-P.loc,F-P,local,probit,F-P,active,195,E.L.19.195,184,E.L.19.184,,1,,models/from-scratch/bin/chessai-pairs3g,--use-probs,,,F-P,F-P,,,1,0
+F-P-S7v3.loc,F-P-S7v3,local,probit,F-P,active,195,E.L.21.195,192,E.L.21.192,,1,,models/from-scratch/bin/chessai-pairs3g,--use-probs --pairs on,,,F-P-S7v3,F-P-S7v3,,,1,0

@@ -1,0 +1,53 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "grow-l-p1b",
+ "description": "The LR growing tree's split mechanics, one factor at ply 1 (analyst 6.59 after grow-l-p1: LR trials mostly undone with NEGATIVE gains, kept gains 0.0008 nats against probit's 0.011-0.014). Mechanism (checked in grow4-src: delegation.rs split_leaf clones the leaf for each child and for the trial's shadow and applies forget(forget_factor); logreg.rs forget divides the AdaGrad sums): at --forget-factor 1 (every recipe) the children and the shadow keep the parent's full AdaGrad sums, so they step at its late-life rate, and the children (each on a third of the stream) can't specialise inside a 1M-position trial; --forget-factor 10 (the engine's default) divides the sums at the split. Flats never split, so F-L is untouched. Lines: F-L x2; T-L-Ne-grow on grow-l-p1's rule (grow4 --grow-mdl 0 --grow-gate age --grow-priority snapshot; W 1M, C 2, z 2, D 5M) with --forget-factor 1 (the recipe's) x2; the same with --forget-factor 10 x2. Every line trains on chessai-grow4; games hybrid16; games_per_cycle 1584; seed 50; floor 300, cap 400. Read: cold, T 0.02, one arena per ply (1, 2), v150 and the final; head to head forget 10 vs forget 1, each vs F-L; growth log. Predictions (6.59): forget 10 keeps 8+ of 12 trials, gains 0.002-0.005 nats (z 3-8), 0-3 undone, 17-25 leaves; forget 10 minus forget 1 0-30 at ply 1, -20..20 at ply 2; forget 10 over F-L 30-60 at ply 1. Plan: if it holds, T-L-Ne-grow with forget 10 takes the LR tree seat of the 6.54 six; if not (fewer than 6 kept, or 20+ below forget 1 at ply 1), the six carry F-L alone on the LR side.",
+ "models": [
+  {
+   "model": "F-L",
+   "replicates": 2
+  },
+  {
+   "model": "T-L-Ne-grow",
+   "set": {
+    "--grow-mdl": "0",
+    "--grow-gate": "age",
+    "--grow-priority": "snapshot"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-L-Ne-grow",
+   "set": {
+    "--grow-mdl": "0",
+    "--grow-gate": "age",
+    "--grow-priority": "snapshot",
+    "--forget-factor": "10"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 50,
+ "train": {
+  "seed": 50
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 400,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid16"
+ }
+}

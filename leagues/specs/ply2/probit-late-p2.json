@@ -1,0 +1,44 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "probit-late-p2",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 38,
+ "train": {
+  "seed": 38
+ },
+ "references": [],
+ "entry_ply": 2,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 400
+ },
+ "cycles": 600,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid13"
+ },
+ "prices_version": "P2",
+ "ply1_entries": false,
+ "description": "Ply-2 late-gain test (11-11 11:53, the coordinator; theory-2 6.31's recommended next step, lean form). probit-confirm-p2 (ply-2 field) read cold at its finals v241: the probit error tree T-P-Ne tied F-P at ply 2 (18 \u00b121) with 9 leaves held. But in G2 (ply-1 field) the trees' ply-1 gain formed late: at v226 (the same 46.5M positions) the error tree was 20 over F-P at ply 1, at v314 98, and in one field F-P v314 minus v226 is 3 \u00b119 while T-P-Ne v314 minus v226 is 78 \u00b119 (diag/g2-versions-cold): the trees go on learning after the flat has plateaued, and probit-confirm-p2's plateau rule (floor 200, crownings judged at T 0.1, which barely sees a tree's ranking edge) stopped it at v241.\n- Question: trained in a ply-2 field for longer, does the error tree pull ahead of its flat, as it did late in the ply-1 field? If it still ties, the six are ply-1 architectures (the user's choice between screening at ply 1 and screening at ply 2, theory-2 6.31); if it pulls ahead, the ply-1 screen stands with longer ply-2 confirmations.\n- Lines: F-P x2; T-P-Ne (NB error router, non-merging, limit 4, 1M, noise 0.03) x2 \u2014 probit-confirm-p2's error lines. The --revise 2 cluster trees are left out (they showed the same late jump in G2; one tree kind answers the question at about half the cost).\n- One factor against probit-confirm-p2: the plateau floor, 400 cycles instead of 200 (cap 600), so the run reaches ~72M trained positions, past G2's 64M at v314. Seed 38 (new: a replicate, not a twin).\n- ply-2 field (entry_ply 2, no ply-1 entries), self-games, hybrid13 games; after create, leagues/specs/ply1/train_binary.py moves training to hybrid6 (exact).\n- Read: cold at the end at plies 1-3 (T 0.02, 75 round-robins), the finals and v241 (probit-confirm-p2's stop) in one field, so the late gain is read inside the run.\n- Cost: probit-confirm-p2 was 2.72 CPU-h for 242 cycles with 6 lines; 4 lines at 400-600 cycles ~2.2-3.3 CPU-h."
+}

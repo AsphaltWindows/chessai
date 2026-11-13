@@ -1,0 +1,45 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "probit-trees-p2",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Nc-merge",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--revise-on": "fresh",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 18,
+ "train": {
+  "seed": 18
+ },
+ "references": [],
+ "entry_ply": 2,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 200
+ },
+ "cycles": 600,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid9"
+ },
+ "prices_version": "P2",
+ "ply1_entries": false,
+ "description": "Does probit-widen-p1b's cold routing gain hold when trees train and play at ply 2? F-P x2 against T-P-Nc-merge limit 4, threshold 1M, fresh merge gate, --split-noise 0.03 (p1b's best arm) x2, in a pure ply-2 field (entry_ply 2, ply1_entries false, self-games, no references), 12 rounds a cycle, scaled plateau with min_cycles 200. Standard tournament (T 0.1) as in p1b, so the ply is the one factor against it; the verdict is a T 0.02 arena of every line's final version at ply 2 and 1 (make_cold_read.py --final). The analyst's plan (theory-2 6.11), launched 11-11 ~01:05; T 0.1 in the tournament instead of the drafted T 0.02, to keep one factor against p1b."
+}

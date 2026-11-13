@@ -1,0 +1,56 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "probit-confirm-p2",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Nc-merge",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--revise-on": "fresh",
+    "--split-noise": "0.03",
+    "--revise": "2"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 35,
+ "train": {
+  "seed": 35
+ },
+ "references": [],
+ "entry_ply": 2,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 200
+ },
+ "cycles": 600,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid13"
+ },
+ "prices_version": "P2",
+ "ply1_entries": false,
+ "description": "Ply-2 confirmation of the ply-1 probit winners (the user's protocol: screen at ply 1, confirm winners at ply 2; Batch 5 item 3, updated 11-11 ~10:10 after G2). A ply-2 field: F-P x2; the probit error tree T-P-Ne (NB error router, non-merging per the user's error-family rule; limit 4, 1M, noise 0.03) x2, which holds its splits by construction and so also answers the user's question whether NB routers suffer at ply-2 training; seat 1's cluster tree T-P-Nc-merge (fresh gate, limit 4, 1M, noise 0.03) at --revise 2, so the gate cannot undo every split as it did in probit-trees-p2, x2. Comparators: G2 error-routing-p1 (the same trees trained at ply 1: 118 and 106 over F-P at ply 1, 77 and 62 at ply 2) and probit-trees-p2 (seat 1 at revise 0 in a ply-2 field: merged to 1 leaf, level with F-P). Read cold at plies 1-3, T 0.02, hybrid13. Launched by the coordinator in G2's slot."
+}

@@ -1,0 +1,52 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 600,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid13"
+ },
+ "name": "dag-lr-p1",
+ "seed": 33,
+ "train": {
+  "seed": 33
+ },
+ "models": [
+  {
+   "model": "F-L",
+   "replicates": 2
+  },
+  {
+   "model": "D-L-Nc",
+   "set": {
+    "--dag-leaves": "5",
+    "--split-threshold": "1000000"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-L-Nc-merge",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--revise-on": "fresh"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "description": "G3 (theory-2 6.24, the analyst's pick (a), 11-11 ~09:55): the cell DAG D-L-Nc (chessai-dag-q9: LR leaves, a cluster router over 9 cells pointing to 5 shared leaves, cells re-pointed by fresh scoring at dag-z 2 over 50k-position windows, first check at 1M) x2, against the LR fresh-gate tree T-L-Nc-merge limit 4, 1M (G6's arm, a third seed for seat 2) x2, F-L x2 beside. The factor is the model kind, each with its own gate (the cell DAG takes no --revise; BDD has no fresh gate or probit leaves). Its size is fixed by --dag-leaves and does not grow with data. Prediction: within 20 of the tree at ply 1; read the cell-to-leaf shares at the end (the old D-L-Nc-c sent 98% to one leaf). Training binaries as the recipes give them (dag-q9 for the DAG, hybrid4gfx for the rest: exact, as hybrid6)."
+}

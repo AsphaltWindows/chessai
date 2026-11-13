@@ -1,0 +1,51 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "seed": 83,
+ "train": {
+  "seed": 83
+ },
+ "references": [],
+ "entry_ply": 2,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300,
+  "rate_scale": "sqrt",
+  "guard_z": 1.0
+ },
+ "cycles": 401,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid21"
+ },
+ "cold_games": {
+  "temperature": 0.02,
+  "share": 0.5,
+  "train": false
+ },
+ "rate_every": 4,
+ "champion_se_kind": "draw-aware",
+ "champion_se": 3,
+ "name": "levers2-p2",
+ "models": [
+  {
+   "model": "F-P",
+   "train_binary": "chessai-hybrid6"
+  },
+  {
+   "model": "F-P",
+   "set": {
+    "--label-depth": "2",
+    "--label-result": "0.5"
+   },
+   "to": "train",
+   "train_binary": "chessai-hybrid6"
+  }
+ ],
+ "description": "DRAFT SECOND SEED of levers-p2's labels contrast (coordinator 11-13 06:35; the analyst out of credits). levers-p2 (seed 75, one seed) had depth-2 labels over ply-2 play at +35-45 mid-run (v290-300 window) and ~0 late (v380-400 window, ply 2), while labeldepth-p1 (two seeds) found equal-depth labels paying +70-78 at the play ply (ply 1) by v300. Is levers-p2's late convergence seed noise (ply-2-trained per-line run SD ~28) or real at ply 2? Two lines on the same games: F-P result labels, F-P --label-depth 2 --label-result 0.5 (both hybrid6), ply 2, the levers-p2 settings otherwise (S7 line dropped, hybrid21 tournament). Reads: version windows (v290-300, final-10..final) vs y/v/l @299 at plies 2-3. RULE: late window pooled with levers-p2 at 30+ at ply 2 => same-parity labels pay at ply 2 (adopt for the standard's ply-2 flats, analyst 6.110's 40 line on the two-seed mean); within 15 => the head start only (labels stay out of ply-2+ rungs at equal depth). Cost ~2.3 CPU-h."
+}

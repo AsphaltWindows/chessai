@@ -1,0 +1,116 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid11",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 5,
+  "min_rounds": 30,
+  "max_rounds": 30
+ },
+ "name": "reverse-rung-p4",
+ "dir": "leagues/arenas/diag/reverse-rung-p4",
+ "plies": [
+  4
+ ],
+ "description": "Reverse rung (theory-2 6.21) at ply 4: does rev keep W4's even-ply gain over W3f1?",
+ "entries": [
+  {
+   "version": "flat-p3-w4-w3f1:F-L#1.loc@96",
+   "name": "rev.F-L#1@96",
+   "label": "flat-p3-w4-w3f1 F-L#1.loc final version v96"
+  },
+  {
+   "version": "flat-p3-w4-w3f1:F-L#2.loc@96",
+   "name": "rev.F-L#2@96",
+   "label": "flat-p3-w4-w3f1 F-L#2.loc final version v96"
+  },
+  {
+   "version": "flat-p3-w4-w3f1:F-L#3.loc@96",
+   "name": "rev.F-L#3@96",
+   "label": "flat-p3-w4-w3f1 F-L#3.loc final version v96"
+  },
+  {
+   "version": "flat-p3-w4-w3f1:F-L#4.loc@96",
+   "name": "rev.F-L#4@96",
+   "label": "flat-p3-w4-w3f1 F-L#4.loc final version v96"
+  },
+  {
+   "version": "flat-p3-w3f1:F-L#1.loc@99",
+   "name": "w3f1.F-L#1@99",
+   "label": "flat-p3-w3f1 F-L#1.loc final version v99"
+  },
+  {
+   "version": "flat-p3-w3f1:F-L#2.loc@99",
+   "name": "w3f1.F-L#2@99",
+   "label": "flat-p3-w3f1 F-L#2.loc final version v99"
+  },
+  {
+   "version": "flat-p3-w3f1:F-L#3.loc@99",
+   "name": "w3f1.F-L#3@99",
+   "label": "flat-p3-w3f1 F-L#3.loc final version v99"
+  },
+  {
+   "version": "flat-p3-w3f1:F-L#4.loc@99",
+   "name": "w3f1.F-L#4@99",
+   "label": "flat-p3-w3f1 F-L#4.loc final version v99"
+  },
+  {
+   "version": "flat-p3-w4:F-L#1.loc@99",
+   "name": "w4.F-L#1@99",
+   "label": "flat-p3-w4 F-L#1.loc final version v99"
+  },
+  {
+   "version": "flat-p3-w4:F-L#2.loc@99",
+   "name": "w4.F-L#2@99",
+   "label": "flat-p3-w4 F-L#2.loc final version v99"
+  },
+  {
+   "version": "flat-p3-w4:F-L#3.loc@99",
+   "name": "w4.F-L#3@99",
+   "label": "flat-p3-w4 F-L#3.loc final version v99"
+  },
+  {
+   "version": "flat-p3-w4:F-L#4.loc@99",
+   "name": "w4.F-L#4@99",
+   "label": "flat-p3-w4 F-L#4.loc final version v99"
+  },
+  {
+   "version": "flat-p3:F-L#1.loc@199",
+   "name": "fp3.F-L#1@199",
+   "label": "flat-p3 F-L#1.loc final version v199"
+  },
+  {
+   "version": "flat-p3:F-L#2.loc@199",
+   "name": "fp3.F-L#2@199",
+   "label": "flat-p3 F-L#2.loc final version v199"
+  },
+  {
+   "version": "flat-p3:F-L#3.loc@199",
+   "name": "fp3.F-L#3@199",
+   "label": "flat-p3 F-L#3.loc final version v199"
+  },
+  {
+   "version": "flat-p3:F-L#4.loc@199",
+   "name": "fp3.F-L#4@199",
+   "label": "flat-p3 F-L#4.loc final version v199"
+  }
+ ]
+}

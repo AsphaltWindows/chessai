@@ -1,0 +1,77 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid13",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "plies": [
+  1,
+  2
+ ],
+ "name": "g2-versions-cold",
+ "dir": "leagues/arenas/diag/g2-versions-cold",
+ "entries": [
+  {
+   "version": "error-routing-p1:F-P#1.loc@226",
+   "name": "fp226.L1@226",
+   "label": "error-routing-p1 F-P#1.loc version v226"
+  },
+  {
+   "version": "error-routing-p1:F-P#2.loc@226",
+   "name": "fp226.L2@226",
+   "label": "error-routing-p1 F-P#2.loc version v226"
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@226",
+   "name": "ne226.L1@226",
+   "label": "error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v226"
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@226",
+   "name": "ne226.L2@226",
+   "label": "error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v226"
+  },
+  {
+   "version": "error-routing-p1:F-P#1.loc@314",
+   "name": "fp314.L1@314",
+   "label": "error-routing-p1 F-P#1.loc version v314"
+  },
+  {
+   "version": "error-routing-p1:F-P#2.loc@314",
+   "name": "fp314.L2@314",
+   "label": "error-routing-p1 F-P#2.loc version v314"
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@314",
+   "name": "ne314.L1@314",
+   "label": "error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v314"
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@314",
+   "name": "ne314.L2@314",
+   "label": "error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v314"
+  }
+ ],
+ "description": "Which side moved between v226 and v314 in G2 (11-11 11:52, the coordinator)? G2's trees were 14 (error) and -4 (cluster) over F-P at ply 1 at v226 (diag/error-routing-p1-v226-cold) but 118 and 106 at v314 (the G2 read). One field of G2's F-P x2 and T-P-Ne x2 at both versions, plies 1-2, T 0.02, 75 round-robins, hybrid13. Tags: fp226, ne226, fp314, ne314. fp314 - fp226 well below 0 = the flat declined late; ne314 - ne226 well above 0 = the trees improved late."
+}

@@ -1,0 +1,81 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid9",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "name": "residual-cold",
+ "dir": "leagues/arenas/diag/residual-cold",
+ "plies": [
+  2
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 5,
+  "min_rounds": 15,
+  "max_rounds": 15
+ },
+ "description": "theory-2 6.9: does sharing the base (residual leaves: shadow trained on everything plus per-leaf deltas) do better than copies under near-argmax ply-2 play, as the off-game-position reading predicts? residual-leaves' F-L, copy tree and residual tree at v150, 300, 399, ply 2, T 0.02. If residual beats copy here, the additive direction keeps a case; if not, park routing.",
+ "entries": [
+  {
+   "version": "residual-leaves:F-L.loc@150",
+   "name": "flat@150",
+   "label": "F-L v150"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+split-limit=4+split-threshold=1000000.loc@150",
+   "name": "copy@150",
+   "label": "copy tree v150"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+leaf-residual+residual-inherit-sums+split-limit=4+split-threshold=1000000.loc@150",
+   "name": "resid@150",
+   "label": "residual tree v150"
+  },
+  {
+   "version": "residual-leaves:F-L.loc@300",
+   "name": "flat@300",
+   "label": "F-L v300"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+split-limit=4+split-threshold=1000000.loc@300",
+   "name": "copy@300",
+   "label": "copy tree v300"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+leaf-residual+residual-inherit-sums+split-limit=4+split-threshold=1000000.loc@300",
+   "name": "resid@300",
+   "label": "residual tree v300"
+  },
+  {
+   "version": "residual-leaves:F-L.loc@399",
+   "name": "flat@399",
+   "label": "F-L v399"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+split-limit=4+split-threshold=1000000.loc@399",
+   "name": "copy@399",
+   "label": "copy tree v399"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+leaf-residual+residual-inherit-sums+split-limit=4+split-threshold=1000000.loc@399",
+   "name": "resid@399",
+   "label": "residual tree v399"
+  }
+ ]
+}

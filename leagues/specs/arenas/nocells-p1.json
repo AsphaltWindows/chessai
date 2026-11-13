@@ -1,0 +1,144 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": "field"
+ },
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 30,
+  "min_rounds": 30,
+  "max_rounds": 30
+ },
+ "name": "nocells-p1",
+ "dir": "leagues/arenas/diag/nocells-p1",
+ "plies": [
+  1
+ ],
+ "description": "nocells read nocells-p1: 8 DAGs with their path cells (wK) and neutral (nK, chessai-nocells copies), and a stranger panel (pJ: ply-1 F-P and T-P-Ne of error-routing-p1, grow-p1b, stall-p1); ply 1, near argmax (T 0.02), 30 round-robins; Elo 0 = the field's mean, no random player",
+ "entries": [
+  {
+   "version": "grow-dag-p1:D-P-Ne-ctx-grow+router-chain=2+router-credit=5000000#1.loc@414",
+   "name": "w1.gdL1@414",
+   "label": "grow-dag-p1 D-P-Ne-ctx-grow+router-chain=2+router-credit=5000000#1.loc v414, with its 2576 path parameters"
+  },
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/nocells/grow-dag-p1:D-P-Ne-ctx-grow+router-chain=2+router-credit=5000000#1.loc@414",
+   "name": "n1.gdL1@414",
+   "label": "grow-dag-p1 D-P-Ne-ctx-grow+router-chain=2+router-credit=5000000#1.loc v414, path cells neutral (chessai-nocells)"
+  },
+  {
+   "version": "grow-dag-p1:D-P-Ne-ctx-grow+router-chain=2+router-credit=5000000#2.loc@414",
+   "name": "w2.gdL2@414",
+   "label": "grow-dag-p1 D-P-Ne-ctx-grow+router-chain=2+router-credit=5000000#2.loc v414, with its 1752 path parameters"
+  },
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/nocells/grow-dag-p1:D-P-Ne-ctx-grow+router-chain=2+router-credit=5000000#2.loc@414",
+   "name": "n2.gdL2@414",
+   "label": "grow-dag-p1 D-P-Ne-ctx-grow+router-chain=2+router-credit=5000000#2.loc v414, path cells neutral (chessai-nocells)"
+  },
+  {
+   "version": "error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#1.loc@361",
+   "name": "w3.edLz0r1@361",
+   "label": "error-dag-p1 D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#1.loc v361, with its 792 path parameters"
+  },
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/nocells/error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#1.loc@361",
+   "name": "n3.edLz0r1@361",
+   "label": "error-dag-p1 D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#1.loc v361, path cells neutral (chessai-nocells)"
+  },
+  {
+   "version": "error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#2.loc@361",
+   "name": "w4.edLz0r2@361",
+   "label": "error-dag-p1 D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#2.loc v361, with its 792 path parameters"
+  },
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/nocells/error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#2.loc@361",
+   "name": "n4.edLz0r2@361",
+   "label": "error-dag-p1 D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#2.loc v361, path cells neutral (chessai-nocells)"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#2.loc@299",
+   "name": "w5.rtSh2@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#2.loc v299, with its 504 path parameters"
+  },
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/nocells/router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#2.loc@299",
+   "name": "n5.rtSh2@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#2.loc v299, path cells neutral (chessai-nocells)"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#1.loc@299",
+   "name": "w6.rtSh1@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#1.loc v299, with its 332 path parameters"
+  },
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/nocells/router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#1.loc@299",
+   "name": "n6.rtSh1@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#1.loc v299, path cells neutral (chessai-nocells)"
+  },
+  {
+   "version": "error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=0+router-split-limit=4#2.loc@366",
+   "name": "w7.edPz0r2@366",
+   "label": "error-dag-probit-p1 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=0+router-split-limit=4#2.loc v366, with its 468 path parameters"
+  },
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/nocells/error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=0+router-split-limit=4#2.loc@366",
+   "name": "n7.edPz0r2@366",
+   "label": "error-dag-probit-p1 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=0+router-split-limit=4#2.loc v366, path cells neutral (chessai-nocells)"
+  },
+  {
+   "version": "error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=0+router-split-limit=4#1.loc@366",
+   "name": "w8.edPz0r1@366",
+   "label": "error-dag-probit-p1 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=0+router-split-limit=4#1.loc v366, with its 504 path parameters"
+  },
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/nocells/error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=0+router-split-limit=4#1.loc@366",
+   "name": "n8.edPz0r1@366",
+   "label": "error-dag-probit-p1 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=0+router-split-limit=4#1.loc v366, path cells neutral (chessai-nocells)"
+  },
+  {
+   "version": "error-routing-p1:F-P#1.loc@314",
+   "name": "p1.erFP1@314",
+   "label": "panel: error-routing-p1 F-P#1.loc v314"
+  },
+  {
+   "version": "error-routing-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@314",
+   "name": "p2.erTP1@314",
+   "label": "panel: error-routing-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc v314"
+  },
+  {
+   "version": "grow-p1b:F-P#1.loc@352",
+   "name": "p3.gbFP1@352",
+   "label": "panel: grow-p1b F-P#1.loc v352"
+  },
+  {
+   "version": "grow-p1b:T-P-Ne-grow#1.loc@352",
+   "name": "p4.gbTP1@352",
+   "label": "panel: grow-p1b T-P-Ne-grow#1.loc v352"
+  },
+  {
+   "version": "stall-p1:F-P#1.loc@392",
+   "name": "p5.stFP1@392",
+   "label": "panel: stall-p1 F-P#1.loc v392"
+  },
+  {
+   "version": "stall-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@392",
+   "name": "p6.stTP1@392",
+   "label": "panel: stall-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc v392"
+  }
+ ]
+}

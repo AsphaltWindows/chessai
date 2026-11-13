@@ -1,0 +1,67 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid13",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "lr-share-p1-cold",
+ "dir": "leagues/arenas/diag/lr-share-p1-cold",
+ "plies": [
+  1,
+  2
+ ],
+ "description": "Cold read of lr-share-p1's final versions at plies 1-2 near argmax (six-model shortlist, theory-2 6.24). Tags: fl=^F-L, share=^T-L-Ne-share3, nc=^T-L-Nc-merge",
+ "entries": [
+  {
+   "version": "lr-share-p1:F-L#1.loc@342",
+   "name": "fl.L1@342",
+   "label": "lr-share-p1 F-L#1.loc final version v342"
+  },
+  {
+   "version": "lr-share-p1:F-L#2.loc@342",
+   "name": "fl.L2@342",
+   "label": "lr-share-p1 F-L#2.loc final version v342"
+  },
+  {
+   "version": "lr-share-p1:T-L-Ne-share3+split-limit=4+split-threshold=1000000#1.loc@342",
+   "name": "share.L1@342",
+   "label": "lr-share-p1 T-L-Ne-share3+split-limit=4+split-threshold=1000000#1.loc final version v342"
+  },
+  {
+   "version": "lr-share-p1:T-L-Ne-share3+split-limit=4+split-threshold=1000000#2.loc@342",
+   "name": "share.L2@342",
+   "label": "lr-share-p1 T-L-Ne-share3+split-limit=4+split-threshold=1000000#2.loc final version v342"
+  },
+  {
+   "version": "lr-share-p1:T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#1.loc@342",
+   "name": "nc.L1@342",
+   "label": "lr-share-p1 T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#1.loc final version v342"
+  },
+  {
+   "version": "lr-share-p1:T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#2.loc@342",
+   "name": "nc.L2@342",
+   "label": "lr-share-p1 T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#2.loc final version v342"
+  }
+ ]
+}

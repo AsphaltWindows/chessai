@@ -1,0 +1,116 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "replay-p2-read-p1",
+ "dir": "leagues/arenas/diag/replay-p2-read-p1",
+ "plies": [
+  1
+ ],
+ "description": "Cold read replay-p2-read at ply 1 only (one arena per ply), versions 300, 399, near argmax (T 0.02), 75 round-robins. Tags: rfp=replay-p2:^F-P, rtr=replay-p2:^T-P-Ne, pfp=probit-late-p2:^F-P, ptr=probit-late-p2:^T-P-Ne",
+ "entries": [
+  {
+   "version": "replay-p2:F-P#1.loc@300",
+   "name": "rfp300.L1@300",
+   "label": "replay-p2 F-P#1.loc version v300"
+  },
+  {
+   "version": "replay-p2:F-P#2.loc@300",
+   "name": "rfp300.L2@300",
+   "label": "replay-p2 F-P#2.loc version v300"
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@300",
+   "name": "rtr300.L1@300",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v300"
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@300",
+   "name": "rtr300.L2@300",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v300"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@300",
+   "name": "pfp300.L1@300",
+   "label": "probit-late-p2 F-P#1.loc version v300"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@300",
+   "name": "pfp300.L2@300",
+   "label": "probit-late-p2 F-P#2.loc version v300"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@300",
+   "name": "ptr300.L1@300",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v300"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@300",
+   "name": "ptr300.L2@300",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v300"
+  },
+  {
+   "version": "replay-p2:F-P#1.loc@399",
+   "name": "rfp399.L1@399",
+   "label": "replay-p2 F-P#1.loc version v399"
+  },
+  {
+   "version": "replay-p2:F-P#2.loc@399",
+   "name": "rfp399.L2@399",
+   "label": "replay-p2 F-P#2.loc version v399"
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@399",
+   "name": "rtr399.L1@399",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v399"
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@399",
+   "name": "rtr399.L2@399",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v399"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@399",
+   "name": "pfp399.L1@399",
+   "label": "probit-late-p2 F-P#1.loc version v399"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@399",
+   "name": "pfp399.L2@399",
+   "label": "probit-late-p2 F-P#2.loc version v399"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@399",
+   "name": "ptr399.L1@399",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v399"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@399",
+   "name": "ptr399.L2@399",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v399"
+  }
+ ]
+}

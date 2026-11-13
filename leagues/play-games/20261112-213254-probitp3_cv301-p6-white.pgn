@@ -1,0 +1,34 @@
+[Event "chessai play page"]
+[Site "leagues dashboard"]
+[Date "2026.11.12"]
+[Round "-"]
+[White "You"]
+[Black "probitp3_c v301 at ply 6"]
+[Result "1-0"]
+[Termination "checkmate"]
+[PlyCount "53"]
+[Time "21:32:54"]
+[LibraryId "probitp3_c"]
+[Experiment "probit-p3"]
+[Line "T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc"]
+[Version "301"]
+[VersionRole "final"]
+[Model "T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1"]
+[Archetype "T-P-Ne"]
+[Kind "bdt"]
+[TrainPly "3"]
+[Ply "6"]
+[Policy "log-odds argmax"]
+[Seed "992154860"]
+[Takebacks "0"]
+[Engine "chessai-play2 play-serve (e68822d1)"]
+[ModelFile "leagues/library/models/probit-p3/runs/T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc/bdt301.model"]
+[ModelMd5 "bcdfa696bc7b8d9b961a86d6fdc02d05"]
+[Calibration "own games 19805661db1569ab298e37ed127e10d4 (play-games)"]
+[Started "2026-11-13T02:31:11.800Z"]
+
+1. e4 Nc6 2. d4 e6 3. Nc3 Bb4 4. Nf3 Nge7 5. a3 Bxc3+ 6. bxc3 d5 7. e5 Bd7 8.
+Bd3 Rc8 9. O-O f6 10. Re1 Kf7 11. Bf4 g5 12. Bg3 g4 13. Nh4 fxe5 14. Bxe5 Nxe5
+15. Rxe5 Nc6 16. Qxg4 Nxe5 17. dxe5 Bc6 18. Re1 Rb8 19. Re3 Qe7 20. Qh5+ Kg7
+21. Rg3+ Kf8 22. Ng6+ Ke8 23. Nxe7+ Kxe7 24. Rg7+ Kd8 25. Qg5+ Kc8 26. Qe7 Rf8
+27. Qxc7# 1-0

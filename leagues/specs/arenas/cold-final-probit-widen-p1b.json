@@ -1,0 +1,76 @@
+{
+ "name": "cold-final-probit-widen-p1b",
+ "dir": "leagues/arenas/diag/cold-final-probit-widen-p1b",
+ "description": "Near-argmax (T 0.02) read of probit-widen-p1b's last versions at ply 1 and 2 (its own tables are at T 0.1, which RESULTS section 8 found confounded by each model's calibrated scale).",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "plies": [
+  1,
+  2
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 5,
+  "min_rounds": 15,
+  "max_rounds": 15
+ },
+ "entries": [
+  {
+   "version": "probit-widen-p1b:F-P#1.loc@199",
+   "name": "F-P#1@199",
+   "label": "F-P#1.loc final version v199"
+  },
+  {
+   "version": "probit-widen-p1b:F-P#2.loc@199",
+   "name": "F-P#2@199",
+   "label": "F-P#2.loc final version v199"
+  },
+  {
+   "version": "probit-widen-p1b:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#1.loc@199",
+   "name": "T-P-Nc-merge#1@199",
+   "label": "T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#1.loc final version v199"
+  },
+  {
+   "version": "probit-widen-p1b:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#2.loc@199",
+   "name": "T-P-Nc-merge#2@199",
+   "label": "T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh#2.loc final version v199"
+  },
+  {
+   "version": "probit-widen-p1b:T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.03+revise-on=fresh#1.loc@199",
+   "name": "T-P-Nc-merge+split-noise=0.03#1@199",
+   "label": "T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.03+revise-on=fresh#1.loc final version v199"
+  },
+  {
+   "version": "probit-widen-p1b:T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.03+revise-on=fresh#2.loc@199",
+   "name": "T-P-Nc-merge+split-noise=0.03#2@199",
+   "label": "T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.03+revise-on=fresh#2.loc final version v199"
+  },
+  {
+   "version": "probit-widen-p1b:T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.1+revise-on=fresh#1.loc@199",
+   "name": "T-P-Nc-merge+split-noise=0.1#1@199",
+   "label": "T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.1+revise-on=fresh#1.loc final version v199"
+  },
+  {
+   "version": "probit-widen-p1b:T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.1+revise-on=fresh#2.loc@199",
+   "name": "T-P-Nc-merge+split-noise=0.1#2@199",
+   "label": "T-P-Nc-merge+split-limit=4+split-threshold=1000000+split-noise=0.1+revise-on=fresh#2.loc final version v199"
+  }
+ ]
+}

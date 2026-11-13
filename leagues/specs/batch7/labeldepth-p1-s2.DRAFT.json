@@ -1,0 +1,60 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "seed": 82,
+ "train": {
+  "seed": 82
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300,
+  "rate_scale": "sqrt",
+  "guard_z": 1.0
+ },
+ "cycles": 401,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid21"
+ },
+ "cold_games": {
+  "temperature": 0.02,
+  "share": 0.5,
+  "train": false
+ },
+ "rate_every": 4,
+ "champion_se_kind": "draw-aware",
+ "champion_se": 3,
+ "name": "labeldepth-p1-s2",
+ "models": [
+  {
+   "model": "F-P",
+   "train_binary": "chessai-hybrid6"
+  },
+  {
+   "model": "F-P",
+   "set": {
+    "--label-depth": "1",
+    "--label-result": "0.5"
+   },
+   "to": "train",
+   "train_binary": "chessai-hybrid6"
+  },
+  {
+   "model": "F-P",
+   "set": {
+    "--label-depth": "2",
+    "--label-result": "0.5"
+   },
+   "to": "train",
+   "train_binary": "chessai-hybrid6"
+  }
+ ],
+ "description": "DRAFT LABEL DEPTH vs PLAY DEPTH at ply 1 (coordinator 11-13 05:19; the analyst out of credits). levers-p2's final (depth-2 labels over ply-2 play) lost the labels lead by v400 (71/61 at v150, 63/45 at v300, -4/5 at v400 at ply 2), while labels-p1 (depth-2 labels over ply-1 play, two seeds) kept 48.5 at ply 1 and 74.5 at ply 2 at v500/v408. Hypothesis: a label no deeper than the play is a variance cut biased to the model's own search, a head start that result labels catch; a label deeper than the play carries information the games lack and keeps its lead. One ply-1 field, three lines on the same games: F-P result labels; F-P --label-depth 1 (= the play depth); F-P --label-depth 2 (= play + 1, labels-p1's line). Seeds 81/82, two runs. Reads vs the r/e/g/h @300 panel at plies 1-2 and the ply-3 strangers, at v150, v300, final (version windows at the final). PREDICTION: d2 - result 30-80 at ply 2 at the final (labels-p1: 74.5); d1 - result within 20 at the final after a lead at v150. RULE: d1 within 20 and d2 30+ (pooled over seeds) supports 'label deeper than play' (next: depth-3 labels over ply-2 play in the standard); d1 30+ too means labels pay at equal depth and levers-p2's v400 was field- or seed-specific. Cost ~1.1 CPU-h a run (labels-p1: ~7 CPU-s a cycle)."
+}

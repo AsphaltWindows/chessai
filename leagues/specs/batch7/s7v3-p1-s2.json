@@ -1,0 +1,46 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "s7v3-p1-s2",
+ "description": "LAUNCHED 2026-11-13 14:23 by the PAIRS FINAL TEST fork (the user, 11-13 ~14:00: \"Let's do one final test of pairs\"; the coordinator's directive ~14:05). S7v3 FINAL TEST: data-chosen PAIRWISE FEATURES for the flat probit (analyst 6.111's statistic with pairs3f's floored SE) WITH THE DUPLICATE FIX, on chessai-pairs3g = pairs3f + a checkpoint skips a candidate whose interaction a chosen pair already is (a two-valued feature, side to move or a castling right, makes one interaction of its two values: x(i:0&X) + x(i:1&X) = x(X), a weight the probit has; pairs3f's clean-list smoke held 22 of its 40 pairs as such duplicates). Seed 78: replicate 2 of 2; s7v3-p1-s1 (seed 77) is the other. PRE-REGISTERED RULE (the coordinator, 11-13 ~14:05; it replaces the drafts' 6.111 band): at the final (two seeds pooled, version windows final-10/-5/final), F-P-S7v3 minus plain F-P below +20 at every ply read (1, 2, 3) CLOSES pairwise features for good; -30 or worse at ply 3 closes them for the goal whatever plies 1-2 say; +20 or more at plies 2 AND 3 REOPENS them (a ply-2 test next). READS: models/from-scratch/batch7-reads/pairs-final-read.sh mid (v150, plies 1-2) and final (the windows, plies 1-3): one arena per ply with both seeds, the r/e/g/h @300 panel at plies 1-2 (FP face = the read), the ply-3 strangers (f3, f3b, p3fp, x4, bfp) at ply 3, make_split_read.py --binary chessai-pairs3g. LINES (two, one factor: the pairs): F-P on chessai-pairs3g without the flag (training byte-identical to hybrid6: 16/16) and F-P-S7v3 (recipes.txt row F-P-S7v3: --use-probs --pairs on, the binary's defaults: the marginal contrast and the floored SE; the entry's train_binary chessai-pairs3g instead of the row's chessai-pairs3f). F-P-S7v3: every conjunction of two feature values is a candidate (356,642; 2,415 active a position); at the end of each training round that crosses a multiple of 1M examples (from the model's start) the window since the previous checkpoint is tested (the statistics restart at every checkpoint: no leakage from earlier models): z = the pair's interaction contrast over its own SE clustered by game, the component terms included (frequency-aware: null mean z^2 ~1 in each band of games), and the selection divides by the larger of that SE and the per-example SE (pairs3f: a side-to-move pair compares positions within games, so a tiny effect gets a tiny clustered SE; the floor asks an effect worth a weight); the 20 with the largest floored |z| above 5 become weights (mean 0, sd 0.5 x prior 0.3), at most 300 in all, after dropping each pair active in 3M examples since chosen whose |mean| is below 1.0 sd; going down the ranking, a candidate whose interaction a chosen pair already is (pairs3g) is skipped for the next. Checks, null by band, offline held-out test, kill -9 smoke and the clean-list smoke: models/from-scratch/pairs3/summary.txt. Model files: probit version 2, pairs1/2/3/3f/3g load them; the statistics are training state, runs/<line>/probitN.state (kind probit-pairs3, ~66 MB; the driver keeps the current version's). PLAY: ply 1, games_per_cycle 1584 (with 4 entries the 48-round cap binds: 576 tournament games + 192 self-games a cycle, ~94k positions: a checkpoint every ~11 cycles), T 0.1 round robins and self-games, every line trains on them; tournament binary chessai-pairs3g (plays every model as hybrid21: 31/31 identical on hybrid21's suite). RATING: rate_every 4, cold games T 0.02 share 0.5, rating only. CROWNING: draw-aware, 3 SEs. PLATEAU: scaled, sqrt, guard_z 1, floor 300 (min_cycles 300), cap 400 (cycles 401). LOGS: runs/F-P-S7v3.loc.log: \"pairs: N chosen of cap 300; ...\" and one \"pairs checkpoint at T examples: window E examples, G games, mean z^2 by games under 100 / 100-999 / 1000+, max |z|, over the bar N (floored: M); dropped ...; added ...; duplicates skipped N: ...\" line per checkpoint. COST: ~0.7-1.0 CPU-h a run. Seeds 77 and 78: unused before. Checks: models/from-scratch/pairs3/summary.txt (pairs3f: null by band, offline, kill -9 smoke) and models/from-scratch/pairs3g/summary.txt (the fix: identity, exact resume, null, the clean-list smoke).",
+ "seed": 78,
+ "train": {
+  "seed": 78
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300,
+  "rate_scale": "sqrt",
+  "guard_z": 1.0
+ },
+ "cycles": 401,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-pairs3g"
+ },
+ "cold_games": {
+  "temperature": 0.02,
+  "share": 0.5,
+  "train": false
+ },
+ "rate_every": 4,
+ "champion_se_kind": "draw-aware",
+ "champion_se": 3,
+ "models": [
+  {
+   "model": "F-P",
+   "train_binary": "chessai-pairs3g"
+  },
+  {
+   "model": "F-P-S7v3",
+   "train_binary": "chessai-pairs3g"
+  }
+ ]
+}

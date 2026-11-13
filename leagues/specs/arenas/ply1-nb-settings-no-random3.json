@@ -1,0 +1,63 @@
+{
+ "name": "ply1-nb-settings-no-random3",
+ "dir": "leagues/arenas/ply1/nb-settings-no-random3",
+ "description": "ply-1 replay of the pair arena: final champions of nb-settings-no-random3 (original) and nb-settings-new (rerun: no random players, no ply-1 entries, plateau stop), with the random players",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid8",
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "plies": [
+  1
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 10,
+  "min_rounds": 56,
+  "max_rounds": 56
+ },
+ "entries": [
+  {
+   "version": "nb-settings-no-random3:F-N+alpha=0.1.loc@2",
+   "name": "orig.F-N+alpha=0.1.loc@2",
+   "label": "nb-settings-no-random3 E.L.1.2",
+   "note": "crowned in cycle 4"
+  },
+  {
+   "version": "nb-settings-no-random3:F-N+alpha=1.loc@7",
+   "name": "orig.F-N+alpha=1.loc@7",
+   "label": "nb-settings-no-random3 E.L.2.7",
+   "note": "crowned in cycle 9"
+  },
+  {
+   "version": "nb-settings-no-random3:F-N+alpha=10.loc@2",
+   "name": "orig.F-N+alpha=10.loc@2",
+   "label": "nb-settings-no-random3 E.L.1.2",
+   "note": "crowned in cycle 4"
+  },
+  {
+   "version": "nb-settings-new:F-N+alpha=0.1.loc@1",
+   "name": "new.F-N+alpha=0.1.loc@1",
+   "label": "nb-settings-new E.L.1.1",
+   "note": "crowned in cycle 3"
+  },
+  {
+   "version": "nb-settings-new:F-N+alpha=1.loc@1",
+   "name": "new.F-N+alpha=1.loc@1",
+   "label": "nb-settings-new E.L.1.1",
+   "note": "crowned in cycle 3"
+  },
+  {
+   "version": "nb-settings-new:F-N+alpha=10.loc@38",
+   "name": "new.F-N+alpha=10.loc@38",
+   "label": "nb-settings-new E.L.3.38",
+   "note": "crowned in cycle 40"
+  }
+ ]
+}

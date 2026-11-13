@@ -1,0 +1,50 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 200
+ },
+ "cycles": 600,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "prices_version": "P2",
+ "name": "lr-anchor-p1",
+ "seed": 32,
+ "train": {
+  "seed": 32
+ },
+ "models": [
+  {
+   "model": "T-L-Nc-merge-anchor",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--revise-on": "fresh",
+    "--split-anchor-l2": "0.0004"
+   },
+   "to": "train",
+   "replicates": 2
+  },
+  {
+   "model": "T-L-Nc-merge",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--revise-on": "fresh"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid13"
+ },
+ "description": "DRAFT, not created or launched. The LR anchor (theory-2 6.23 item 4): T-L-Nc-merge limit 4, threshold 1M, fresh gate, with --split-anchor-l2 4e-4 x2 against without x2 (lr-trees-p1's tree arm), pure ply-1 LR field; the anchor is the one factor. After create, give every line chessai-hybrid6an: python3 leagues/specs/ply1/train_binary.py LDIR chessai-hybrid6an (the plain lines then train as chessai-hybrid6, byte for byte). Strength: a third of 1.3e-3, the match to the probit trees' split noise 0.03 at threshold 1M (models/from-scratch/lranchor/summary.txt). Offline (l2sweep testbed, 3 seeds) no strength beat no anchor: this one +0.0007 nats fresh log-loss (+0.0008 winner), the matched one +0.0029 with a root merge; so the offline prediction is no gain over the plain copies (the analyst's: 60-90 over F-L against their 43). Read cold at T 0.02 at plies 1 and 2."
+}

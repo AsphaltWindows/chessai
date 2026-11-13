@@ -1,0 +1,98 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "std-v1-p1-s2",
+ "description": "DRAFT (2026-11-12 ~17:30; NOT created: the coordinator reviews and launches). The TRAINING STANDARD v1, ply-1 rung (models/STANDARD.md): reference models of the 8 standard recipes, each trained to its plateau under these repeatable conditions, for the library, arenas, the global ladder and further training (the user, 11-12 ~16:38; recipe set agreed ~16:55: \"F-L F-P capped trees, growing trees and router-splitting dags (but all of those might have either LR or probit leaves) so that's 8 entries?\"; ~17:00: \"First let's establish the standard for ply 1. then we can move onto ply 2\"). Two replicate runs, identical but for the seed and the name (std-v1-p1-s1 seed 65, std-v1-p1-s2 seed 66; the user, ~16:45: replicates \"help us calibrate noise\"); lines in one run share data, so replicates are separate runs. LINES (1 each, mixed field): F-L; F-P; T-L-Ne capped (split limit 4, threshold 1M, forget 10: capped-l-f10-p1); T-P-Ne capped (limit 4, 1M, split noise 0.03); T-L-Ne-grow-f10 with grow-l-p1b's settled leaf rule (--grow-mdl 0 --grow-gate age --grow-priority snapshot, forget 10: the LR seat after grow-l-p1b, analyst 6.67-6.69); T-P-Ne-grow with the leaf bar on (--grow-mdl 1, gate age, priority snapshot: grow-p1c / grow-dag-p1); D-P-Ne-ctx-grow and D-L-Ne-ctx-grow (grow6's encourage rule for router splits) with --router-chain 2 (analyst 6.94: chain 1 ends router growth once each router has split, dropping the long-horizon case the user reopened) and --router-trial-z -2 (the user, ~17:00: the DAGs \"split a little too liberally\"; a router split is now KEPT only if its trial gain over the unsplit router is at least +2 block SEs, where before it stayed unless 2 SEs worse; in grow-dag-p1 14 of 16 kept splits passed +3 SE, so the bar trims the marginal ones), router credit at the recipe default 10M root positions (grow-dag-p1 had 5M). The LR DAG takes the LR grow tree's leaf rule (--grow-mdl 0, --forget-factor 10): an MDL bar of ~0.006 nats blocks every LR leaf split (LR gains 0.0007-0.002 nats), and at forget 1 LR clones keep the parent's AdaGrad sums and can't specialise (analyst 6.59); so each DAG differs from its leaf type's grow tree by the DAG features only. Prediction (6.94): 35-45 nodes at v300, 55-70 at v600 (grow-dag-p1: 63-76 at v430). PLAY: ply 1 (entry_ply 1), games_per_cycle 1584 (8 lines, 16 entries: 7 double round-robins, 1,680 games), round-robins and self-games at T 0.1 log-odds softmax (the binary's default; T 0.02 training games cost 54-138), every line trains on them; tournament binary chessai-hybrid19 (plays grow6's DAGs byte for byte as grow6 and hybrid17 at plies 1-4: models/from-scratch/ply4-prep). RATING: rate_every 4 (the user's sub-cycles; rated cycles 1, 5, 9, ...), cold games T 0.02 share 0.5 (3 cold double round-robins, 720 games a rated cycle), rating only (train false: cold games in training failed 11-12 14:21). CROWNING: champion_se_kind draw-aware, champion_se 3 (analyst 6.93: in-run SEs are ~1.7x the split-half noise; 3 draw-aware SEs is ~1.8 nominal, about today's false-crowning rate; built, verified and swapped in 11-12 17:22:24, leagues.py dfba7832 contrast_ses_draws: full selftest 234 rule checks and 17 runs, off byte for byte on 3 running experiments; leagues/BUILD.md, section Draw-aware champion test and plateau guard). PLATEAU: scaled, rate_scale sqrt (DECIDED, the coordinator ~17:15): K = round(50 x sqrt(2/8)) x sqrt(4) = 50 training cycles without a crowning, checked on rated cycles from cycle 300 (the first is 301), with guard_z 1.0 (never stop while any line's last rated test has current minus champion above 1 draw-aware SE); cap 601 (a rated cycle). TRAINING BINARIES (after create, before cycle 1): python3 leagues/specs/ply1/train_binary.py --from chessai-hybrid4gfx LDIR chessai-hybrid6 (F-L, F-P, both capped trees); --from chessai-grow4 LDIR chessai-grow6 (T-P-Ne-grow); --from chessai-grow5 LDIR chessai-grow6 (T-L-Ne-grow-f10); the DAGs' recipes are on chessai-grow6 already (byte-identical swaps: grow6 = grow5 = grow4 without their new flags). NOT IN v1: train filters, observers, openings, cold games in training, warm starts. COST (measured per-line rates of grow-dag-p1, filtered-p1-twin, grow-l-p1b, capped-l-f10-p1 and error-dag-p1 at ply 1): ~19 CPU-s a cycle early, ~33 by cycle 300, ~45 by 600 (the DAGs' training and calibration dominate late); ~2.2 CPU-h to the floor (cycle 301) and ~5.7 to the cap (601) per seed, +-30%; both seeds ~4.4 / ~11.4. Seeds 65 and 66: unused (64 is probit-p4w's draft).",
+ "models": [
+  {
+   "model": "F-L"
+  },
+  {
+   "model": "F-P"
+  },
+  {
+   "model": "T-L-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--forget-factor": "10"
+   },
+   "to": "train"
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train"
+  },
+  {
+   "model": "T-L-Ne-grow-f10",
+   "set": {
+    "--grow-mdl": "0",
+    "--grow-gate": "age",
+    "--grow-priority": "snapshot"
+   },
+   "to": "train"
+  },
+  {
+   "model": "T-P-Ne-grow",
+   "set": {
+    "--grow-mdl": "1",
+    "--grow-gate": "age",
+    "--grow-priority": "snapshot"
+   },
+   "to": "train"
+  },
+  {
+   "model": "D-L-Ne-ctx-grow",
+   "set": {
+    "--router-chain": "2",
+    "--router-trial-z": "-2",
+    "--grow-mdl": "0",
+    "--forget-factor": "10"
+   },
+   "to": "train"
+  },
+  {
+   "model": "D-P-Ne-ctx-grow",
+   "set": {
+    "--router-chain": "2",
+    "--router-trial-z": "-2"
+   },
+   "to": "train"
+  }
+ ],
+ "seed": 66,
+ "train": {
+  "seed": 66
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300,
+  "rate_scale": "sqrt",
+  "guard_z": 1.0
+ },
+ "cycles": 601,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid19"
+ },
+ "cold_games": {
+  "temperature": 0.02,
+  "share": 0.5,
+  "train": false
+ },
+ "rate_every": 4,
+ "champion_se_kind": "draw-aware",
+ "champion_se": 3
+}

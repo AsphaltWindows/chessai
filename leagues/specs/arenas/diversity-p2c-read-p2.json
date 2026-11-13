@@ -1,0 +1,231 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "diversity-p2c-read-p2",
+ "dir": "leagues/arenas/diag/diversity-p2c-read-p2",
+ "plies": [
+  2
+ ],
+ "description": "diversity-p2c's read at ply 2 (analyst 6.57/6.58), final version v331: p2c F-P (cfp) and tree (ctr) against base-probit-p2 F-P (bfp), probit-late-p2 F-P (pfp), diversity-p2 F-P (dfp); at ply 2 also the acceleration ladder and the cold test of each cut reference kind (rFP, rTNc) against the line versions that cut it (cutFP, cutTNc). Near argmax (T 0.02), 75 round-robins.",
+ "entries": [
+  {
+   "version": "diversity-p2c:F-P#1.loc@100",
+   "name": "cfp100.L1@100",
+   "label": "diversity-p2c F-P#1.loc version v100"
+  },
+  {
+   "version": "diversity-p2c:F-P#2.loc@100",
+   "name": "cfp100.L2@100",
+   "label": "diversity-p2c F-P#2.loc version v100"
+  },
+  {
+   "version": "diversity-p2c:F-P#1.loc@150",
+   "name": "cfp150.L1@150",
+   "label": "diversity-p2c F-P#1.loc version v150"
+  },
+  {
+   "version": "diversity-p2c:F-P#2.loc@150",
+   "name": "cfp150.L2@150",
+   "label": "diversity-p2c F-P#2.loc version v150"
+  },
+  {
+   "version": "diversity-p2c:F-P#1.loc@200",
+   "name": "cfp200.L1@200",
+   "label": "diversity-p2c F-P#1.loc version v200"
+  },
+  {
+   "version": "diversity-p2c:F-P#2.loc@200",
+   "name": "cfp200.L2@200",
+   "label": "diversity-p2c F-P#2.loc version v200"
+  },
+  {
+   "version": "diversity-p2c:F-P#1.loc@300",
+   "name": "cfp300.L1@300",
+   "label": "diversity-p2c F-P#1.loc version v300"
+  },
+  {
+   "version": "diversity-p2c:F-P#2.loc@300",
+   "name": "cfp300.L2@300",
+   "label": "diversity-p2c F-P#2.loc version v300"
+  },
+  {
+   "version": "diversity-p2c:F-P#1.loc@331",
+   "name": "cfpF.L1@331",
+   "label": "diversity-p2c F-P#1.loc version v331"
+  },
+  {
+   "version": "diversity-p2c:F-P#2.loc@331",
+   "name": "cfpF.L2@331",
+   "label": "diversity-p2c F-P#2.loc version v331"
+  },
+  {
+   "version": "diversity-p2c:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@150",
+   "name": "ctr150.L1@150",
+   "label": "diversity-p2c T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v150"
+  },
+  {
+   "version": "diversity-p2c:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@150",
+   "name": "ctr150.L2@150",
+   "label": "diversity-p2c T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v150"
+  },
+  {
+   "version": "diversity-p2c:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@300",
+   "name": "ctr300.L1@300",
+   "label": "diversity-p2c T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v300"
+  },
+  {
+   "version": "diversity-p2c:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@300",
+   "name": "ctr300.L2@300",
+   "label": "diversity-p2c T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v300"
+  },
+  {
+   "version": "diversity-p2c:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@331",
+   "name": "ctrF.L1@331",
+   "label": "diversity-p2c T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v331"
+  },
+  {
+   "version": "diversity-p2c:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@331",
+   "name": "ctrF.L2@331",
+   "label": "diversity-p2c T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v331"
+  },
+  {
+   "version": "base-probit-p2:F-P#1.loc@300",
+   "name": "bfp300.L1@300",
+   "label": "base-probit-p2 F-P#1.loc version v300"
+  },
+  {
+   "version": "base-probit-p2:F-P#2.loc@300",
+   "name": "bfp300.L2@300",
+   "label": "base-probit-p2 F-P#2.loc version v300"
+  },
+  {
+   "version": "base-probit-p2:F-P#1.loc@450",
+   "name": "bfp450.L1@450",
+   "label": "base-probit-p2 F-P#1.loc version v450"
+  },
+  {
+   "version": "base-probit-p2:F-P#2.loc@450",
+   "name": "bfp450.L2@450",
+   "label": "base-probit-p2 F-P#2.loc version v450"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@300",
+   "name": "pfp300.L1@300",
+   "label": "probit-late-p2 F-P#1.loc version v300"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@300",
+   "name": "pfp300.L2@300",
+   "label": "probit-late-p2 F-P#2.loc version v300"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@399",
+   "name": "pfp399.L1@399",
+   "label": "probit-late-p2 F-P#1.loc version v399"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@399",
+   "name": "pfp399.L2@399",
+   "label": "probit-late-p2 F-P#2.loc version v399"
+  },
+  {
+   "version": "diversity-p2:F-P#1.loc@300",
+   "name": "dfp300.L1@300",
+   "label": "diversity-p2 F-P#1.loc version v300"
+  },
+  {
+   "version": "diversity-p2:F-P#2.loc@300",
+   "name": "dfp300.L2@300",
+   "label": "diversity-p2 F-P#2.loc version v300"
+  },
+  {
+   "version": "diversity-p2:F-P#1.loc@314",
+   "name": "dfp314.L1@314",
+   "label": "diversity-p2 F-P#1.loc version v314"
+  },
+  {
+   "version": "diversity-p2:F-P#2.loc@314",
+   "name": "dfp314.L2@314",
+   "label": "diversity-p2 F-P#2.loc version v314"
+  },
+  {
+   "version": "base-probit-p2:F-P#1.loc@599",
+   "name": "rFP.L1@599",
+   "label": "base-probit-p2 F-P#1.loc version v599"
+  },
+  {
+   "version": "base-probit-p2:F-P#2.loc@599",
+   "name": "rFP.L2@599",
+   "label": "base-probit-p2 F-P#2.loc version v599"
+  },
+  {
+   "version": "base-probit-p2:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#1.loc@599",
+   "name": "rTNc.L1@599",
+   "label": "base-probit-p2 T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#1.loc version v599"
+  },
+  {
+   "version": "base-probit-p2:T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#2.loc@599",
+   "name": "rTNc.L2@599",
+   "label": "base-probit-p2 T-P-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+split-noise=0.03+revise=2#2.loc version v599"
+  },
+  {
+   "version": "diversity-p2c:F-P#1.loc@18",
+   "name": "cutFP.L1@18",
+   "label": "diversity-p2c F-P#1.loc version v18 (its current version when the window first cut the FP references)"
+  },
+  {
+   "version": "diversity-p2c:F-P#2.loc@18",
+   "name": "cutFP.L2@18",
+   "label": "diversity-p2c F-P#2.loc version v18 (its current version when the window first cut the FP references)"
+  },
+  {
+   "version": "diversity-p2c:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@96",
+   "name": "cutFP.L3@96",
+   "label": "diversity-p2c T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v96 (its current version when the window first cut the FP references)"
+  },
+  {
+   "version": "diversity-p2c:F-P#1.loc@9",
+   "name": "cutTNc.L1@9",
+   "label": "diversity-p2c F-P#1.loc version v9 (its current version when the window first cut the TNc references)"
+  },
+  {
+   "version": "diversity-p2c:F-P#2.loc@9",
+   "name": "cutTNc.L2@9",
+   "label": "diversity-p2c F-P#2.loc version v9 (its current version when the window first cut the TNc references)"
+  },
+  {
+   "version": "diversity-p2c:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@9",
+   "name": "cutTNc.L3@9",
+   "label": "diversity-p2c T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v9 (its current version when the window first cut the TNc references)"
+  },
+  {
+   "version": "diversity-p2c:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@10",
+   "name": "cutTNc.L4@10",
+   "label": "diversity-p2c T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v10 (its current version when the window first cut the TNc references)"
+  }
+ ]
+}

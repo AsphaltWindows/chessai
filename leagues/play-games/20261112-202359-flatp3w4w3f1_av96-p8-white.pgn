@@ -1,0 +1,44 @@
+[Event "chessai play page"]
+[Site "leagues dashboard"]
+[Date "2026.11.12"]
+[Round "-"]
+[White "You"]
+[Black "flatp3w4w3f1_a v96 at ply 8"]
+[Result "1-0"]
+[Termination "checkmate"]
+[PlyCount "181"]
+[Time "20:23:59"]
+[LibraryId "flatp3w4w3f1_a"]
+[Experiment "flat-p3-w4-w3f1"]
+[Line "F-L#1.loc"]
+[Version "96"]
+[VersionRole "final"]
+[Model "F-L#1"]
+[Archetype "F-L"]
+[Kind "lr"]
+[TrainPly "3"]
+[Ply "8"]
+[Policy "log-odds argmax"]
+[Seed "261198578"]
+[Takebacks "0"]
+[Engine "chessai-play2 play-serve (e68822d1)"]
+[ModelFile "leagues/library/models/flat-p3-w4-w3f1/runs/F-L#1.loc/lr96.model"]
+[ModelMd5 "c2db02c9acf293dc3ec5ae0f72784603"]
+[Calibration "own games f820a6018c98bb07e2baedf0c30405ff (play-games)"]
+[Started "2026-11-12T23:13:33.020Z"]
+
+1. c4 f5 2. g3 a6 3. Bg2 Nf6 4. Nc3 d6 5. e3 Kf7 6. Nge2 Nbd7 7. d4 g6 8. d5
+Bg7 9. Nd4 Nf8 10. Nce2 h5 11. Nf4 g5 12. Nfe6 Bxe6 13. Nxe6 Nxe6 14. dxe6+
+Kxe6 15. Bd5+ Nxd5 16. Qxd5+ Kf6 17. Rb1 c6 18. Qd3 Re8 19. Bd2 d5 20. Bc3+ e5
+21. cxd5 Qxd5 22. Qxd5 cxd5 23. O-O Kf7 24. Rfd1 Rad8 25. a4 d4 26. exd4 exd4
+27. Bb4 Rc8 28. Rd3 Rc4 29. Rb3 Bf8 30. Bxf8 Kxf8 31. Rxb7 Rxa4 32. Rd7 d3 33.
+Rxd3 Rae4 34. Kg2 Re1 35. Rxe1 Rxe1 36. Ra3 Re6 37. Rb3 Kf7 38. Rb7+ Kf6 39.
+Kf3 g4+ 40. Kg2 Kg5 41. h4+ gxh3+ 42. Kxh3 Kg6 43. f4 Rc6 44. Kh4 a5 45. Ra7 a4
+46. Rxa4 Rb6 47. b4 Rd6 48. b5 Rd5 49. Ra6+ Kh7 50. Rb6 Rd3 51. Rf6 Kg8 52.
+Rxf5 Rd1 53. Kxh5 Kg7 54. Kg4 Rb1 55. Re5 Kg6 56. Re6+ Kf7 57. Re5 Kg6 58. f5+
+Kf7 59. Kg5 Rg1 60. g4 Rb1 61. f6 Rb2 62. Re7+ Kf8 63. Rb7 Rb1 64. Kg6 Re1 65.
+g5 Re6 66. Rb8+ Re8 67. Rb7 Re6 68. Rh7 Ke8 69. Re7+ Rxe7 70. fxe7 Kxe7 71. b6
+Kd6 72. b7 Kc7 73. Kf7 Kxb7 74. g6 Kc6 75. g7 Kd6 76. g8=Q Kd5 77. Qe8 Kc5 78.
+Qe6 Kd4 79. Ke7 Kc5 80. Qd6+ Kb5 81. Ke6 Kc4 82. Qd5+ Kb4 83. Ke5 Kc3 84. Qd4+
+Kb3 85. Ke4 Ka2 86. Kd3 Kb3 87. Qc3+ Ka4 88. Qb2 Ka5 89. Qb7 Ka4 90. Kc4 Ka5
+91. Qb5# 1-0

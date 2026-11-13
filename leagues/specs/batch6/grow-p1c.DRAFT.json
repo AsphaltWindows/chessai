@@ -1,0 +1,46 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "grow-p1c",
+ "description": "Growth rule, the trigger as the only factor, at ply 1 (analyst 6.47 (1)/(b) and 6.48, arm B; the user 11-11 ~18:00-19:30: splits should wait for stagnation). In league fields the stagnation test measures drift (window means on different data), and a paired snapshot statistic has a floor (the online model always beats a one-window-old copy: grow4's smoke saw 234 snapshot gains, all positive, +0.0012 to +0.0182), so no stagnation GATE: a leaf is eligible after 3 closed own windows plus a credit, and among eligible leaves the smallest paired snapshot gain (the most stagnant) is tried first, keeping 'wait for stagnation' as an order. Lines: F-P x2; T-P-Ne-grow (grow1's rule: stall gate, excess priority, MDL bar) x2; T-P-Ne-grow with --grow-gate age --grow-priority snapshot (grow4) x2, MDL bar on as in grow1 so the trigger is the only factor. Every line trains on chessai-grow4 (byte-identical to grow1 without the new flags; train_binary.py after create); games chessai-hybrid16; seed 47. Floor 300, cap 400. Read: cold, T 0.02, one arena per ply (1, 2), v150 and the final, head to head B vs grow1 and each vs F-P, plus split_table.py. Prediction (6.47 (b), 6.48): B's trials earlier and more often, 12-15 leaves, within 10 of grow1 at both plies.",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne-grow",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne-grow",
+   "set": {
+    "--grow-gate": "age",
+    "--grow-priority": "snapshot"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 47,
+ "train": {
+  "seed": 47
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 400,
+ "rounds_per_cycle": 12,
+ "min_rounds": 12,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid16"
+ }
+}

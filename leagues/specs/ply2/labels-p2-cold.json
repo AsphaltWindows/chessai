@@ -1,0 +1,51 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "name": "labels-p2-cold",
+ "description": "Do depth-2 search labels carry to deeper search? F-L with result labels (comparator, 2 seeds) against F-L --label-depth 2 --label-result 0.5 (2 seeds), local, in a ply-2-only field of its own games (entry_ply 2, no ply-1 entries, no references, self-games), rated near argmax (tournament and self-games at softmax T 0.02: the T 0.1 ratings were confounded by each model's calibrated scale, RESULTS section 8), 15 rounds a cycle, scaled plateau with min_cycles 200, cap 600. Verdict: a final T 0.02 arena of the four champions at ply 3 with ply 2 beside it. The analyst's first experiment (theory-2 6.10 b), launched 11-11 overnight under the user's standing instruction to launch without them.",
+ "options": [
+  "local"
+ ],
+ "references": [],
+ "ply1_entries": false,
+ "entry_ply": 2,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 200
+ },
+ "cycles": 600,
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid9",
+  "flags": [
+   "--reports-last",
+   "--sparse-fit",
+   "--policy",
+   "log-odds-softmax",
+   "--temperature",
+   "0.02"
+  ]
+ },
+ "prices_version": "P2",
+ "models": [
+  {
+   "model": "F-L",
+   "replicates": 2
+  },
+  {
+   "model": "F-L",
+   "set": {
+    "--label-depth": "2",
+    "--label-result": "0.5"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 17,
+ "train": {
+  "seed": 17
+ },
+ "rounds_per_cycle": 15,
+ "min_rounds": 15
+}

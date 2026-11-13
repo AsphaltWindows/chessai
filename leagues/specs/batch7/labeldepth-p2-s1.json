@@ -1,0 +1,60 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "seed": 84,
+ "train": {
+  "seed": 84
+ },
+ "references": [],
+ "entry_ply": 2,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300,
+  "rate_scale": "sqrt",
+  "guard_z": 1.0
+ },
+ "cycles": 401,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid21"
+ },
+ "cold_games": {
+  "temperature": 0.02,
+  "share": 0.5,
+  "train": false
+ },
+ "rate_every": 4,
+ "champion_se_kind": "draw-aware",
+ "champion_se": 3,
+ "name": "labeldepth-p2-s1",
+ "models": [
+  {
+   "model": "F-P",
+   "train_binary": "chessai-hybrid6"
+  },
+  {
+   "model": "F-P",
+   "set": {
+    "--label-depth": "2",
+    "--label-result": "0.5"
+   },
+   "to": "train",
+   "train_binary": "chessai-hybrid6"
+  },
+  {
+   "model": "F-P",
+   "set": {
+    "--label-depth": "3",
+    "--label-result": "0.5"
+   },
+   "to": "train",
+   "train_binary": "chessai-hybrid6"
+  }
+ ],
+ "description": "LAUNCHED 2026-11-13 07:41 by the coordinator (launch-when-free.sh, the user away). LABEL DEPTH ABOVE THE PLAY at ply 2 (coordinator 11-13 07:11; the analyst out of credits). labeldepth-p1 (two seeds, windows) found the deeper label's value rising with the read ply (d2 - d1 = -17 / +59 / +74 at plies 1 / 2 / 3; d1 - p +68 / -4 / -36; d2 - p +50 / +55 / +38): a label as deep as the play helps only at that ply, a deeper one helps at every ply read. Here: one ply-2 field, three F-P lines on the same games: result labels (p), depth-2 labels (d2 = play depth; a third seed of levers-p2's line), depth-3 labels (d3 = play + 1). Measured label cost: depth 3 57 CPU-s a cycle (136k positions) vs depth 2 6.5; the field ~9.5 CPU-h to cap 401. Reads with version windows vs y/v/l @299 at plies 2 and 3 (and 4 at the final). PREDICTION: d3 - p 30-60 at ply 2 and 40-80 at ply 3 at the final; d3 - d2 positive and larger at ply 3. RULE: d3 - p 30+ at plies 2 and 3 (windows) => the ply-2 rung's flats train on depth-3 labels (+6 CPU-h a run); d3 within 15 of p => label depth is not the lever at ply 2."
+}

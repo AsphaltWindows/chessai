@@ -1,0 +1,97 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 15,
+  "min_rounds": 75,
+  "max_rounds": 75
+ },
+ "name": "stall-p1-stage",
+ "dir": "leagues/arenas/diag/stall-p1-stage",
+ "plies": [
+  1,
+  2
+ ],
+ "description": "Stage-1 cold read of stall-p1 at versions 150, final, plies 1,2, near argmax (T 0.02), 75 round-robins (theory-2 6.34). Tags: stall=split-rule=stall-high, cur=^T-P-Ne, fp=^F-P",
+ "entries": [
+  {
+   "version": "stall-p1:F-P#1.loc@150",
+   "name": "fp150.L1@150",
+   "label": "stall-p1 F-P#1.loc version v150"
+  },
+  {
+   "version": "stall-p1:F-P#2.loc@150",
+   "name": "fp150.L2@150",
+   "label": "stall-p1 F-P#2.loc version v150"
+  },
+  {
+   "version": "stall-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@150",
+   "name": "cur150.L1@150",
+   "label": "stall-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v150"
+  },
+  {
+   "version": "stall-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@150",
+   "name": "cur150.L2@150",
+   "label": "stall-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v150"
+  },
+  {
+   "version": "stall-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03+split-rule=stall-high+split-z=2#1.loc@150",
+   "name": "stall150.L1@150",
+   "label": "stall-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03+split-rule=stall-high+split-z=2#1.loc version v150"
+  },
+  {
+   "version": "stall-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03+split-rule=stall-high+split-z=2#2.loc@150",
+   "name": "stall150.L2@150",
+   "label": "stall-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03+split-rule=stall-high+split-z=2#2.loc version v150"
+  },
+  {
+   "version": "stall-p1:F-P#1.loc@392",
+   "name": "fpF.L1@392",
+   "label": "stall-p1 F-P#1.loc version v392 (final)"
+  },
+  {
+   "version": "stall-p1:F-P#2.loc@392",
+   "name": "fpF.L2@392",
+   "label": "stall-p1 F-P#2.loc version v392 (final)"
+  },
+  {
+   "version": "stall-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@392",
+   "name": "curF.L1@392",
+   "label": "stall-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v392 (final)"
+  },
+  {
+   "version": "stall-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@392",
+   "name": "curF.L2@392",
+   "label": "stall-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v392 (final)"
+  },
+  {
+   "version": "stall-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03+split-rule=stall-high+split-z=2#1.loc@392",
+   "name": "stallF.L1@392",
+   "label": "stall-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03+split-rule=stall-high+split-z=2#1.loc version v392 (final)"
+  },
+  {
+   "version": "stall-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03+split-rule=stall-high+split-z=2#2.loc@392",
+   "name": "stallF.L2@392",
+   "label": "stall-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03+split-rule=stall-high+split-z=2#2.loc version v392 (final)"
+  }
+ ]
+}

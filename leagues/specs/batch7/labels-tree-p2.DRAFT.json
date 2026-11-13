@@ -1,0 +1,57 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "seed": 79,
+ "train": {
+  "seed": 79
+ },
+ "references": [],
+ "entry_ply": 2,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300,
+  "rate_scale": "sqrt",
+  "guard_z": 1.0
+ },
+ "cycles": 401,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid21"
+ },
+ "cold_games": {
+  "temperature": 0.02,
+  "share": 0.5,
+  "train": false
+ },
+ "rate_every": 4,
+ "champion_se_kind": "draw-aware",
+ "champion_se": 3,
+ "name": "labels-tree-p2",
+ "models": [
+  "F-P-lab",
+  "T-P-Ne-cap",
+  {
+   "model": "T-P-Ne-cap",
+   "set": {
+    "--label-depth": "2",
+    "--label-result": "0.5"
+   },
+   "to": "train"
+  },
+  {
+   "model": "T-P-Ne-cap",
+   "set": {
+    "--label-depth": "2",
+    "--label-result": "0.5",
+    "--label-model": "F-P-lab"
+   },
+   "to": "train"
+  }
+ ],
+ "description": "DRAFT (tree-labels fork for the coordinator, 11-13 04:01; analyst 6.113). SEARCH LABELS FOR TREES, trained at ply 2: do trees convert a less noisy target into a lead over the labelled flat? (labels-p1 extended: search minus result labels +48.5 at ply 1 and +74.5 at ply 2 on the flat; trees had never trained on search labels.) One ply-2 field, four lines on the same games: F-P-lab (F-P --label-depth 2 --label-result 0.5 on hybrid6, the reference: levers-p2's and labels-p1's labelled flat), T-P-Ne-cap (the standard's capped T-P-Ne: split limit 4, threshold 1M, noise 0.03; result labels), T-P-Ne-cap --label-depth 2 --label-result 0.5 (own search: each position labelled half by a depth-2 search by the tree as it starts the round, calibrated on the round's results, half by the result; its leaves and its routers' error targets train on the blended label), and the same with --label-model F-P-lab (the field's F-P-lab line as the labeller: its current version each cycle, the one that played the cycle's games; leagues.py label_line_args). Trees on chessai-treelab (grow7 + labels for bdt/bdd; without the flags byte-identical to hybrid6 on this tree). Seed 79, hybrid21 tournament, T 0.1 training games, 1,584 games a cycle with self-games, cold T 0.02 share 0.5 rating-only, rate every 4, draw-aware crowning 3 SE, plateau floor 300 sqrt guard 1, cap 401. COST (measured by the build fork): training at the trees' 4-split cap ~32 CPU-s a cycle (T-P-Ne-cap own-search labels ~17: 25.7 CPU-s per 200k P1 positions with std-v1-p1-s1's v604 tree, ~122 us a position, 21x its result-label training; with the F-P-lab labeller ~7, the flat's fixed-point search; F-P-lab ~6.8 as in levers-p2; T-P-Ne-cap result ~1.5), young trees cheaper; games, own calibration and self-games ~35-40 (residual-p2's ply-2 field of capped trees: 30.5 + 5.6 + 3.2 for 1,728 games); so ~70 CPU-s a cycle, ~6 CPU-h to the floor (300), ~8 to the cap (401). Reads against y + v + l @299 at plies 2 and 3, v150, v300, final; verdicts on the TR face for tree-against-tree cells, both faces for tree-against-flat. Bands (6.113; ply 2 / ply 3): tree-labels minus tree-result 40-100 / 30-80; tree-labels minus F-P-lab -20..40 / -20..40 (the goal's cell); fixed-labeller (F-P-lab labels) minus own-search within 20 (own-search 30+ below = the bootstrap bites: the fixed labeller is the form). Rules: tree-labels 30+ over F-P-lab at ply 2 and not below at ply 3 => the capacity converts the target and the standard's trees take search labels (then the growing tree and the ply-3 twin); within 15 of F-P-lab => labels lift trees and flats alike and the tie stands."
+}

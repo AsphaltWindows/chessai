@@ -1,0 +1,73 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid16",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random"
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 30,
+  "min_rounds": 300,
+  "max_rounds": 300
+ },
+ "name": "diversity-p2d-read-p1-v250",
+ "dir": "leagues/arenas/diag/diversity-p2d-read-p1-v250",
+ "plies": [
+  1
+ ],
+ "description": "Cold read diversity-p2d-read-p1-v250: ply 1, version 250, only the contrast's lines, near argmax (T 0.02), 300 round-robins. Tags: dfp=diversity-p2d:^F-P, dtr=diversity-p2d:^T-P-Ne, cfp=diversity-p2c:^F-P, ctr=diversity-p2c:^T-P-Ne",
+ "entries": [
+  {
+   "version": "diversity-p2d:F-P#1.loc@250",
+   "name": "dfp250.L1@250",
+   "label": "diversity-p2d F-P#1.loc version v250"
+  },
+  {
+   "version": "diversity-p2d:F-P#2.loc@250",
+   "name": "dfp250.L2@250",
+   "label": "diversity-p2d F-P#2.loc version v250"
+  },
+  {
+   "version": "diversity-p2d:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@250",
+   "name": "dtr250.L1@250",
+   "label": "diversity-p2d T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v250"
+  },
+  {
+   "version": "diversity-p2d:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@250",
+   "name": "dtr250.L2@250",
+   "label": "diversity-p2d T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v250"
+  },
+  {
+   "version": "diversity-p2c:F-P#1.loc@250",
+   "name": "cfp250.L1@250",
+   "label": "diversity-p2c F-P#1.loc version v250"
+  },
+  {
+   "version": "diversity-p2c:F-P#2.loc@250",
+   "name": "cfp250.L2@250",
+   "label": "diversity-p2c F-P#2.loc version v250"
+  },
+  {
+   "version": "diversity-p2c:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@250",
+   "name": "ctr250.L1@250",
+   "label": "diversity-p2c T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v250"
+  },
+  {
+   "version": "diversity-p2c:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@250",
+   "name": "ctr250.L2@250",
+   "label": "diversity-p2c T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v250"
+  }
+ ]
+}

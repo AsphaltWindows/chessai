@@ -1,0 +1,107 @@
+{
+ "name": "diag-dip-cold",
+ "dir": "leagues/arenas/diag/dip-cold",
+ "description": "Twin of diag-dip played at softmax temperature 0.02 (near argmax) instead of the standard 0.1, same depth-1 own calibrations (theory-2 6.7): if the dip shrinks, the dip is the fixed-temperature policy's sensitivity to the evaluator's scale (hot young tree against cold flat), not the evaluator's ranking. Check that the standard arena's policy is log-odds-softmax at 0.1 before reading this; if the tournament's default differs, add the explicit pair to a rerun of diag-dip as well.",
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid9",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid9",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [
+  "random",
+  "random-1",
+  "random-2",
+  "random-3"
+ ],
+ "plies": [
+  1,
+  2
+ ],
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 5,
+  "min_rounds": 15,
+  "max_rounds": 15
+ },
+ "entries": [
+  {
+   "version": "residual-leaves:T-L-Nc+split-limit=4+split-threshold=1000000.loc@60",
+   "name": "tree@60",
+   "label": "copy tree v60 (dip)"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+split-limit=4+split-threshold=1000000.loc@90",
+   "name": "tree@90",
+   "label": "copy tree v90 (dip)"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+split-limit=4+split-threshold=1000000.loc@120",
+   "name": "tree@120",
+   "label": "copy tree v120 (dip)"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+split-limit=4+split-threshold=1000000.loc@150",
+   "name": "tree@150",
+   "label": "copy tree v150 (dip end)"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+split-limit=4+split-threshold=1000000.loc@300",
+   "name": "tree@300",
+   "label": "copy tree v300 (late)"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+split-limit=4+split-threshold=1000000.loc@350",
+   "name": "tree@350",
+   "label": "copy tree v350 (late)"
+  },
+  {
+   "version": "residual-leaves:T-L-Nc+split-limit=4+split-threshold=1000000.loc@399",
+   "name": "tree@399",
+   "label": "copy tree v399 (late)"
+  },
+  {
+   "version": "residual-leaves:F-L.loc@60",
+   "name": "flat@60",
+   "label": "F-L v60"
+  },
+  {
+   "version": "residual-leaves:F-L.loc@90",
+   "name": "flat@90",
+   "label": "F-L v90"
+  },
+  {
+   "version": "residual-leaves:F-L.loc@120",
+   "name": "flat@120",
+   "label": "F-L v120"
+  },
+  {
+   "version": "residual-leaves:F-L.loc@150",
+   "name": "flat@150",
+   "label": "F-L v150"
+  },
+  {
+   "version": "residual-leaves:F-L.loc@300",
+   "name": "flat@300",
+   "label": "F-L v300"
+  },
+  {
+   "version": "residual-leaves:F-L.loc@350",
+   "name": "flat@350",
+   "label": "F-L v350"
+  },
+  {
+   "version": "residual-leaves:F-L.loc@399",
+   "name": "flat@399",
+   "label": "F-L v399"
+  }
+ ]
+}

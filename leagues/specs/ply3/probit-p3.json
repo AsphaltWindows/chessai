@@ -1,0 +1,42 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "probit-p3",
+ "description": "The user, 11-12 ~11:08: 'we should be trying ply 3 trees against ply 3 flats at ply 3 though no?' Nothing on disk is a ply-3-trained tree (every ply-3/4 model is F-L). Analyst 6.84 design: FROM SCRATCH (a warm start is the rung's question) and MIXED (comparable with the ply-1 r/e/g/h and ply-2 y/v/l families): F-P x2 + T-P-Ne capped (limit 4, 1M, noise 0.03, forget 1) x2, entry_ply 3, seed 61, games_per_cycle 720 (volume ~20 at equal versions, nothing at the plateau; halves the run), self-games, plateau scaled min 300, cap 400, hybrid17 games, hybrid6 training. Read: ply-3 panel of strangers (f3, f3b, w4, x4, x4b, bfp; all flats, so 'against flats'), v150 and the final, plies 2-4; the within-field cell is the matchup. Prediction (6.84): tree minus flat at ply 3 -40..10 (centre -15); the user's odd-ply idea predicts 30-90. Rule: 30+ at the final keeps the odd-ply hypothesis alive (next: a ply-4 mixed field); 0 or less = the tree's advantage is a ply-1 phenomenon, parity unrelated to architecture.",
+ "models": [
+  {
+   "model": "F-P",
+   "replicates": 2
+  },
+  {
+   "model": "T-P-Ne",
+   "set": {
+    "--split-limit": "4",
+    "--split-threshold": "1000000",
+    "--split-noise": "0.03"
+   },
+   "to": "train",
+   "replicates": 2
+  }
+ ],
+ "seed": 61,
+ "train": {
+  "seed": 61
+ },
+ "references": [],
+ "entry_ply": 3,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300
+ },
+ "cycles": 400,
+ "games_per_cycle": 720,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-hybrid17"
+ }
+}

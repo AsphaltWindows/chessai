@@ -1,0 +1,45 @@
+{
+ "kind": "experiment",
+ "root": "/home/iv/dev/chessai/leagues",
+ "options": [
+  "local"
+ ],
+ "name": "s7-p1-s2",
+ "description": "DRAFT (the S7 pairs fork, 2026-11-12 ~22:45; not created, not launched). S7: data-chosen PAIRWISE FEATURES for the flat probit (analyst 6.97; the user ~21:50: \"Let's try pairwise features also\"). Seed 72 replicate 2 of 2; s7-p1-s1 (seed 71) is the other (flats are deterministic, so two lines of one recipe in one field would be one model twice: replicates are separate runs, analyst 6.98). QUESTION: does F-P-S7 beat plain F-P at ply 1 (and ply 2)? LINES (two, one factor): F-P on chessai-pairs1 without the flag (byte-identical to hybrid6, std-v1's F-P binary: models/from-scratch/pairs/summary.txt) and F-P-S7 (recipes.txt row F-P-S7: chessai-pairs1 --pairs on). F-P-S7: every conjunction of two feature values is a candidate (356,642; 2,415 active a position); after each example each active candidate adds the latent's standardized shift v to S and 1 to n; every 1M examples (counted from the model's start) the 50 candidates with the largest |z| = |S|/sqrt(n) above 5 become weights of the probit (mean 0, sd 0.5 x prior 0.3), at most 2,000 in all, after dropping each pair active in 3M examples since chosen whose |mean| is below 0.5 sd. The model file holds the pairs and their weights (probit model version 2: ONLY chessai-pairs1 loads it, older binaries refuse it with \"unknown probit model version\"); the candidates' statistics are training state, runs/<line>/probitN.state (5.7 MB) beside the model, written by every training, read by the next (the driver moves it and keeps only the current version's; exact resume proven: models/from-scratch/pairs/summary.txt). PLAY: ply 1, games_per_cycle 1584 (with 4 entries the 48-round cap binds: 576 tournament games + 192 self-games a cycle, ~94k positions, so a checkpoint every ~11 cycles and ~35 by cycle 400), round robins and self-games at T 0.1 (the binary's default), every line trains on them; tournament binary chessai-pairs1 (needed to load F-P-S7's models; the same games as hybrid20 on every other model). RATING: rate_every 4, cold games T 0.02 share 0.5, rating only. CROWNING: draw-aware, 3 SEs. PLATEAU: scaled, sqrt, guard_z 1, floor 300 (min_cycles 300), cap 400 (cycles 401, a rated cycle). READS (the coordinator's): against the r/e/g/h panel @300 at v150, v300 and the final version, plies 1 and 2 (make_split_read.py --binary chessai-pairs1: its default hybrid16 cannot load F-P-S7's models); bands: ply 1 30-120 (under 15 closes the lever), ply 2 0-60; 15-40 gets a third seed. LOGS: runs/F-P-S7.loc.log, after each training's \"round 0\" line: \"pairs: N chosen of cap 2000; this round: E examples, C checkpoints, added A (|z| min/median/max), dropped D; active per position X; T examples since the start\", then one \"pairs checkpoint at T examples:\" line per checkpoint naming the pairs dropped (mean, sd) and added (|z|) as i:a&j:b. COST: see models/from-scratch/pairs/summary.txt (measured on the smoke). Seeds 71 and 72: unused before (70 is residual-p2's).",
+ "seed": 72,
+ "train": {
+  "seed": 72
+ },
+ "references": [],
+ "entry_ply": 1,
+ "self_games": true,
+ "plateau": {
+  "scaled": true,
+  "min_cycles": 300,
+  "rate_scale": "sqrt",
+  "guard_z": 1.0
+ },
+ "cycles": 401,
+ "games_per_cycle": 1584,
+ "prices_version": "P2",
+ "tournament": {
+  "binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-pairs1"
+ },
+ "cold_games": {
+  "temperature": 0.02,
+  "share": 0.5,
+  "train": false
+ },
+ "rate_every": 4,
+ "champion_se_kind": "draw-aware",
+ "champion_se": 3,
+ "models": [
+  {
+   "model": "F-P",
+   "train_binary": "chessai-pairs1"
+  },
+  {
+   "model": "F-P-S7"
+  }
+ ]
+}
