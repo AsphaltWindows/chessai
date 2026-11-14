@@ -1,0 +1,38 @@
+Near-flat tree leaves vs F-L-c, 2026-11-08 ~23:45. Why do D-L-Nc-c, T-L-LLs-merge-c and T-L-Te-merge-c, single LR models in
+practice, rate above flat LR? Files: models/ (copies), leaves/ (extracted with `leaves`), cal/, match/, offline/, analysis/.
+
+Extraction. `chessai-sparsefit leaves` wrote each leaf as a standalone LR model; every leaf block is byte-identical to the
+tree's. D-L-Nc-c routes 287,210 of 287,222 heldout-d2play positions (all but 12) and 598,650 of 598,656 heldout positions
+to leaf 3; eval-loss on those positions is identical for the tree and the extracted leaf.
+
+Play (chessai-sparsefit arena, log-odds-softmax T0.1, depth 2, 2000 games, seed 11; each side's own calibration made the
+driver's way (600 games d1 seed 5 from cal:heldout-lr-d2-s555); fl4100 and dnc2043 calibration games byte-identical to
+cycles/champ/owncal):
+  a. D-L-Nc-c v2043 full vs its leaf 3           +1  [-14, +15]   the DAG plays as its leaf
+  b. leaf 3 v2043 vs F-L-c v4100 (champion)       +54 [+39, +69]
+     leaf 3 v2043 vs F-L-c v4664 (current)        +54 [+39, +68]
+     leaf 3 v2064 (current) vs F-L-c v4664        -25 [-40, -10]   the same leaf 21 versions on: a 79-Elo swing
+  c. T-L-LLs-merge-c v2865 vs F-L-c v4100         -12 [-27, +2]
+  d. T-L-Te-merge-c v766 vs F-L-c v4100 (control) -21 [-36, -6]
+
+Offline, eval-loss --fit-calibration (log-loss / winner log-loss):
+  heldout-d2play (287k, 75% decisive): leaf3 v2043 0.9105/0.5598, leaf3 v2064 0.9127/0.5614, LLs 0.9135/0.5647,
+    Te v766 0.9166/0.5670, F-L-c v4100 0.9180/0.5661, F-L-c v4664 0.9197/0.5652
+  heldout (599k, 3% decisive): all 0.1384-0.1388; winner 0.4985 (LLs) to 0.5074 (leaf3 v2064); F-L-c 0.5011-0.5028
+  The leaves predict d2-play positions better than F-L-c, but leaf3 v2064 does so and still loses to F-L-c in play.
+
+Weights and AdaGrad (analysis/weights.txt). All have rate 0.05 (F-L-c: --model lr, defaults). The win-loss weight vectors
+correlate 0.995-0.997 with F-L-c's (draw vectors 0.967-0.980). |w_win - w_loss| 27.3 (leaf 3) vs 25.6-25.7 (F-L-c).
+  Bias squared-gradient sums relative to F-L-c v4664: leaf 3 0.37 (416M examples counted since round 29), LLs 0.69,
+  Te v766 0.19, F-L-c v4100 0.87. Median AdaGrad step (x1e-3): F-L-c 0.112, LLs 0.136, leaf 3 0.175, Te v766 0.262.
+  Hypothesis "a split restarts the sums": FALSE. Split children and shadows are clones forgotten by --forget-factor, which
+  is 1 for all of these (delegation.rs 1528-1537), so the sums carry over. The leaves are simply younger in examples.
+Trends (league d2 entries): F-L-c +2.3 Elo per 100 versions (se 0.7, v2860-v4664); D-L-Nc-c +14.5 (se 2.3, v1546-v2064).
+Version-to-version sd of d2 ratings (last 16, detrended, minus rating noise): F-L-c ~20, D-L-Nc-c ~24, LLs ~29, Te ~20,
+T-L-Ne-c ~15. Last-16 means: F-L-c 1769, D-L-Nc-c 1781, LLs 1770, Te 1783.
+
+Conclusion: the structure contributes nothing in play (the DAG = leaf 3). The top champions' edge over F-L-c is mostly
+selection: D-L-Nc-c's champion leaf beats F-L-c by 54, its current leaf loses by 25, and LLs and the control are level or
+below. What does differ is AdaGrad age: same model and rate, but 1.2-2.3x larger effective steps, because these leaves
+have accumulated fewer squared gradients. That fits D-L-Nc-c improving ~6x faster per version than F-L-c, and its somewhat
+higher average. One-factor test: F-L-c continued with its AdaGrad sums divided (e.g. by 2.7, to leaf 3's level).

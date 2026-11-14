@@ -1,0 +1,32 @@
+//! chessai: categorical Bayesian chess evaluation, self-play and search.
+
+pub mod bdd;
+pub mod bdt;
+pub mod calcache;
+pub mod calibration;
+pub mod classifier;
+pub mod compound;
+pub mod cnbp;
+pub mod delegation;
+pub mod encoding;
+pub mod fastpath;
+pub mod fastprobit;
+pub mod fixed;
+pub mod fm;
+pub mod game;
+pub mod games;
+pub mod ht;
+pub mod hybrid;
+pub mod logreg;
+pub mod moe;
+pub mod nbmix;
+pub mod pathctx;
+pub mod player;
+pub mod probit;
+pub mod search;
+pub mod selfplay;
+pub mod state;
+pub mod tan;
+pub mod tangate;
+pub mod textfmt;
+pub mod tournament;

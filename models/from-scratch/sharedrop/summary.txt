@@ -1,0 +1,19 @@
+T-L-Ne-share-c: why v433 (cycle 43) rated 112-123 below v428 (cycle 42). 2026-11-08 ~22:45.
+League: d2 entries by version 1713 1740 1775 1745 1721 1812 1832(v428) 1719(v433) 1791(v440, early); d1 flat 951-998.
+Common opponents, cycle 43 (190 opponents x 10 games each): v428 79.4%, v433 71.4% (~75 Elo, ~6 SE).
+Direct matches (chessai-sparsefit arena, log-odds-softmax T0.1, seed 11; own calibration regenerated exactly as the driver
+made it, checked byte-identical for v428):
+  d2 v433 own cal vs v428 own cal      -98 [-113, -84]  2000 games
+  d2 v433 cal fitted on v428's games   -84 [-99, -70]   -> calibration ~14 Elo, the model ~84
+  d1 v433 vs v428                       -30 [-40, -21]
+  d2 v429/v430/v431/v432 (cal on v428's games) vs v428: -9 [-29,12], -18 [-39,2], -57 [-78,-36], -36 [-56,-16] (1000 each)
+  d2 v440 own cal vs v428               -6 [-20, 9]     2000 games: recovered
+Log: no split, merge or reset in rounds 428-432 (no --revise: revision lines are diagnostics only). Self-play vs-previous
+per round: +8 -6 +6 +2 -5 (WldScoreJitter10, ~92% draws): blind to the slide.
+Recovery: cycle 43's own step (training on its league games) beat v433 by +100 [+35,+173] at the gate, kept -> v434 -> v440.
+Conclusion: a gradual 5-round self-play drift in depth-2 league strength that self-play's own check cannot see; the
+champion rule kept v428; the own step undid it the next cycle. Same phenomenon as the 40-70 Elo version-to-version
+d2 swings in every lineage (F-L-c, T-L-Ne-c, T-L-Nc-share-c), larger here (~120 range).
+Structure: the model headers show the fifth and final split at v416 (splits 4 -> 5, nodes 13 -> 16; split limit 5, so no more
+splits; no --revise, so no merges; --reset-leaves inf, so no resets). v421 (1812) and v428 (1832) were the first versions after it
+and the best yet, up from v413 (1721, 4 splits). The v428 -> v433 dip happened at a fixed structure.

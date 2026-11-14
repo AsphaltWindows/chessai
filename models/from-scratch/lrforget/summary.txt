@@ -1,0 +1,119 @@
+LR GRADUAL FORGETTING (--lr-memory), 2026-11-10
+
+Task: test the user's hypothesis that gradual forgetting helps LR, and helps more on a diverse (mixed-architecture)
+local stream. Build an option that makes LR's AdaGrad step size stop shrinking, at a memory matched to probit's default
+tau, and draft (not create) two experiments: a flat-only stream and a mixed stream.
+
+BINARY
+- models/from-scratch/bin/chessai-hybrid6f (md5 2ea8c5100c82c34b83d73409f0025284), built from src-h6f/, a copy of
+  fastbin/hybrid6-src. rs/ and the other binaries are untouched. cargo -j 2, nice.
+- train --lr-memory M (default 0: off). For --model lr, and for bdt/bdd with --leaf lr (not --leaf-residual).
+  Refused for self-play, for probit or NB leaves, and for M below 2.
+
+DESIGN
+- Plain AdaGrad: squares += g^2; w -= rate * g / sqrt(squares). The step shrinks like 1/sqrt(uses) forever.
+- With memory M: each time a weight is used, squares = squares * keep + g^2, with keep = 1 - 1/M, then the same
+  step. squares levels off near M * mean(g^2), so the step stops shrinking after about M uses: an RMSProp-like
+  window of M uses.
+- Applies only to flat LR models and LR leaves. Routers and error routers never forget, because LR routers keep their
+  own LR objects. Shadows and children made at a split inherit the leaf's memory.
+- Off is the old code: step() calls the decayed step only when memory != 0, and the original code follows unchanged.
+- The decayed step has an AVX2 path, the same as the plain step's, with separate multiply, multiply and add (no FMA).
+  It is bit-identical to scalar, and a unit test checks it.
+- The memory is recorded only when it is on, so an off run's files are the old bytes:
+  - a flat model file gets a trailing line "memory 6e6". Old readers ignore it, so hybrid7 plays the file.
+  - an LR state sets a flag bit on class_num and adds the f64.
+  - a tree's options string, which its state checks on resume, gains ", lr_memory: M" only when M != 0.
+  - Resuming with a different --lr-memory than the --start model or state is refused.
+
+CHECKS (check_lrforget.sh, log check_lrforget.log, fail=0)
+- Unit tests: 158 + 1 passed. New tests:
+  - the step levels off. With M = 1000, the sum of squares changes under 5% from pass 2 to 9, while plain's grows
+    more than 3x. It sits within 20% of M * mean g^2, and the step ends more than 4x plain's.
+  - the AVX2 decayed step equals a scalar reference bit for bit.
+  - the memory survives files and states, and plain files and states are unchanged.
+  - in a tree, the memory goes to leaves only, and a state refuses a different memory.
+- Off: byte-identical to chessai-hybrid6 in models, states and train output, over version 0, two rounds in one go,
+  and the same rounds in pieces. Checked on F-L (--use-probs) and on T-L-Nc at limit 4, threshold 20k (it splits).
+- On, at M = 1000 and 2e7:
+  - one go equals the same rounds in pieces with --start, for flat models (via the trailer) and for tree states;
+  - 4 threads equal 1 thread;
+  - the memory changes the models.
+- Refusals: ten cases, all refused with clear errors.
+- Play: hybrid7 arenas give byte-identical games and logs with the trailer file and the same file stripped, in plain
+  and cal: mode. hybrid7 plays the forgetting tree.
+- The exact league line (version 0 from no games, then --start, at --lr-memory 6000000) works. "6000000" and "6e6"
+  give the same model. --start without the flag is refused.
+
+M CHOSEN: 6e6 (6,000,000 uses)
+- Probit's memory at tau 1e-5:
+  - each use adds tau^2 to a weight's variance s2 and shrinks it by s2^2 * w / S^2. At equilibrium these balance.
+  - so the per-use gain (the fraction of the error absorbed) is s2*/S^2 * w = tau^2 / s2*, and the memory is
+    s2*/tau^2 uses.
+  - measured on cluster-error's F-P version 585 (bias): s2* = 1.446e-5, about 1.45 tau, so the memory is about
+    1.45e5 uses. The user's round numbers (~200k positions, floor ~2 tau) are the same estimate.
+- Decayed LR at equilibrium:
+  - squares ~ M * E[g^2], so the per-use gain is rate * h / sqrt(M * E[g^2]), where h is the curvature E[p(1-p)];
+  - for a calibrated model E[g^2] = h = q, so the gain is rate * sqrt(q / M).
+- Equal gains give M = q * (rate * memory_probit)^2.
+  - With rate 0.05 and q = 0.111 (F-L version 585's bias: G/n over n = 463.5M uses; W 0.133, L 0.134, draw
+    0.065), M = 5.8e6, so 6e6. The per-class values would be 7.0e6, 7.0e6 and 3.4e6.
+  - With the user's 2e5, M would be 1.1e7. The step scales as 1/sqrt(M), so that factor of 2 is only 1.4x in step.
+- At M = 6e6, the bias's gain levels off at 6.8e-6, against F-P's 6.9e-6.
+  - Plain F-L passes that gain after about 6e6 bias uses (~21 cycles at the drafts' ~280k positions a cycle).
+  - After that, plain F-L's step keeps shrinking: about 5x smaller than the forgetting line's by cycle 600.
+
+SIDE FINDING (the step-size trace offered for decision 1)
+- In cluster-error at version 585, F-L's per-use bias gain is 8.5e-7, against F-P's 6.9e-6. LR moves 8-12x more
+  slowly than probit per use, across classes.
+- This is the candidate mechanism for F-P catching F-L there: LR's steps die out, while probit's tau keeps its steps
+  alive.
+
+DRAFT EXPERIMENTS (specs written, NOT created)
+- Both: local, seed 8, train seed 8, 600 cycles, tournament chessai-hybrid7.
+- leagues/specs/batch3/13-forget-flat.json (name forget-flat): 4 lines, 17 rounds a cycle (min 17), 3,128 local
+  games a cycle (2n(4n+7) = 184 a round).
+  F-L.loc; F-L+lr-memory=6000000.loc; F-P.loc; F-P+probit-tau=0.loc
+- leagues/specs/batch3/13-forget-mixed.json (name forget-mixed): 8 lines, 5 rounds a cycle (min 5), 3,120 local
+  games a cycle (624 a round). The same four lines plus:
+  - T-L-Nc-merge+split-limit=1+split-threshold=1000000.loc
+  - T-P-Tc-merge+split-limit=1+split-threshold=1000000.loc
+  - T-L-Le+split-limit=1+split-threshold=1000000.loc
+  - T-P-Ne+split-limit=1+split-threshold=1000000.loc
+- The cluster trees are single-split's and single-split-probit's -merge recipes. No plain T-P-Tc recipe exists, and
+  at limit 1 the merge gate changed nothing in split-growth.
+- Every line's train arguments are identical to the same-named line of single-split, single-split-probit,
+  probit-settings, residual-leaves or cluster-error; only the train binary differs. Checked with the engine's
+  make_config.
+- The top-level config differs from residual-leaves' only in name, created, seed, train seed, rounds, min rounds and
+  cycles.
+- Matching single-split's ~2,450 a cycle instead: 14 and 4 rounds give 2,576 and 2,496 games a cycle, ~20% cheaper
+  (the two experiments' rates are then 3% apart instead of 0.3%).
+- Expected cost, from per-game costs measured in lr-settings-2, probit-settings, single-split and single-split-probit:
+  - forget-flat: ~55 CPU-s a cycle, ~9 CPU-hours for 600 cycles;
+  - forget-mixed: ~70 CPU-s a cycle, ~12 CPU-hours;
+  - about 7-9 hours of wall time each on an unloaded machine.
+
+CREATE AND SWAP (as models/from-scratch/target/league/; leagues.py and recipes.txt untouched)
+- league/create_lf.py SPEC F-L: plain `leagues.py create` refuses --lr-memory, because it checks each flag against
+  the recipe row's train binary, hybrid4gfx. The wrapper gives the F-L row chessai-hybrid6f in memory and runs the
+  engine's cmd_create.
+  - DRY=1 builds the config with make_config, writes nothing, and prints each line and a top-level diff.
+- league/swap_lf.py EXPERIMENT_DIR: swap_et.py with the binary and flag changed. Run it before the first cycle:
+  lines using --lr-memory get hybrid6f, all others hybrid6. It keeps swap_et's refusals and its diff check, and keeps
+  the old config in league/config-before/. DRY=1 checks without writing.
+- Tested end to end in a scratch root (scratch/league-root): created both experiments, swapped them, and checked.
+  Result:
+  - forget-flat: F-L, F-P, F-P tau 0 on hybrid6; F-L memory on hybrid6f.
+  - forget-mixed: the same, plus the 4 trees on hybrid6.
+- Launch steps, after the user's OK:
+  1. python3 models/from-scratch/lrforget/league/create_lf.py leagues/specs/batch3/13-forget-flat.json F-L
+     (and the same for 13-forget-mixed.json)
+  2. DRY=1 python3 models/from-scratch/lrforget/league/swap_lf.py leagues/experiments/forget-flat, then without DRY
+     (and the same for forget-mixed)
+  3. start each with the repeat script as residual-leaves was (resid/rerun/summary.txt, "Launch steps").
+
+CPU USED: about 7 CPU-minutes.
+- builds: cargo check rounds, a debug unit-test build, and the release build, ~5 min;
+- check-script runs: ~15 s each, about 5 runs;
+- test re-run, dry runs and the scratch create: ~20 s.

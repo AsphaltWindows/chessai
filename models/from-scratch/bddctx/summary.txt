@@ -1,0 +1,195 @@
+bddctx: "path context" for DAG (BDD) nodes. Built and checked offline 2026-11-10. Nothing in the league was created,
+launched or changed.
+
+THE OPTION: --path-context (BDD only, off by default)
+It gives every node inputs that say which path delivered a position, so a node shared by several paths can treat
+them differently. The design is the user's.
+- Sibling sets. A router split makes one: its B copies. It goes into a registry with a permanent index and its
+  members' node ids. Entries never change. Leaf splits make no set.
+- Path tables. Every node, leaf or router, has one cell per sibling set upstream of it: a set with a member that is
+  an ancestor of the node (not the node itself). The cells are in registry order. A cell has B+1 values: 0 if the
+  path skipped the set, otherwise the number (1-B) of the member it passed through.
+- LR nodes (leaves and LR routers): weights per (cell, value, class), with AdaGrad sums. They add to the logits and
+  train in the same AdaGrad step as the node's own weights.
+- CNBP nodes: counts per (cell, value, class), smoothed like the board features. Each cell keeps its own per-class
+  totals from when it was made. Value 0 is counted.
+- TAN routers are refused.
+- Router split: the new set is appended. Every node below the copies appends a cell at neutral values (weights 0,
+  no counts). The copies start from the splitting router's table. With home targets the central router keeps its
+  table.
+- Leaf split: the new leaves copy the leaf's table. The new router at that node gets the same cells, empty.
+- Nested splits: a member that splits stays in its set as the central router (same node id, same number). Its
+  copies form a new set below it.
+- Paths are carried in training, in error-target scoring (a copy j is scored with value j for its set) and in play.
+  It works with both sub-router targets; home is not required.
+- Refused with merges and --revise, split trials, cluster routing, route switching and leaf sharing. BDTs and other
+  model kinds refuse it.
+- Files. A model file starts with "pathcontext 1 <sets>", then the registry, then each node's table after its
+  classifier. chessai-hybrid4gfx and chessai-bddhome2 refuse such files. States carry the registry and the tables
+  only with the option, so other states are as before.
+
+CHANGES FROM THE SPEC, AND WHY
+1. The copies get one cell more than the splitting router has: a neutral cell for the set the router is a member
+   of, if it is one. The router becomes their parent, so that set is upstream of them. For the copies it always
+   reads the router's number. In the user's nested case, P2's copies get an S1 cell that reads 2.
+2. With routing targets the central router's router starts afresh, as before. Its table also starts afresh, with
+   the same cells. Its outputs now mean "which copy", not "which child", so the old table no longer fits. With home
+   targets it keeps both, as specified.
+3. Cluster routing and route switching are refused. D-L-Ne and D-L-Ne-home use error routing, and that kept the
+   scope small.
+4. A CNBP cell's factor is P(value | class) divided by 1/(B+1). That constant is the same for every class, so the
+   posterior is unchanged. But it makes a new cell multiply every class by exactly 1, so a split changes no bit of
+   any prediction.
+5. Not about path context. The home-target code from bddhome2 worked out a router's home children by a recursion
+   that walks every path below it. That grows exponentially with the depth of chains of sub-routers, and the long
+   growth test stalled in it. bddctx works each node's result out once per structure. The result is the same: a
+   unit test checks it against the old recursion, and the identity runs below include home targets. Runs at split
+   limit 10 never noticed. bin/chessai-bddhome2 still has the old recursion, which will matter at higher limits.
+6. New command, path-stats MODEL GAMES...: per-node diagnostics, used below.
+
+BUILD
+- bin/chessai-bddctx (md5 0918dd1a), built from bddctx-src: bddhome2-src plus the option (bddctx.patch, about
+  1,500 added lines, many of them tests). Without --path-context it trains and plays as chessai-bddhome2 and
+  chessai-hybrid4gfx (CHECKS).
+
+CHECKS
+- Unit tests: 164 pass (154 old, 10 new). The new ones check:
+  - Random growth, 30 forced splits of random leaves and routers, under both sub-router targets and with LR/CNBP,
+    LR/LR and CNBP/CNBP leaves/routers: no split changes any bit of predict or predict_log for any test position.
+  - After every split, each node's cells are exactly the sets upstream of it, in registry order, worked out afresh
+    from the structure. Registry entries never change.
+  - Every path in play, and every training path in the growth test (27,000), decodes from its leaf's values back
+    to the exact node sequence.
+  - The user's nested case, P2 in S1 = {P1, P2, P3}, under both targets: P2 keeps its id and number in S1; its
+    copies form S2; P2 gets no S2 cell and the copies no cell for S2; the leaves read S1=1, S2=0 through P1, S1=2,
+    S2=2 through P2 and its second copy, S1=3, S2=0 through P3. Every position's S1 value is the same after the
+    split as before, and S2 reads 0 for every path through P1 or P3.
+  - Two runs with automatic splits give byte-identical models and states.
+  - With the tables frozen at neutral values, training with the option equals training without it, bit for bit
+    (this checks that paths are carried right in training and scoring).
+  - Model and state files round-trip. A state resumed trains on exactly as the original. A run without the option
+    refuses the state.
+  - The refusals: BDTs, split trials, cluster routing, TAN routers.
+- Identity without the option: chessai-bddctx trains D-L-Ne (bdd), D-L-Ne-home (bdd --subrouter-target home) and
+  T-L-Ne (bdt) byte for byte as chessai-bddhome2: every round's model, the state, and train.log without times.
+  Setup as bddhome's: bddstudy's first 8 rounds, threshold 100k, limit 10, seed 1 (through the root's router split
+  in round 4).
+- Play identity: a tournament with the league's flags (one double round-robin, --use-probs, --anchor random, seed
+  1, --no-catch-up, --retired, --prior-draws 0, --reports-last, --sparse-fit, --save-games, --game-cpu). It had 9
+  players: random, random-1, F-L at depths 1 and 2, a D, a T, a home-trained D, a probit and a cluster-merge T.
+  chessai-hybrid4gfx and chessai-bddctx played the same 72 games, byte for byte (games.csv and every saved game).
+- With the option: a tournament with two path-context Ds (round 8 at depth 2, round 20 calibrated at depth 1) gave
+  the same 30 games twice. chessai-hybrid4gfx and chessai-bddhome2 refuse the model files ("invalid digit found in
+  string: pathcontext").
+- chessai-bddctx re-scores a control number exactly: home-s1 round 60, part 0, log-loss 0.6256, winner 0.3476, as
+  in ../bddhome/cal.csv.
+
+PARAMETER GROWTH: NOT LINEAR
+The long growth test: 200 forced splits of random leaves and routers, 10 positions between splits, branch 3, LR
+leaves, CNBP routers, 2 classes. "Numbers" counts every path-table number: LR weights and their AdaGrad sums, CNBP
+counts and totals. Both sub-router targets gave the same rows, since forced splits don't depend on training.
+   splits  nodes  sets   cells  most cells at a node  numbers
+       25     76    15     606                    15    6,252
+       50    151    30   2,157                    30   22,468
+      100    301    54   6,855                    48   72,188
+      150    451    83  15,291                    67  161,760
+      200    601   108  24,489                    81  259,284
+- Nodes grew 8-fold, the numbers 41-fold. Growth is about quadratic.
+- Why: a router split adds a cell to every node below its copies. A split high in the DAG is above most nodes.
+  So a node's cells grow with the number of sets (here a node had cells for about 40% of all sets), and the
+  total grows with nodes times sets.
+- Each node evaluation also reads all its cells. At 600 nodes the mean node had 41 cells, beside its 70 board
+  features.
+- At split limit 10 it is small. The mechanism run below has 120 cells and 1,440 numbers at 31 nodes, about 1.5%
+  of the model.
+- Two ways to make it linear, if wanted (not built): give a node cells only for the sets its parents belong to
+  (the edge that delivered the position), or only for the K nearest sets above it. Both bound the cells per node.
+
+MECHANISM CHECK (offline, seed 1). It checks the mechanism only and is not a strength claim.
+Setup: bddstudy's, as in ../bddhome. Data: offline-c15 RRs 80-83 in 60 rounds; test set RR 84 in 10 parts. Recipe:
+LR leaves, CNBP error routers, --error log, branch 3, forget 1, threshold 100k, limit 10, plus --path-context.
+- ctxhome-s1: D-L-Ne-home with the option, 60 rounds, 245 CPU s. Control: bddhome's home-s1.
+- ctxrouting-s1: D-L-Ne with the option, 20 rounds only, 205 CPU s. Control: bddstudy's bdd-s1 at round 20. The
+  plain D-L-Ne took about 34 CPU s for 20 rounds, so the option made routing-target training about 6 times
+  slower: each copy is scored through its own path (k x k subtree predictions instead of k).
+- Controls are not retrained. chessai-bddctx without the option trains exactly as chessai-bddhome2, and it
+  re-scores a home-s1 number exactly.
+- Diagnostics: path-stats on test parts 0-3 (230k positions) at rounds 4, 5, 6, 8, 15, 30, 60 (stats/,
+  stats.py). Every play path decoded back to its node sequence at every checkpoint.
+1. Splits. The option changed the structure. Both arms made 7 router splits and 3 leaf splits, so they have 7
+   leaves. The controls made 6 and 4, and have 9 leaves.
+   - ctxhome: leaf splits in rounds 2, 6, 9; router splits in rounds 4, 7, 11, 13, 13, 14, 15.
+   - ctxrouting: leaf splits in rounds 2, 6, 7; router splits in rounds 4, 6, 7, 9, 11, 11, 12.
+2. Inputs per node over time (ctxhome; the split limit is reached in round 15, so nothing changes after it).
+   round  sets  cells  most cells at a node  numbers
+       4     1      3                     1       36
+       6     1      6                     1       72
+       8     2     15                     2      180
+      15     7    120                     7    1,440
+   Leaves end with 6-7 cells, routers with 0-6. ctxrouting ends with 7 sets, 126 cells and 1,512 numbers.
+3. Non-home edges (ctxhome). Share of test positions that reach their leaf through at least one edge where a copy
+   sends the position to a child other than its home: 5% (round 4), 12% (5), 16% (6), 23% (8), 34% (15),
+   55% (30), 58% (60). Per leaf at round 60 it ranges from 1% to 99%. These positions reach their leaf with cell
+   values that the central router never scored (limitation 3 below). With routing targets a copy has no home; the
+   same count is 64-100% there and means little.
+4. How far the tables move, by node kind.
+   - LR leaves. The cells change a leaf's white-minus-black log-odds by 0.42 on average at round 60 (0.64 in
+     ctxrouting at round 20). Most of that is a constant per leaf, which only stands in for the bias. The part that
+     differs by path, the within-leaf standard deviation, is 0.13 in both arms (0.06-0.19 over the checkpoints).
+     A leaf's table L2 is about 4% of its own weight L2.
+   - CNBP routers. With its cells neutral, a router would pick another child for 7% of the positions it sees
+     (median router 7%, the most 24-26%). In both arms 28-30% of test positions meet at least one such router.
+     This is the cells' doing, not the routers' own counts: a CNBP's board counts don't depend on its cells.
+5. Held-out calibrated loss, a sanity check only. ctx minus control, log-loss / winner log-loss, mean +- SE over
+   the 10 parts:
+   - ctxhome vs home-s1: round 20 +0.0043 +- 0.0007 / +0.0020 +- 0.0004 (worse); round 40 -0.0005 +- 0.0009 /
+     -0.0011 +- 0.0007; round 60 -0.0007 +- 0.0005 / -0.0012 +- 0.0007 (level).
+   - ctxrouting vs bdd-s1: round 20 -0.0001 +- 0.0010 / -0.0003 +- 0.0006 (level).
+   - So: worse early in the home arm, level later, level in the routing arm. The structures differ (7 leaves
+     against 9), so this does not isolate the cells.
+Reading: the mechanism works as built. Paths are carried and decoded, splits change nothing, and the tables learn.
+The LR leaves use the path a little beyond a bias. The CNBP routers change 7% of their decisions because of it.
+Offline it is level after round 20.
+
+KNOWN LIMITATIONS (found by the theory agent, ../theory/summary.txt sections 2.5 and 2.6; not fixed)
+1. CNBP cells double-count (2.6). A cell's value is a function of the board through the routers above it. Naive
+   Bayes treats it as independent of the board given the class, so it squares the likelihood ratio of whatever the
+   upstream routers route by. In the theory's example the loss rises from 0.500 to 0.612 nats. LR cells add a
+   nested convex class and can't hurt in the population. Here every router is a CNBP and every leaf an LR, so all
+   router cells carry this flaw. They flip 7% of router decisions (4 above).
+2. CNBP cells briefly double the class prior (2.5 d). A new cell's per-class totals start at 0. While they are
+   small, its factor depends on the class through them, like a second copy of the prior. It fades as 1/N_c and
+   comes back with every new cell.
+3. Home targets score a counterfactual (2.5 b). home_errors_ctx scores child C_j with cell value j, through the
+   home chain. A position that the central router sends to copy i, and copy i overrules to C_j, reaches C_j with
+   value i, which the central router never scored. That is the non-home share in 3 above: 23% of test positions
+   at round 8, 34% at round 15, 55-58% at rounds 30-60.
+
+OTHER CAVEATS
+- One seed, offline.
+- Parameter growth is about quadratic (above). At limit 10 the tables are 1.5% of the model.
+- With routing targets the option costs about 6 times the training CPU.
+- The copies' cell for their parent's set is constant for them. In an LR that is a bias. In a CNBP it is one more
+  transient copy of the prior (limitation 2).
+- chessai-bddctx also loads path-context files through bdt: specs, with the same predictions as bdd:.
+- ctxrouting ran 20 rounds, not 60.
+
+BEFORE A LEAGUE TEST
+- The tournament must run on chessai-bddctx, because chessai-hybrid4gfx refuses the model files. chessai-bddctx
+  played the other models byte-identically to chessai-hybrid4gfx in one 72-game tournament with the league's flags.
+- Decide what to do about CNBP cells: cells on LR nodes only, LR routers, or accept the double counting.
+- Keep split limits low, or bound the cells per node, because the growth is quadratic.
+- With home targets, decide whether the central router should score realised paths. The theory suggests Best over
+  the copies' subtrees, with the home pick as the tie-break.
+- Unrelated to the option: D-L-Ne-home on bin/chessai-bddhome2 at higher split limits will hit the exponential
+  home-base recursion. chessai-bddctx without the option trains identically and has the fix.
+
+CPU: about 20 CPU-min measured in this part. The two training runs took 7.5, builds 3.8, unit tests 6.4 (6.0 of it
+went to the growth test stalled in the home-base recursion, before the fix), identity, play, scoring and stats 2.2.
+The earlier builds and tests were not measured, roughly 5-10 more. Total about 25-30.
+
+Files here:
+- run.sh: the arms (m/). stats.sh and stats.py: path-stats at the checkpoints (stats/). evalcal.sh: held-out
+  losses (cal/, cal.csv). compare.py: ctx against the controls.
+- identity/: identity.sh (training identity), play.sh with players.txt and players-ctx.txt (play checks).
+- tests/: unit-test logs. bddctx.patch: the source diff against bddhome2-src.

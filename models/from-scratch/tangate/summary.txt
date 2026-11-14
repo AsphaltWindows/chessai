@@ -1,0 +1,61 @@
+TAN gate + LR experts (tangate, the proposed MoE-L-T-c) (2026-11-07).
+
+Verdict: broken as a candidate, so no smoke and no league line. Offline it is clearly worse than MoE-c's recipe and
+no better than the NB gate (nbgate, MoE-L-N-c in the restart). The NB gate fails because naive-Bayes posteriors are
+extreme, which makes the gate nearly hard. TAN does not remove that: the TAN gate is as hard.
+
+Code: ../tangate-src = ../tanroute-src + tangate.patch.
+- src/tangate.rs (TanGateMoe): nbgate with a TAN gate (fixed m, --tan-m) in place of its CNBP. Everything else is
+  nbgate's: the hash warm-up (--nbmix-warm), EM responsibilities, responsibility-weighted LR expert steps, and the gate
+  counting responsibilities.
+- While training, the gate scores from its current counts with the tree of its last refresh. It relearns its tree
+  each round.
+- Model file: gate tables + experts. State file: every count, for resume.
+- Wired into train (from scratch or --start a state), self-play (fresh and --resume from states), every model spec
+  (tangate:PATH) and mix-stats.
+- nbmix.rs: 5 helpers made pub(crate), no other change. Tan::is_trainable added.
+
+Binary: ../bin/chessai-tangate (md5 bc6fad3c9bbfa005bd1be1b70f152b93), a superset of chessai-tanroute2.
+- Identity against chessai-tanroute2, 0 non-log diff lines on both:
+  - ../probit/identity/run2.sh (out2-tangate against out2-tanroute2);
+  - the TAN-node script ../tanroute/identity/run.sh (out-tangate against out-tanroute2): eval-loss of TAN-router
+    trees, self-play with TAN routers from scratch and resumed (with merges), and train.
+- Unit tests: 132 pass. The 4 new ones check:
+  - two experts fit what one cannot;
+  - one expert equals nbgate's one expert exactly;
+  - before its first refresh the gate scores as nbgate's CNBP, within 1e-6;
+  - the text round trip, and the state resume exact.
+
+Offline (offline.sh): offline-c15, 4 experts, nbgate's defaults otherwise. Calibrated log-loss / winner log-loss:
+
+| model | log-loss | winner log-loss |
+|---|---|---|
+| tangate (m 2e5) | 0.6239 | 0.3332 |
+| tangate m 2e6 | 0.6243 | 0.3336 |
+| tangate m 2e4 | 0.6240 | 0.3331 |
+| tangate-1 (one expert) | 0.6220 | 0.3293 (= flat LR exactly, as it must) |
+| comparator: MoE-c's recipe | 0.6144 | 0.3242 |
+| comparator: nbgate | 0.6245 | 0.3339 |
+| comparator: flat LR | 0.6220 | 0.3293 |
+
+Paired differences of calibrated log-loss, with 95% intervals, over the 10 nearly game-disjoint parts of RR 84
+(parts.csv):
+
+| difference | calibrated log-loss | winner log-loss |
+|---|---|---|
+| tangate − MoE-c recipe | 0.0095 [0.0059, 0.0131] (worse) | 0.0087 [0.0061, 0.0112] |
+| tangate − nbgate | −0.0006 [−0.0014, 0.0003] | −0.0006 [−0.0014, 0.0001] |
+| tangate − flat LR | 0.0027 [−0.0011, 0.0065] | 0.0043 [0.0022, 0.0063] (worse) |
+
+(m 2e6 and 2e4 are the same within 0.0004 of nbgate.)
+
+Gate hardness (mix-stats on RR 84): 3.97 of 4 experts used, the largest weight over 0.99 in 63.7% of positions, and
+exp(entropy) 1.14 per position. nbgate: 65.9%, 1.13. m 2e4: 59.2%.
+
+Training cost: 70 CPU-s on the 2.3M positions, against 15 for nbgate.
+- Rounds after the first refresh take 43 s against 4.3: the gate's count-based scoring with parents reads the pair
+  counts at random, for 4 classes.
+- So it is also about 5x nbgate's training cost a position. If it were ever wanted, a table refresh every 1024
+  examples would give nbgate's staleness at a fraction of the cost.
+
+CPU: about 6 min (offline training 3.8, evaluations about 1.2, identity 0.5), builds excluded.

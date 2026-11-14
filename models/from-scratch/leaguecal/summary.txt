@@ -1,0 +1,181 @@
+leaguecal: does the league's fixed 0.1-nat softmax confound ratings through each entry's calibration?
+Diagnostic only, no league change. 2026-11-07. Tournament binary bin/chessai-tanroute2
+(md5 a25836325c9571bdd1b88aa227f450e1); nothing new was built.
+
+IN SHORT
+- Yes, the confound is real and large. On its own play, each entry's league spec has a calibration slope
+  between 0.55 and 2.03 (median 1.16). The league spec is cal:HELDOUT, fitted on held-out d2 games.
+  - Softmax at T over a spec with own-play slope a plays like softmax at a*T in the entry's calibrated units.
+  - So d0-trained LR entries (median slope 1.5-1.7) play hotter than their own calibration says.
+  - NB entries (0.86) and d2-trained entries (0.93) play colder.
+  - Colder won at T 0.1 for every model tested.
+- Measured directly, head to head at ply 2: 132 Elo per unit ln(slope ratio), 95% 96 to 169.
+  - Between a d0 LR tree (slope 1.65-1.80) and a d2-trained entry (0.73-0.88), that is 90-113 Elo.
+- It changes the order at the top of the seeding field, but it does not reverse it.
+  - Now the first 9 ply-2 entries are all d2-trained, and the best d0 LR tree is 81 below the top.
+  - With every entry on cal-own, the best estimate puts the top 3 within about 30 Elo:
+    F-P-tau0-d2jit-c-v2036, T-L-Nc-merge-c-v1631, F-L-d2jit-c-v1651.
+  - The top 15 would be mixed: 6 d2-trained, 4 LR trees, 4 flat LR, 1 MoE.
+  - Among the family means, d2-trained falls from level with the d0 LR families to 65-90 below them.
+  - In the two pairs played head to head, the d2-trained side stays ahead even under cal-own, by 24 and 28.
+- Fair alternative, cheapest of those that keep the current policy: cal-own.
+  - Calibrate each version on 600 of its own ply-1 games (self-play only) and play cal:OWNGAMES:KIND:PATH.
+  - Cost: 1.2-3.1 CPU-s per version, measured on one thread. About 1.5 CPU-min per cycle for 54 new entries.
+  - The spec form already works in the tournament binary.
+  - The scale-free alternative (argmax or rank-based softmax with random openings) costs nothing per version
+    but was not tested.
+
+METHOD
+1. Survey (survey.py → survey.csv, survey_summary.txt)
+   - Field: 103 unique models from champion-sim/stage2/dry-run.out, the restart's seeding field:
+     54 latest versions and 49 old peaks, references left out.
+   - League spec per model: cal:HELDOUT:KIND:PATH, as stage2 cycle.py builds it. HELDOUT is lr or cnbp, from
+     lineages.txt and config.json.
+   - Own games: the league spec against itself, 600 games, league policy (log-odds softmax, T 0.1), ply 1,
+     seed 5. Stored in games/NAME.
+   - Fit: eval-loss SPEC games/NAME --use-probs --fit-calibration, once for the league spec and once for the raw
+     model. "Slope" below means slope_winner of the league spec's fit. Under softmax only the slope matters,
+     because the offset difference is the same for every child.
+2. Effect size: cal-own against the league spec of the same model (step2.sh, step2b.sh → step3.py → step3.txt)
+   - cal-own = cal:games/NAME:KIND:PATH, the raw model calibrated on its own 600 games.
+   - Ply 1: 1000 games per model. Ply 2: 600 games per model. Several seeds, alternating colours.
+3. Direct check of the predicted re-ranking (step4.sh → step5.py → step5.txt)
+   - Two pairs, 600 games each at ply 2.
+   - Played once with both sides on their league specs and once with both sides on cal-own.
+
+1. SURVEY BY FAMILY: own-play slope of the league spec
+
+   family           n   league spec slope, median (range)   raw model slope, median
+   flat LR/FM       10  1.70 (1.06-2.03)                    1.36
+   LR trees         35  1.50 (1.17-1.80)                    1.58
+   NB/CNBP          30  0.86 (0.55-1.22)                    1.35
+   MoE/NB mixtures   2  1.29                                1.30
+   probit            4  1.37                                2.42
+   d2-trained       22  0.93 (0.73-1.42)                    0.86
+   all             103  1.16 (0.55-2.03), quartiles 0.88-1.50
+
+   - The held-out calibration comes from d2 games, so it suits d2-trained entries (about 0.93).
+   - It leaves d0-trained LR entries underconfident on their own play, so they play hot.
+   - It makes NB entries overconfident (the cnbp held-out set), so they play cold.
+
+2. EFFECT SIZE: cal-own minus league spec, same model (step3.txt)
+
+   model                   slope   ply 1 (1000 games)      ply 2 (600 games)
+   T-N-NNs-c-v632          0.55    -143 (-162 to -126)     -255 (-292 to -222)
+   F-L-d2play-c-v1011      0.76     -30 (-45 to -16)        -67 (-94 to -40)
+   F-L-d2jit-c-v1651       0.88      -3 (-16 to 9)          -47 (-72 to -21)
+   F-L-d4mix-c-v324        1.04      16 (1 to 30)            -7 (-33 to 19)    control
+   T-L-Le-fresh-c-v742     1.42      29 (15 to 42)           69 (43 to 96)
+   F-L-c-v2860             1.73      38 (23 to 52)           98 (71 to 126)
+
+   - The effect is monotone: making play colder helps at T 0.1. It is larger at ply 2 than at ply 1.
+   - Per unit ln(slope), least squares through 0:
+     - ply 2: 184 above slope 1 (2 models), 389 below (3 models);
+     - ply 1: 72 above, 208 below.
+   - These self-arena coefficients overstate the shift between different entries. See the direct check.
+
+3. DIRECT CHECK, HEAD TO HEAD AT PLY 2 (step5.txt)
+
+   pair (A - B)                                        league specs           cal-own specs        shift
+   T-L-Nc-merge-c-v1631 (1.80) - F-L-d2jit-c-v1651 (0.88)  -114 (-142 to -86)   -24 (-50 to 3)       90 (51 to 129)
+   T-L-Ne-merge-c-v792 (1.65) - MoE-d2jit-c-v2156 (0.73)   -141 (-171 to -112)  -28 (-55 to -1)     113 (73 to 153)
+
+   - Pooled: 132 Elo per unit ln(slope ratio), 95% 96 to 169.
+   - This is about 70% of the self-arena coefficient above 1, and a third of the one below 1.
+   - So step 3's extrapolated ranks (step3.txt) overstate the re-ranking. Use step5.txt.
+
+4. RE-RANKING OF THE SEEDING FIELD (step5.txt)
+   - Method: first-run ply-2 Elo plus 132 ln(slope), with the field mean kept fixed. 96 entries have a
+     first-run Elo.
+
+   top now (rank now → estimate)                    top by the estimate
+   1  F-L-d2jit-c-v1651          1789 → 1751 (3)    1  F-P-tau0-d2jit-c-v2036    1780 (2 now)
+   2  F-P-tau0-d2jit-c-v2036     1785 → 1780 (1)    2  T-L-Nc-merge-c-v1631      1765 (12 now)
+   3  T-L-Le-merge-d2jit-c-v1404 1760 → 1736 (5)    3  F-L-d2jit-c-v1651         1751 (1 now)
+   4  MoE-d2jit-c-v2156          1759 → 1697 (17)   4  T-L-Ne-merge-c-v792       1740 (14 now)
+   5  F-L-d2jit-c-v3943          1758 → 1717 (13)   5  T-L-Le-merge-d2jit-c-v1404 1736 (3 now)
+   8  F-L-d2play-c-v1011         1744 → 1686 (20)   6  F-L-c-v2860               1736 (16 now)
+   12 T-L-Nc-merge-c-v1631       1708 → 1765 (2)    7  T-L-NNs-merge-c-v818      1735 (13 now)
+
+   family means, now → estimate (best entry now → estimate)
+   flat LR/FM        10  1636 → 1675   (1686 → 1736)
+   LR trees          33  1617 → 1648   (1708 → 1765)
+   NB/CNBP           30  1321 → 1286   (1466 → 1459)
+   MoE/NB mixtures    2  1682 → 1695   (1709 → 1728)
+   probit             4  1530 → 1546   (1563 → 1576)
+   d2-trained        17  1610 → 1583   (1789 → 1780)
+
+ANSWERS
+- Would the confound change the order among the top entries? Yes.
+  - The current d2-trained sweep of the top 9 is partly sharpness.
+  - With cal-own the top is mixed:
+    - the best d0 LR tree climbs from 12th to about 2nd;
+    - MoE-d2jit-c-v2156 drops from 4th to about 17th;
+    - F-L-d2play-c-v1011 drops from 8th to about 20th.
+  - It does not reverse the top. The top 3 come within about 30 Elo of each other.
+  - Both d2-trained entries tested still win head to head under cal-own, by 24 and 28.
+- Would it change the order between families? Yes, on the means.
+  - Now d2-trained (1610) is level with flat LR (1636) and LR trees (1617).
+  - Under cal-own it falls 65-90 below them.
+  - At the top, d2-trained's lead over the best d0 LR tree shrinks from 81 to about 15.
+  - Whether d2 training "beats" d0 training is therefore mostly a scale effect in today's ratings, except at the
+    very top.
+- NB/CNBP stays last either way. Its overconfidence gives it a small free boost now, about 35 Elo on the mean,
+  and possibly more: its self-arena below slope 1 was steeper.
+
+FAIR ALTERNATIVES AND COST PER VERSION
+(a) cal-own, recommended if the league keeps the T 0.1 softmax.
+    - Each version plays 600 games of itself at ply 1 (league spec or raw). The league then uses
+      cal:OWNGAMES:KIND:PATH.
+    - It is self-play only, zero knowledge, no hand features.
+    - Measured cost on one thread (step4.out), 600 games plus one fit:
+      - flat LR F-L-c-v2860: 1.33 + 0.11 CPU-s;
+      - tree T-L-Nc-merge-c-v1631: 1.14 + 0.07 CPU-s;
+      - MoE-d2jit-c-v2156: 2.87 + 0.21 CPU-s.
+    - About 1.5 CPU-min per cycle for 54 new entries, one per lineage.
+    - The survey's cpu_s column is about 2x too high: it counted child time across two worker threads. The real
+      survey total was 300 CPU-s for 103 models with two fits each.
+    - Disk: the games dir is about 11 MB per version. Keep it while the version is in the league, since the spec
+      refits at load (0.07-0.2 s per load). Storing the 4 fitted numbers would need a new spec form.
+    - The 103 own-game dirs in games/ are exactly the seeding field's cal-own inputs, so a restart could use them
+      at no extra cost.
+    - What it equalizes: T 0.1 then means the same in outcome units for every entry. An entry still plays sharper
+      if it really separates moves better on its own play.
+(b) Scale-free policy: argmax or a rank-based softmax, with randomized openings for variety.
+    - Zero cost per version, and ratings would measure move order only.
+    - It changes play for everyone and loses the variety T 0.1 gives. Not tested here.
+(c) Fit on each entry's own league games instead of its own self-play.
+    - About 0.1-0.2 s per fit and no extra games.
+    - It needs the league to keep its games per entry, lags one round, and mixes in the opponents' play.
+- Not checked: whether self-play for training uses the same held-out spec under a softmax. If it does, the
+  effective self-play temperature also differs by family.
+
+CORRECTIONS TO EARLIER REPORTS (errwhy)
+- "Recalibrating on its own games gives T-L-Le-c 56 Elo at ply 2 (own-game slope about 1.35)": that 56 was
+  measured against the raw model, not the league spec. The league spec is already calibrated on held-out d2 games.
+  - Against the league spec, the own-game gain for T-L-Le-fresh-c-v742 (league-spec slope 1.42) is 69 at ply 2
+    and 29 at ply 1.
+  - The conclusion holds; only the comparator changes.
+- The blend-play variants' arena gains were measured against raw hard routing.
+  - Part of those gains is the own-game calibration's sharpening: 29 at ply 1 and 69 at ply 2 over the league
+    spec for T-L-Le-fresh-c-v742.
+  - The blend variants should be compared with cal-own of the same model before they are judged.
+
+CAVEATS
+- The slopes are fitted on ply-1 own games, while the first-run ratings and the shifts are ply 2.
+- The re-ranking assumes a head-to-head shift carries over to rating and scales with ln(slope).
+  - Its single coefficient comes from 2 pairs, both a d0 LR tree against a d2-trained entry.
+  - Entries far from that range (NB at 0.55) may shift more.
+- The first-run ratings carry error bars of 7-79 in dry-run.out (median 43). Orders inside about 40 Elo are
+  not settled, by them or by this estimate.
+
+CPU: survey 300 s, step 2 123 s, step 2b 55 s, step 4 158 s. Total about 10.6 CPU-min at nice 19, 1-2 threads.
+
+FILES (models/from-scratch/leaguecal/)
+- survey.py, survey.csv, survey.out, survey.time, survey_summary.py, survey_summary.txt
+- step2.sh, step2.out, step2.time, step2b.sh, step2b.out, step2b.time: self arenas
+- step3.py, step3.txt: pooled self arenas, coefficients, extrapolated ranks (superseded by step5)
+- step4.sh, step4.out, step4.time: head-to-head check and per-version cost
+- step5.py, step5.txt: pooled check, direct coefficient, best-estimate ranks and family means
+- games/: 103 own-game dirs (600 ply-1 games each, seed 5) with NAME.arena logs, 1.1 GB, regenerable. Kept
+  because they are the seeding field's cal-own inputs.

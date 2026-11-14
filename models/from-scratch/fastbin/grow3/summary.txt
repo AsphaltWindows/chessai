@@ -1,0 +1,55 @@
+grow3 (2026-11-11): the analyst's rulings 6.46 (iii) on grow2's three points, built on grow2-src as fastbin/grow3-src
+(grow3.patch = diff against grow2-src: bdd.rs tests, delegation.rs, main.rs). Binary md5 aa05358af994da8fbfd333ae80ba3bbc,
+cand/chessai-grow3, installed as models/from-scratch/bin/chessai-grow3 (cp -n). Built and tested at nice 15.
+
+CHANGES (all under --router-split-rule stall-h / stall-hg only; no rule, z and subtree are grow2's byte for byte):
+  (1) Share guard: a router is judged once its children holding at least S of their lifetime examples (the per-node
+      `life` counter) have each closed a window (num_trained_total >= W); no lifetime examples, no judging.
+      --grow-router-guard-share S, default 0.9 under stall-h/stall-hg; 1.0 = grow2's every-child guard (refused
+      with no rule, z or subtree, and outside [0, 1]). Recorded in the state's options only when not 1.
+  (2) Null shadows (stall-hg): beside the real shadows (path or cluster), as many copies of the router and its
+      table, made and run with them, each scored before training and trained alike on the examples of its part of
+      a hash partition (position_hash mod m, the cluster warm-up's). Per example d = G_real - G_null, blocked with
+      the same 20-block windows; split iff mean d > 2 block SE and > the MDL bar. Logged (--log-router-stats):
+      "G real; G null; G diff [passes]". The null is always on under stall-hg (no way to run HG without it); its
+      shadows and blocks are in the state. Subtree keeps grow2's real-G rule.
+  (3) k = (m-1) d_R under stall-h/stall-hg: cluster (B-1) d = 5,112 at B 3 (was (B+1) d = 10,224); path (m-1) d
+      unchanged. Equivalent to grow2 at --grow-mdl 0.5. Subtree keeps (B+1) d.
+
+TESTS
+  unit       224 lib + 1 main pass (unit-tests.log): grow2's 221 kept (stall_hg_fires now also asserts the paired
+             difference passes, G diff > 0.2 > 2 SE, G null ~0) and 3 new: guard_share_opens_at_90_percent_not_89
+             (lives 9000/1000 open, 8900/1100 and 8999/1001 shut, 0.89 opens at 0.89, 1.0 waits for every child, no
+             lives no judging, and in a close a child with 1% of the examples no longer holds the router);
+             null_shadows_cancel_a_drifting_g (a null world whose best child rotates every 4 windows: G_real below
+             -2 SE in 3+ windows, |G_real - G_null| within 2 SE in every one of 10+ windows, no split);
+             null_shadows_resume_exactly (states with both shadow sets running, round trip and resumed training
+             byte-identical).
+  identity   vs grow2 (which matched grow1, hybrid15, hybrid6): train 28/28 SAME, live 8/8, P1 4/4, play 161/161;
+             subtree one process 30 rounds SAME (models, state, log); stall-h at --grow-router-guard-share 1.0 SAME
+             (models, state; log with k masked).
+  CLI        cli_checks.txt: 21 refusals (4 new for the guard flag) and 6 acceptances.
+  resume     P1 30 rounds W 200k, --grow-mdl 0 --grow-router-z 0, chain of 30 one-round processes = one process (all
+             models, final state, rule log lines): stall-h at guard 0.9 (4 router splits: 3 cluster, 1 unsharing, 3
+             sibling sets, post-split checks resumed); stall-hg (28 of 29 saves with both shadow sets running; 0
+             splits: G diff stayed negative).
+  play       play_rules_g3.txt: the smoke's and the resume runs' stall-h and stall-hg models (up to 3 sibling sets and
+             unsharings) load in hybrid15 and hybrid16 and play byte-identical games to grow3 at depths 1 and 2 (16
+             SAME).
+
+SMOKE (smoke.txt, smoke-RULE.txt: every router window: H, G real, G null, G diff, bars, gate, decision). P1 108 rounds
+(21.6M), D-P-Ne-ctx, defaults (guard 0.9, k 5,112, MDL 1, z 2):
+  stall-h   4 router splits, the budget: root cluster split at 9.0M (set 0), router 2 unshared over its 3 parents at
+            13.2M, router 9 cluster split at 18.6M, router 11 unshared at 20.3M; 23 nodes; the root's post-split
+            check fine (-0.160 vs bar 0.160). The guard opened at the root at 9.0M (grow2: never in 21.6M).
+  stall-hg  0 splits; 12 open gates (root from 9M, router 2 from 11.7M), G diff under its bars at every one.
+            G real drifts as in grow2 (root -0.0069, z -35; router 2 -0.0186, z -27 at 21M), but G NULL DOES NOT:
+            |G null| <= 0.0005 (root within 3.5 SE; router 2 +0.0002 to +0.0005, z up to +7.8). So
+            G diff = G real (root -0.0069, z -35; router 2 -0.0189, z -27): the drift is the cluster partition's own,
+            not the shadows' smaller share of the data; the null cancels a lag drift (unit test), not this one.
+  User CPU: stall-h 140 s, stall-hg 132 s (null shadows included).
+
+FOR THE ANALYST: on P1 the hash-partition shadows route as well as the router (slightly better at router 2) while
+the hard-EM cluster shadows route worse and worse; HG's refusals at cluster routers are therefore refusals of this
+partition, not evidence that no partition gains. Candidates: Q_v's clusters still moving (each shadow trained on a
+region that has since moved), or unbalanced clusters leaving small shadows on few examples.

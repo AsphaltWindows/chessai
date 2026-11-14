@@ -1,0 +1,117 @@
+DRIVER SCAN CACHE: EXACT FASTER PER-CYCLE FILE SCANS IN leagues/leagues.py (2026-11-10 ~09:30 to ~11:05, a fork)
+
+Task: make the league driver's per-cycle full scans of tour/games.csv and tour/game_cpu.csv cheaper with identical
+results. Swap the change into cluster-error once single-split and single-split-probit had finished cycle 1000. The
+user has said yes to any exact, deterministic speedup.
+
+RESULT
+- leagues/leagues.py is git HEAD's (e0d3f24) plus one new section ("exact fast scans", ~290 lines) and five call
+  sites. It is built by drivercache/build.py from leagues_orig.py (git HEAD's) and scan_section.py. md5
+  a3e88a55955af17f9b5649192e6f1aba. Not committed. To undo: git checkout leagues/leagues.py.
+- Deployed 2026-11-10 10:56:46, during cluster-error cycle 416's training phase. leagues.py was replaced
+  atomically (temp file in leagues/, then rename). Cycle 417 is the first on the new code.
+  - single-split finished cycle 1000 at 10:51:47 on the old code; single-split-probit at 10:56:14.
+  - Cycles 417-423 finished cleanly by 11:02. scan-cache/ was created (5.4 MB).
+- Saving, measured live: the driver process's own CPU per cycle (all threads, binaries excluded; cpusample.py).
+  - Old code at the same low load (cycle 416, load ~3): 8.8 s.
+  - New code: 2.4-2.6 s (cycles 418, 419, 421-423). Cycle 420 took 3.4 s while perf.py ran beside it.
+  - So about 6.3 s per cycle now, on the critical path, out of a ~45-51 s cycle.
+  - Under this morning's load (~10, all three experiments running) the old code used 12.0-16.1 s a cycle (cycles
+    397-411). The saving at that load is ~10-11 s a cycle (see TIMES).
+- Phase walls at the same low load (repeat.log, 1 s resolution; binary wall from tour/tournament.log):
+  - cycle 416 (old): pre-tournament 9.0 s, driver part of the tournament phase 5.1 s, cycle 51.0 s;
+  - cycles 418-422 (new): 5.2 s, 1.8 s, 45.2 s.
+  - The tournament binary's wall was 22.9 s and 25.2 s (noise).
+- Projection for cluster-error's remaining cycles (424-1000). The old scans grow with the files: games.csv was
+  526 MB at cycle 424 and grows 1.25 MB a cycle, to ~1.25 GB by cycle 1000.
+  - At today's load the saving is ~0.012-0.017 s per MB a cycle, which comes to about 1.7-2.4 h of wall time.
+  - If the machine is loaded again as this morning (~0.023 s per MB), it is about 3.3 h.
+  - The first cycle on the new code built the cache (7.6 s of driver CPU, still less than the old 8.8 s).
+
+WHAT WAS SLOW (profiled on reflink snapshots of the live leagues, the original code, CPU s at load ~10)
+- Every cycle the driver reads both files whole, in Python, five times. cluster-error at cycles 354-370 (games.csv
+  ~450 MB, game_cpu.csv ~460 MB):
+  - done_round_robins, before and after the tournament: 1.2 s each;
+  - clean_partial (readlines of game_cpu.csv and a check; it rewrites only when rows are dropped): 2.2 s;
+  - game_rows (both files, for the cycle's 5 rounds): 3.1 s;
+  - contrast_ses (decide): 4.4 s, of which ~3.2 s is counting pairs over all of games.csv and ~1.3 s is the sparse
+    elimination and dense Cholesky.
+  - Total: ~12.8 s a cycle on the driver's critical path, growing linearly with the games.
+  - single-split at cycle 927: ~8.2 s a cycle.
+- The records phase's CSV rewrites cost ~0.35-0.5 s a cycle (left alone).
+
+WHAT CHANGED
+- A cache beside tour/: <league>/scan-cache/games.csv.json (+ games.csv.pairs.json) and game_cpu.csv.json.
+- It summarizes the file's complete lines before byte L (L is just after the last "\n"), using the original code's
+  own expressions:
+  - games.csv: the max round as done_round_robins reads it; the unordered pair counts as contrast_ses counts them,
+    in first-seen order; whether every line parses;
+  - game_cpu.csv: whether clean_partial would keep every line; the max round;
+  - both: the byte offset of each round's first line, and whether the rounds never go down.
+- When the cache is trusted:
+  - the file is unchanged since the cache was saved (same device, inode, size, mtime and ctime). This holds within
+    a cycle and between cycles;
+  - or the SHA-256 of bytes [0, L) equals the saved one. This runs once per cycle per file, after the tournament's
+    appends.
+- What is read then: only the lines after L (and the cache is extended and saved). For game_rows, only the cycle's
+  rounds, found from the round offsets.
+- Each function runs its original code whenever the summary can't prove the same answer:
+  - no cache is possible: a file outside a league's tour/, or a locale encoding other than UTF-8;
+  - a "\r" anywhere after L, or bytes that don't decode;
+  - a line the original would raise on (or, for clean_partial, drop);
+  - rounds out of order (game_rows), or a partial last line (clean_partial);
+  - a damaged, foreign or stale cache, or the file changed while being read.
+- A partial last line is handled by the original per-line logic in done_round_robins, game_rows and contrast_ses.
+- clean_partial: when every row would be kept (the normal case), the file isn't read at all. Otherwise the original
+  code runs and rewrites as before.
+- Return values, their order, exceptions and every file the original writes are the same. Order here means the dict
+  insertion order of the pair counts, and rows in file order. The only new side effect is scan-cache/.
+
+IDENTITY (old vs new: every return value, exception and file byte compared; 0 failures in every run)
+- drivercache/ident.py, final build:
+  - single-split snapshot at cycle 927: 150 checks;
+  - nb-settings-no-random3: 170 checks;
+  - leaf-sources-2: 170 checks.
+- ident.py, previous build (same logic; only where the mmap is closed differed):
+  - cluster-error snapshot at cycle 370: 178 checks;
+  - lr-settings-2, probit-settings and leaf-sources-2: 170 checks each.
+- Each ident.py run covers:
+  - static: done_round_robins; game_rows over 12 ranges (empty, reversed, out of range, all); contrast_ses on the
+    real decision pairs, on synthetic pairs and on a smaller rated set. Each with a fresh cache, from the saved
+    cache and from the memo;
+  - clean_partial keeping all rows and dropping 3 rounds (both rewrite paths);
+  - a 4-6 cycle replay as the driver runs it (a new process each cycle). Faults between cycles:
+    - a partial line in both files;
+    - a byte rewritten in an early line (same length; only the hash can see it);
+    - a damaged and a foreign cache;
+    - the pairs file deleted;
+  - rare files: a "\r", a blank line, rounds out of order, a non-numeric round.
+  - Its fast-path counters show the original code ran exactly in the expected cases.
+- The driver's own selftest passes with the new code, both builds: 66 rule checks, plus the replay test (an
+  experiment with self-play, local and global lines and its global league, run straight and interrupted 18 times).
+  Its replay roots are identical to the original code's: games, ratings, models, self-play rounds and every record,
+  502 items.
+- perf.py runs (below) also compare results: identical.
+
+TIMES (perf.py: CPU s per cycle, both codes interleaved on the same snapshot and the same appends, nice 15)
+- cluster-error snapshot at cycle 370:
+  - at load ~10-12: original ~12.8 s, new 2.15-2.43 s;
+  - at load ~3.5 (11:00): original 8.7-10.3 s, new 1.5-2.0 s.
+  - New per call: done_round_robins 0.1 s before and 0.25-0.35 s after the tournament (the SHA-256 of the prefix
+    plus the new lines); clean_partial 0.00 s; game_rows 0.2-0.3 s; contrast_ses 0.9-1.6 s (its elimination,
+    unchanged).
+  - One-time cache build: 6.4-8.8 s.
+- single-split snapshot at cycle 927 (load ~10): original 8.1-8.9 s, new 1.24-1.34 s.
+
+NOT DONE
+- contrast_ses' sparse elimination and dense Cholesky: ~1 s a cycle now, growing with the players. No exact
+  speedup was found that keeps the same floating-point operations in the same order.
+- The records phase's CSV rewrites (~0.4 s a cycle).
+- The cache still hashes each file once a cycle (~0.3 s per 500 MB), which is linear in the file. A cheaper proof
+  that trusts appends would not be exact.
+- No ident.py run on the single-split-probit snapshot (that experiment finished on the old code).
+
+FILES (models/from-scratch/fastbin/drivercache/; the snapshot copies were deleted)
+- build.py, scan_section.py, leagues_orig.py, leagues_new.py: the build. deploy.sh/deploy.log: the swap.
+- ident.py, perf.py, cmp_e2e.py: the checks, with their *.log files.
+- prof*.py: the profiles. phases.py: the phase times. cpusample.py/cpu-ce.log: the driver's CPU per cycle.

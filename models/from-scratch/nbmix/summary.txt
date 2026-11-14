@@ -1,0 +1,45 @@
+Mixtures of naive Bayes (2026-11-07). Verdict: no naive-Bayes-expert mixture beats flat NB. The better one, the
+generative EM mixture (b), loses 440 Elo to F-N-c at equal positions; the NB-gate + LR-experts cell (c) only ties flat LR.
+
+Code: ../nbmix-src = probit-src (chessai-probit4's source) + nbmix.patch: src/nbmix.rs (MoeNb, NbMix, NbGateMoe),
+model kinds moenb, nbmix, nbgate (train, --start, self-play, --resume; files hold all training state at full
+precision), the mix-stats command, Moe::component_weights and Cnbp::predict_log_cached (both additive).
+Binaries: ../bin/chessai-nbmix2 (md5 d51bf10839e539e52d54b06c09d0f24e; all three kinds). ../bin/chessai-nbmix is the
+first build without nbgate, superseded. Identity: chessai-nbmix2 = chessai-probit4 on every non-log output of
+../probit/identity/run2.sh (out2-nbmix2), so chessai-probit for every existing kind.
+Unit tests: one component is exactly flat NB (moenb, nbmix) or flat LR (nbgate); each mixture fits a two-regime problem
+its single model cannot; text round trip and resume are exact.
+
+Offline (offline/run2.sh; offline-c15: train RRs 80-83, --seed 1 --rounds 4 --use-probs, eval-loss on RR 84 with
+--fit-calibration; 4 components each). Calibrated log-loss / winner log-loss:
+  gate \ experts      LR experts                          NB experts
+  LR gate             MoE-c recipe (moe)  0.6144 / 0.3242  (a) moenb   0.8698 / 0.5816
+  NB gate             (c) nbgate          0.6245 / 0.3339  (b) nbmix   0.7569 / 0.4337
+  references: flat LR 0.6220 / 0.3293, flat NB 0.7328 / 0.4050, T-N-Nc fresh 0.7169 / 0.4034.
+  One-component checks: moenb-1 and nbmix-1 give flat NB's numbers exactly, nbgate-1 flat LR's.
+Components used (mix-stats on RR 84). Given the position: effective number (exp of the entropy of the mean weights),
+exp(mean entropy) per position, and the share with a weight over 0.99. Then the same two for the responsibilities
+given the label:
+  MoE-c recipe   2.36 of 4 (0.496 0.035 0.461 0.008)   1.70   6.2%    label: 1.45  25.0%
+  (a) moenb      3.62 of 4                              2.39   1.6%    label: 1.27  49.5%
+  (b) nbmix      3.94 of 4 (pi 0.20-0.31)               1.50  22.4%    label: 1.14  62.8%
+  (c) nbgate     3.98 of 4                              1.13  65.9%    label: 1.13  66.0%
+  (a)'s experts split by outcome, not position: expert 0 is 100% draws, expert 2 72% black wins, expert 3 52% white
+  wins. NB's extreme posteriors make the label responsibilities hard, and a gate that cannot see the label cannot use
+  such experts. (b) does not collapse; its components cluster positions (one has 36% draws against 14-18%). (c)'s NB
+  gate is nearly hard, a soft T-L-Nc. MoE-c's recipe uses about 2 of its 4 experts.
+
+Self-play smoke of (b) (smoke/run.sh; F-N-c's recipe with --model nbmix, seed 21, depth 0, 25 rounds of 1000 games,
+3 threads): draws 87-88%, 291 plies a game in rounds 0-4 and 249 in rounds 15-24; v25 trained on 6.49M positions.
+Cost, the same binary and load: nbmix 26.5 CPU-us a ply, cnbp (F-N-c's recipe) 7.6, moe 4 experts (MoE-c's) 38.9.
+So nbmix is 3.5x F-N-c and 0.68x MoE-c a ply; at early-round lengths, 7.7 / 2.6 / 11.7 CPU-ms a game.
+Arena (smoke/arena.sh): nbmix v25 vs F-N-c v21 (6.63M positions), d2, both calibrated on heldout-cnbp-d2-s555,
+jitter10, 2 x 1000 games: W/L/D 79/1785/136, score 7.3%, Elo -440 (-467 to -416); seeds -413, -472.
+
+League proposal, if the user wants the round robin to judge it anyway (not recommended on these numbers):
+  M-N-N-c | M-N | models/from-scratch/bin/chessai-nbmix2 | scratch | cnbp | own | --model nbmix --nbmix-components 4 --use-probs --seed 21 --vs-previous --no-games
+  Needs: the tournament binary switched to chessai-nbmix2, because chessai-probit cannot load nbmix: specs (identity
+  above); own_games.binary_by_lineage -> chessai-nbmix2; a new costs signature at 3.5x F-N-c's cost a ply.
+
+CPU: about 12 min in all (builds and tests about 3, offline about 2.5, smoke and cost references 4, arena 2.5,
+identity 0.3).

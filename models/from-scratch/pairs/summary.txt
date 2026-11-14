@@ -1,0 +1,238 @@
+chessai-pairs1 (2026-11-12 ~22:50): S7, data-chosen pairwise features for the flat probit (analyst 6.97/6.98; the
+user ~21:50: "Let's try pairwise features also"). Built and verified by the S7 fork. Nothing launched; no commits;
+rs/ untouched; nothing deleted outside this fork's own scratch.
+
+BINARY
+  models/from-scratch/bin/chessai-pairs1   md5 2fed7278b78e9bc2598b2d6b036e58d0   (cp -n)
+  source: models/from-scratch/pairs-src, a copy of fastbin/hybrid20-src. Before any edit an unmodified rebuild gave
+  hybrid20's md5 cda3d7c59dd98feb431fea23a29f867c. One binary trains F-P-S7 and plays every model (tournament,
+  self-games, cold games, own calibration, arena reads). Named pairs1, not hybrid21, to keep the hybrid series for
+  speedups.
+  tests: cargo test --release: 216 passed (214 lib + 2 main), 7 of them new:
+    pairs:: candidates_cover_every_pair_value_once (356,642, each index decodes back), text_and_state_round_trip,
+            checkpoints_drop_then_add_by_z_up_to_k_and_the_cap (order, ties by index, cap, drop rule, the log lines),
+            active_pairs_follow_the_index
+    probit:: s7_a_model_without_pairs_writes_version_1, s7_forget_includes_the_pairs,
+             s7_pairs_are_chosen_enter_the_latent_and_resume_exactly (a planted conjunction is found; the latent adds
+             exactly the active pairs; model file + state reload trains on to the same bytes, drops included)
+  source changes: src/pairs.rs (new), src/probit.rs (pairs in the latent, the updates, forget, fixed (None with
+  pairs), the text format), src/classifier.rs (round_report hook; a probit's save_state writes its pairs' state),
+  src/main.rs (flags, train dispatch and checks, the report lines, self-play refusals), src/lib.rs.
+
+THE OPTION (train)
+  --pairs on|off (off)  --pairs-k 50  --pairs-z 5  --pairs-cap 2000  --pairs-shrink 0.5  --pairs-drop 0.5
+  --pairs-every 1000000  --pairs-drop-after 3000000  --pairs-sample 1
+  A pair = feature i value a AND feature j value b (i < j): 356,642 candidates, 2,415 active a position. After each
+  example every active candidate adds the latent's standardized shift v (TrueSkill's v of the truncation, summed over
+  the label's results; 0 if not finite) to S and 1 to n. Every --pairs-every examples, counted from the model's start
+  (examples trained with pairs): first drops (a pair active in at least --pairs-drop-after examples since chosen with
+  |mu| < 0.5 sd; its statistics restart), then adds the k candidates with the largest |z| = |S|/sqrt(n) above z (ties
+  by index), up to the cap: mu 0, sd shrink x prior (0.15), statistics restarted. A chosen pair is one more weight:
+  the dynamics widen it, it enters the latent's mean and variance, the truncation moves it, forget scales it. The
+  pairs are summed after the model's own weights. --pairs-sample M: only candidates whose index hashes to 0 mod M.
+  Model file: probit version 2 = version 1 + a "pairs" section (options, examples trained, the pairs "i a j b mu s2"
+  in the order chosen). A model without pairs is version 1, byte for byte. Older binaries refuse version 2 ("unknown
+  probit model version"), loudly. A model with chosen pairs plays on the float path (fixed() is None); with none yet
+  (the first 1M examples) it plays in fixed point exactly as a plain probit.
+  State: the candidates' (S, n) are training state, written by every pairs training as {name}N.state beside the
+  model ("chessai-state 1 probit-pairs": examples trained, the pair list, 713,284 f64; 5.7 MB). `train --start
+  X.model` reads X.state and checks it matches (examples trained and pair list); missing or mismatched: an error,
+  unless the model has trained nothing (the driver's version 0: fresh statistics, noted on stderr).
+  Refused, with an error and no output: --pairs on with a start model without pairs (pairs only from scratch),
+  a pairs model trained without --pairs on, --pairs-* options without --pairs on, --label-depth, --init-forget,
+  and self-play (the flag, or a pairs model as --init/--resume).
+  Log (after train's "round 0: N positions" line; the driver's regex is unaffected), per training:
+    pairs: 300 chosen of cap 2000; this round: 202567 examples, 2 checkpoints, added 100 (|z| min 8.71, median 9.41,
+    max 11.04), dropped 0; active per position 3.386; 605209 examples since the start
+  then one line per checkpoint naming every pair dropped (mu, sd) and added (|z|) as i:a&j:b, e.g.
+    pairs checkpoint at 600000 examples: dropped 0; added 50 (|z|): 1:2&3:4 11.04, 50:7&54:8 11.02, ...; 300 chosen
+
+DATA (real ply-1 games; data/gen-p1/gen.sh)
+  The 16 std-v1-p1 finals @600 (both seeds), held-out (lr) calibration, ply 1, T 0.1, leagues' tournament flags,
+  chessai-hybrid20. 175 round robins (seed 7101) = 25 training sets of 7 (data/sets/set1-25: links; ~200k positions
+  each, 5.06M in all); held-out slice data/heldout-p1: 7 more round robins (seed 7199), 1,680 games, 199,261
+  positions, with games.csv for game-clustered errors (weight1's uloss.py format). 1 GB, deletable once read.
+
+IDENTITY, TRAINING (flag absent or off) .............................................. scripts/chains.sh, compare_chains.py
+  As weight1's: train SET OUT --model probit|lr --rounds 1 --seed S [--start PREV] --use-probs, nice 19, 1 thread.
+  F-P from std-v1-p1-s1 F-P.loc probit600, F-L from its lr600; three chained steps on sets 1-3 (seeds 101-103) and
+  one from-scratch step on set 1 (seed 100). Arms h6 (chessai-hybrid6), p1 (pairs1, no flag), p1off (--pairs off):
+  every output file, stdout (time masked) and stderr byte-identical to h6's. ALL IDENTICAL; no state written.
+               F-P (probit1.model)                 F-L (lr1.model)
+    step 1     27aadbae9d5aaae819468a4d2054a9fe    408c842194b7848e87e74cfe9226a9fa
+    step 2     5ec857ed4ffbae51af722c5e55edf373    f771715bfa9f746b9a931bd7dd9b4d5c
+    step 3     f56baa9b7cc0ae39d3f54355cf6ea2bf    b7881f77f08cb8c8d133edee41789dc5
+    scratch    4aebce0cc42b01f4d32ae795660fb7a7    ff5e1ba30b1caa42b4875517f759e6cd
+  The driver's untrained version 0 (one empty game): hybrid6 = pairs1 off (probit 46559da8..., lr 95f23cdf...);
+  with --pairs on the same weights in a version-2 file with an empty pairs section (id/v0).
+  Pairs on is deterministic: chains ps/ps2 (defaults) and psx/psx2 (--pairs-every 100000) byte-identical, models,
+  states, stdout and stderr.
+
+EXACT RESUME ............................................................................ scripts/resume.sh
+  One process trains sets 1-3 as three rounds (--rounds 3, seed 101) vs three single-round processes chained through
+  the files (model + the state beside it), each seeded so its shuffle is the multi-round process's round's
+  (s_k = 101 ^ splitmix64(k-1) ^ splitmix64(0)). --pairs on --pairs-every 100000 (2 checkpoints inside every step,
+  pairs chosen across the boundaries): the models after sets 1, 2, 3 and the final state IDENTICAL. Again with
+  --pairs-drop-after 20000 (3 drops in step 3): IDENTICAL.
+
+IDENTITY, PLAY ............................................. identity/identity.sh, compare.py (-> identity/compare.txt)
+  hybrid20's own identity harness, cases and models (identity/m: probit rfp300, lr FL, bdt lib40 TBIG TL, bdd d1 d2
+  DC gd300 gd599a gd599b lib84), both halves rerun here, h20 = chessai-hybrid20 vs h21 = chessai-pairs1, nice 19:
+  28 CASES, 0 WITH DIFFERENCES: every output file of every case byte-identical (4 to 2,120 files a case). Cases:
+  round robins at plies 1-4 (argmax with 8 random opening plies, T 0.02, T 0.1, T 0.1 with an opening temperature)
+  and ply 5 (T 0.1); self-games at plies 1-4 (and ply 2 at T 0.02); own-calibration games (4 cases); the fixed-point
+  path checks at plies 3 and 4 (compound and deep). Process CPU h21/h20 x0.79 to x1.15 a case: noise (load ~25); a
+  model without pairs runs hybrid20's code (the pairs add work only to a model that has some).
+
+SLOWDOWN (bench/: scripts/bench.sh; self-play arenas as own-calibration games, T 0.1, one thread, nice 19, on a
+loaded machine; different models play different games, so +-10-20%)
+                                   ply 1 (2000 g)   ply 2 (200 g)   ply 3 (40 g)    CPU ms a game
+    plain, fixed point                  0.74            12.8            57.8
+    plain, float path (float:)          0.78  x1.06     19.3  x1.50     88.3  x1.53
+    300 pairs                           1.47  x2.0      31.8  x2.48    147.8  x2.56
+    2,000 pairs (the cap)               2.21  x3.0      44.3  x3.46    223.3  x3.87
+  (x: against plain fixed point.) The pairs themselves cost x1.7-1.9 (300) and x2.3-2.8 (2,000) over the float path;
+  the rest is losing fixed point at plies 2+ (x1.5). Fixed point with pairs is not built: pairs interact across
+  squares, so the incremental accumulators would need per-pair terms.
+
+SMOKE (kill and resume) ........................................... smoke/: s7smokeA.json, runA.sh, runB.sh, compare.py
+  A scratch experiment with the drafts' settings (ply 1, games_per_cycle 1584, self-games, cold games T 0.02 share
+  0.5 rating only, rate_every 4, draw-aware crowning at 3, tournament binary chessai-pairs1; seed 79, 9 cycles) and
+  three lines: F-P (pairs1 without the flag), F-P-S7, and F-P-S7 --pairs-every 200000 (to: train; pairs within 9
+  cycles). Root A: one driver for the whole run (exit 4 = EXIT_DONE). Root B: one driver process a cycle; the first
+  to reach cycle 6's training was killed -9 with its process group (the driver and two pairs1 trains: smoke/killedB)
+  at 22:41:42, and the next resumed ("cycle 6 resumes at phase train"). A = B: 35 FILES BYTE-IDENTICAL (models,
+  states, games, ratings, records); cycles.csv's 27 rows, decision columns identical. Each S7 line keeps only its
+  current version's state (probit8.state, 5.7 MB); F-P keeps none.
+  Its log (runs/<line>.log), per training of ~194k positions:
+    F-P-S7 (defaults): no pair in its first 5 trainings (0.95M examples); the 6th crossed 1M: 50 chosen, |z| 24.4 to
+      36.4 (median 27.2), 25 of the 50 (and the top 12) with one value, 47:7 (partners include 66:1-69:1);
+      active pairs per position 2.9-3.8.
+    --pairs-every 200000: 50 more each training from the 2nd, 350 by the 8th; |z| minima 11.9-13.5, medians
+      12.3-14.4, maxima 15.8-18.6; no drops (drop-after 3M); active per position 0.36 rising to 10.5; 47:7 in 0-2
+      of each 50.
+  CPU a cycle (cycles.csv; nice, load ~25): training F-P 0.25 s, F-P-S7 2.0 s, every-200k 2.25 s; own calibration
+  ~0.9 s a line, pairs or not; ply-1 games 0.87 ms (F-P vs F-P), 1.09 (one S7 model), 1.18 (two; up to 350 pairs).
+
+OFFLINE HELD-OUT LOSS ................................ scripts/offline.sh, offline2.sh -> offline/uloss.txt, uloss2.txt
+  The 25 training sets in order (one round each, from scratch, seeds 101..., 5.06M positions), the held-out slice
+  data/heldout-p1, weight1's uloss.py: log-loss B - A with game-clustered SEs; positive = S7 worse. A = plain F-P.
+                         defaults            every 200k (s7x5)   z 15 (s7z15)        shrink 0.1 (s7s01)
+    round 10, full       0.0034 +-0.0010     0.0059 +-0.0013     0.0008 +-0.0003     0.0007 +-0.0005
+    round 25, full       0.0006 +-0.0008     0.0052 +-0.0016    -0.0002 +-0.0002    -0.0001 +-0.0005
+    round 25, winner     0.0050 +-0.0015     0.0138 +-0.0026     0.0003 +-0.0004     0.0019 +-0.0008
+    pairs at round 25    250                 1,250               33                  250
+  NO HELD-OUT GAIN IN ANY ARM. The more pairs and the sooner, the worse (chained models at the cap, 2,000 pairs:
+  full 0.031 +-0.003 worse); the bar raised to 15 leaves S7 within 0.0002 of plain F-P.
+  Why, as far as measured, the statistic: z is inflated. In the defaults arm's state after 5.03M examples the mean
+  z^2 over candidates is 4.78 (about 1 or less for independent examples); 12,005 candidates have |z| > 5 (~0.2
+  expected), 1,545 > 8, 265 > 10; mean z^2 by n: 3.1 (n < 1e3), 7.9 (to 1e4), 10.6 (to 1e5), 11.6 (to 1e6), 3.0
+  (above). Growth with n is what positions of one game sharing a conjunction do (v correlated over many plies);
+  the smoke's 47:7 hub looks like a main-effect residual (a pair's S carries both its values' own residuals). So
+  the bar admits noise and copies of main effects, and K = 50 binds at every checkpoint.
+  For the analyst (not built): a game-clustered z (S summed per game: z = sum S_g / sqrt(sum S_g^2)) and an S net
+  of the two values' main effects; then this offline test again before any league run.
+
+LEAGUES (no leagues.py change)
+  leagues/recipes.txt and make_recipes.py (HAND): one row appended (backups *.before-s7):
+    F-P-S7 | F-P-S7 | F-P | probit | 21 | models/from-scratch/bin/chessai-pairs1 | models/from-scratch/bin/chessai-
+    hybrid4gfx | --use-probs --pairs on | --model probit --use-probs --seed 21 --vs-previous --no-games | - | lr
+  It is priced as F-P (its family column), so price_s columns understate it (training x8-9 in leagues, ply-1 play x1.3-3);
+  prices drive only price columns and self-play budgets, neither used by the drafts: no prices change.
+  leagues/specs/arenas/make_split_read.py --binary BIN (backup .before-s7): the arena's game binary (a name in
+  models/from-scratch/bin or a path); without the flag the spec is as before (hybrid16, which can't load S7 models).
+  leagues.py: NO CHANGE, so nothing to apply after the extend swap and no repro re-runs of residual-p2,
+  explore-t015-p1 or probit-field-p1. State handling is generic already: train_line moves out/{kind}1.state to
+  runs/<line>/{kind}V.state for any kind, the cleanup keeps every line's current state, version 0 has none, and a
+  probit trains with --start probitV.model while pairs1 reads probitV.state beside it (the smoke above, kill
+  included). The extend WIP (.leagues-extendwip.py; not swapped yet: leagues.py is 18:48's, no .before-extend)
+  keeps the finals' states by existence, any kind, and an extension trains on from the kept state: nothing needed.
+  Gap, left as is: a warm start ("start" in a spec) of an S7 line from an S7 model copies the model but not its
+  state (state copies are for TREE_KINDS), so its first training fails loudly (pairs1: no state beside a trained
+  model; and pairs1 refuses --init-forget). The fix when wanted: copy {kind}V.state whenever it exists (~10 lines
+  in the start checks), with the repro re-runs then. And S7 models play only on chessai-pairs1 (identical to
+  hybrid20 on all else): the global ladder, library arenas and /play/ need it for them.
+
+DRAFTS (not created in the leagues root, not launched) ......... leagues/specs/batch7/s7-p1-s1.DRAFT.json, -s2.DRAFT.json
+  Seeds 71 and 72, otherwise identical: two lines, F-P on chessai-pairs1 without the flag (its "train_binary") and
+  F-P-S7; ply 1, games_per_cycle 1584, self-games, cold games T 0.02 share 0.5 rating only, rate_every 4,
+  draw-aware crowning at 3, plateau scaled sqrt guard_z 1 min_cycles 300, cycles 401; tournament binary
+  chessai-pairs1. Created in scratch (smoke/rootC: 2 lines, plateau window 100 cycles). With 4 entries the 48-round
+  cap binds: 576 round-robin games + 192 self-games a cycle (~94k positions), so S7's first pairs come at cycle ~11
+  and a checkpoint every ~11 cycles after (~37 by cycle 400: up to ~1,850 pairs before drops).
+  COST, MEASURED on s7-p1-s1 itself (smoke/costC.sh: 9 cycles in scratch rootC, /usr/bin/time over the driver and
+  everything it ran): 39.6 CPU-s (33.8 user, 5.7 sys), 2:43 wall at load ~25. A full cycle ~4.4 CPU-s: round
+  robins 0.97, training 1.2 (F-P 0.11, F-P-S7 1.0), own calibration 1.6, self-games 0.28, the driver ~0.35, cold
+  games 0.57 every 4th cycle; 12-22 s wall. No pairs yet in 9 cycles: from cycle ~11 S7's play costs x2-3 more
+  (bench above) on its share of the games and its own calibration, ~7 CPU-s a cycle at 1,000+ pairs.
+  ESTIMATE: ~0.6-0.8 CPU-h a run (300 to 401 cycles), ~1.2-1.6 CPU-h for both; ~2-3 h wall a run at today's load.
+  (Below the brief's 4-5 CPU-h because the round cap halves the games: 768 a cycle, not 1,584.)
+
+PAIRS2 (2026-11-12 ~23:45; analyst 6.100, the coordinator 22:56): the corrected statistic ............ chessai-pairs2
+  BINARY models/from-scratch/bin/chessai-pairs2 md5 939a2ca1fa55b0e5d7660be4f15c5cfe (cp -n; pairs1 kept); source
+  models/from-scratch/pairs2-src (pairs1's plus the statistic). cargo test --release: 219 passed (217 lib + 2 main);
+  new or rewritten for pairs2: statistics_are_sums_by_game_whatever_the_training_order (exact sums by hand, the same
+  in any order), a_value_s_own_effect_does_not_make_its_pairs_interact (pairs1's z puts a main effect's pairs over 5,
+  pairs2's keeps them under 4.5), s7_pairs_on_trains_as_plain_until_a_pair_is_chosen, and the planted conjunction:
+  pairs2 chooses its four cells (3:1&17:1 first) and nothing else (pairs1 chose others too).
+  THE STATISTIC (6.100's (a) and (b)): I = S_ab/n_ab - S_a/n_a - S_b/n_b + S/n (sums of v per value and overall);
+  per candidate, by game, sums of G, m, G^2, m G, m^2 and the games; z = (S_ab - n_ab mu0) / sqrt(sum_g (G - m mu0)^2),
+  mu0 = the null's prediction. ONE DEVIATION: 6.100's SE is sqrt(sum G^2)/n_ab, uncentred; on the null that z FAILS
+  badly (below: mean z^2 788, 400 over |z| 5, max 13,264: a rare pair whose games' sums happen to be near 0 while
+  its values' means are not), so pairs2 centres the games' sums at mu0 (the same when mu0 = 0; self-normalized:
+  |z| <= sqrt(games), E z^2 = 1 under the null). The state keeps all six sums, so either z can be read from it.
+  NO REORDERING, so no --game-order flag: train keeps the plain probit's shuffled order; the probit keeps each
+  example's v (8 bytes) and sums them by game at the round's end (the games' ids come with the positions, as trees
+  get them: Classifier::end_round_data). Checkpoints move to the end of the round that crosses each multiple of
+  --pairs-every. Order unchanged, measured: offline, pairs2's weights are byte-identical to plain's through round 5
+  (its first pairs come at that round's end), and the unit test above. The stamp fallback isn't needed: exact sums.
+  Defaults k 20, z 5, cap 500, shrink 0.5, drop 0.5 sd after 3M, every 1M. State: kind probit-pairs2, 17 MB.
+  CHECKS. Training identity vs hybrid6 (flag absent and off; F-P and F-L; 3 chained steps and one from scratch):
+  16 of 16 IDENTICAL (scripts/chains2.sh). Exact resume, one 3-round process vs 3 chained: models after each set and
+  the final state IDENTICAL, with the defaults (no pair passes 5 in 600k examples) and with --pairs-z 2.5
+  --pairs-drop-after 2000 --pairs-drop 3 (119 pairs chosen, one dropped, across the steps; id/resume-p2*). Play
+  identity vs hybrid20: 28 cases, 0 with differences (identity/compare-pairs2.txt; pairs1's halves in
+  identity.pairs1/). Smoke (smoke2/: the same 9-cycle scratch league, lines F-P on pairs2, F-P-S7v2, F-P-S7v2
+  --pairs-every 200000; root B killed -9 in cycle 6's training at 23:28:56, resumed): A = B, 35 files byte-identical,
+  decision columns identical, the current version's state only. Play speed: pairs1's code (its 300- and 2,000-pair
+  benches above bracket the cap of 500). Training: 3.7 CPU-s a cycle of ~200k positions (pairs1 2.0, F-P 0.22).
+  NULL CHECK (data/null25: the offline sets with the results shuffled among each round's games: 42,000 games, 27,529
+  with another result; scripts/mknull.py, zstats.py -> null/zstats.txt). pairs2 defaults through all 25 rounds
+  (5.03M examples, 5 checkpoints): 0 PAIRS CHOSEN. Over the 304,237 candidates with a z:
+                                   mean z^2   |z|>3 (normal)   >4 (normal)    >5 (normal)   max |z|
+    pairs2 (centred)                0.801      123 (821)        0 (19.3)       0 (0.17)      3.85
+    6.100 as written (uncentred)    788        865              516            400           13,264
+    pairs1 (S / sqrt(n))            5.14       48,716           24,473         12,145        17.1
+  pairs2's mean z^2 by games per candidate: 1.000 (1 game), 1.000 (2-9), 0.974 (10-99), 0.776 (100-999), 0.247
+  (1,000+). So NO LEAK (nothing near 1.3; every tail under the normal's), but BELOW 1.0 +- 0.1: conservative, all of
+  it in frequent candidates, whose examples are much of their values' own, so the marginals in the contrast absorb
+  part of it while the SE counts the pair's variance alone (a disjoint-cells contrast with cross terms would be
+  exact; not built). Top 100 by |z| under the null: 164 distinct values, none more than 4 times.
+  OFFLINE RERUN (the same 25 sets, seed and held-out slice; offline/uloss3.txt; B - A, negative = pairs2 better):
+                  pairs   full                  winner
+    round 5         3     -0.0000 +-0.0000      -0.0000 +-0.0000
+    round 10       19     -0.0000 +-0.0000      -0.0000 +-0.0000
+    round 15       39     -0.0003 +-0.0001      -0.0003 +-0.0001
+    round 20       59     -0.0004 +-0.0001      -0.0005 +-0.0001
+    round 25       79     -0.0007 +-0.0002      -0.0006 +-0.0002
+  NOT WORSE: better by 0.0007 nats at 5M examples, rising with the pairs (6.100: 0.003-0.01 if interactions matter,
+  under 0.001 predicts an arena result under 15; a draft run sees ~37M examples by cycle 400). On the real sets
+  pairs2's z: mean z^2 1.108, 113 over 5 (0.17 by chance). The chosen pairs look like real conjunctions: mostly a
+  queen on the other side's back ranks with the king or pieces near (57:5, 58:5: a white queen on b8, c8; 9:11: a
+  black queen on b2), and side to move x en passant file (64:0&65:2); top 100: 117 values, 57:5 in 11, 58:5 in 10
+  (the null's most is 4). Not done: the quiet middlegame subset (no per-position 1- and 2-ply value tool; not cheap).
+  LEAGUE-DATA CAVEAT (smoke2): from scratch, F-P-S7v2's first checkpoint (1.15M examples, cycles 1-6) chose 20 pairs
+  at |z| 5.7-8.2 with hubs again (40:7 in 6, 65:4 in 3, castling partners such as 68:1): the statistics run from
+  version 0, whose fast-changing early games confound the cumulative marginals (non-stationarity, which clustering
+  by game doesn't touch). The drop rule removes such pairs once their weights stay near 0 for 3M examples of their
+  own; a statistic restarted at each checkpoint (a window) would avoid them (not built: the analyst's call).
+  LEAGUES: recipe row F-P-S7v2 appended (recipes.txt and make_recipes.py, backups *.before-s7v2): chessai-pairs2
+  --use-probs --pairs on, otherwise F-P-S7's row. leagues.py: still no change (the same state handling).
+  DRAFTS UPDATED by the launch rule (backups leagues/specs/batch7/*.DRAFT.json.before-pairs2): two lines, F-P on
+  chessai-pairs2 without the flag and F-P-S7v2, tournament binary chessai-pairs2, the rest as before; create-checked
+  in scratch (drafts2/root). Cost ~0.7-0.9 CPU-h a run (pairs1's measurement plus pairs2's training, ~1.8 CPU-s a
+  cycle of ~94k positions), 2-3 h wall each.
+
+STATUS (2026-11-12 ~23:45): everything above done and checked; nothing of this fork's is running. Scratch:
+  models/from-scratch/pairs (~1.6 GB; data/ is most of it) and pairs2-src. Nothing deleted outside the fork's own
+  identity reruns (pairs1's halves kept in identity.pairs1/); no commits.

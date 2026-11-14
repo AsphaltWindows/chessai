@@ -1,0 +1,15 @@
+MoE expert usage, 2026-11-08 ~23:00. chessai-hybrid mix-stats on games/heldout-lr-d2-s555/round0 (163,219 positions;
+LR d2 self-play, not each MoE's own games). Per model: the gate's mean weights (eff = exp entropy of the mean), exp of the
+per-position entropy (1 = hard), and the share of positions with a top weight >0.99; then the same for the
+responsibilities given the result (+label). If the experts predicted alike, +label would equal the gate.
+- M-L4-L-c (MoE-c) v652/v723: gate 0.06-0.10, 0, 0, 0.90-0.94 (eff 1.3); +label 0.42, 0, 0, 0.58. 2 of 4 alive.
+- M-L8-L-c (MoE-8-c) v169/v209: gate expert 4 at 0.94-0.96, experts 3 and 6 at 0.01-0.04, 5 dead; +label 3 alive.
+- M-L4-L-d2jit-c v2431/v2682: gate 0.43-0.47, 0, 0.50-0.54, 0.02-0.03; per-position 1.85, never >0.99; +label about the
+  same (per-position 1.7): two near-copies blended ~50/50 everywhere, so effectively one model.
+- M-L4-N-c (MoE-L-N-c, NB gate) v274/v325: all 4 used (0.10-0.39); per-position 1.12, >0.99 in 68%; +label = gate.
+  Effectively a hard one-level tree with 4 LR leaves. The best MoE (current 1807).
+- M-N4-L-c (MoE-N-L-c) v256/v274: gate spread (per-position 2.3-2.5), but +label puts 96% on expert 1 (>0.99 in 93%).
+  The gate doesn't track which expert explains the result.
+- M-N4-N-c (MoE-N-N-c) v102/v485: all 4 used; per-position 1.6 gate vs 1.2 +label. The components differ.
+Conclusion: the LR-gated LR MoEs lose experts (rich get richer: starved experts get no responsibility, so they never
+learn). The NB gate keeps all 4 alive and routes almost hard.

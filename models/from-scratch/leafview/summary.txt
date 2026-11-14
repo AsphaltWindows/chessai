@@ -1,0 +1,164 @@
+leafview: what the leaves of T-L-Ne-share3-c and T-L-Ne-fresh-c look like (2026-11-09)
+
+Analysis only. Nothing was deployed, cycles/ was only read, rs/ was not touched. The models were copied into models/
+first.
+
+Pages (self-contained, open from disk, light and dark):
+  share3.html: T-L-Ne-share3-c v394, cycle 71's champion
+  fresh.html:  T-L-Ne-fresh-c v1659, the champion since cycle 65
+Each page has: structure (tree diagram, when splits and merges happened), rating history, routing (shares, each leaf's
+positions in chess terms, what each router looks at), leaf weights as piece-square boards (any leaf or the mean leaf;
+win-loss or draw; value, positional, or minus the mean leaf; numbers on request), effective piece values, the
+non-square features, leaf-to-leaf correlations, how differently the leaves predict, and the recipe in plain words.
+
+Positions: 1,280,370 from 14,915 league games of cycle 70's pool (5 tournaments, every 16th pairing). The chess-terms
+tables leave out the 26,460 positions from games with a random player.
+
+
+1. T-L-Ne-share3-c v394 (chessai-sparsefit, leaf share 0.3)
+
+- Shape: 11 leaves under 5 routers, depth up to 4. Two leaves take three quarters of league positions:
+    L8   40.6%  middlegame, median ply 53
+    L7   33.9%  opening, median ply 16, a castling right in 98%
+    L15  10.1%  long endgames, median ply 134, 55% from drawn games
+    L4    5.6%  endgames (58% of its positions come from games white won)
+    L5    4.7%  endgames (66% from games black won)
+  The other six leaves get under 2% each.
+- The leaves are near-copies.
+  - Two leaves' win-loss weights correlate at a median of 0.9989 (lowest 0.9943). Draw weights: 0.9947.
+  - Their winner log-odds on league positions correlate at 0.9992.
+  - The routed leaf differs from the other leaves' mean by a median of 0.13 nats; positions spread over an SD of
+    3.1 nats. The two disagree on who is better in 2.6% of positions.
+- Why they can be so alike. This is from the code; it was not tested here.
+  - A split copies the leaf into each child, AdaGrad sums too (forget factor 1).
+  - Leaf share 0.3 trains every leaf on every other leaf's positions at 0.3 weight. With league routing, a leaf's own
+    positions would be this much of its training weight: L8 70%, L7 63%, L15 27%, L4 17%, L5 14%, the six small
+    leaves 1-6%. Self-play routes differently, so these are estimates.
+- T-L-Ne-share-c v618 (leaf share 0.1, not rated yet) has less alike leaves: median 0.9961 (lowest 0.9854); draw
+  0.9836.
+- The weights (mean leaf, white's pieces, log-odds against an empty square): queen 2.12 (F-L-c 1.76), rook 1.01,
+  bishop 0.74, knight 0.53, pawn 0.48.
+  - Pawns are worth most on the 7th rank.
+  - Queens are best in the centre (e4, e5).
+  - The white king is best on e6/d6/f6 (an advanced king) and worst in the far corners.
+  - Black's pieces mirror this.
+- Rating: 1889.9 ± 20.4 at cycle 71, 58 above the mean of the ten versions before it (1831.8, SD 22.1). One version
+  swings about 17 Elo (SD), so part of the 58 is likely luck.
+- Splits: the five splits (v27-46, v123-133, v207-217, v267-274, v366-371; cycles 29-67) came while the rating
+  climbed steadily. The history can't separate them from training.
+
+
+2. T-L-Ne-fresh-c v1659 (chessai-resid4, --revise 2 --revise-on fresh --reset-leaves inf)
+
+The flags in plain words (from chessai-resid4 --help and models/from-scratch/resid-src):
+- Shadow: each router keeps one, the leaf it was before it split. The shadow goes on training on every position that
+  passes through the router.
+- --revise 2: the test runs after every 5M examples through a router.
+  - It compares the branch below the router with the shadow on the log-loss of who won (decisive positions only).
+  - If the branch's mean gain over the shadow is more than 2 standard errors below zero, the branch is merged back:
+    the shadow becomes a leaf again.
+  - The undone splits stop counting towards the limit of 5, so the tree can split elsewhere.
+- --revise-on fresh: the test scores each self-play round's positions with the model as it was at the start of the
+  round, before it trains on them. Neither the branch nor the shadow has seen those positions. The alternative,
+  stream, scores each position as training reaches it.
+- --reset-leaves inf: the same test for single leaves against their router's shadow. With inf it only compares and
+  logs; it never resets.
+- The other flags are as in share3, except that there is no leaf share: each leaf trains only on its own positions.
+
+Findings:
+- Shape: 11 leaves under 5 routers, the same in v1659 and in the latest version, v1714.
+    L2   60.6%  openings into the early middlegame, median ply 27, a castling right in 80%
+    L1   19.8%  middlegames, median ply 69
+    L9   10.3%  endgames, median ply 98
+    L13   6.4%  late endgames, median ply 142, 58% from drawn games
+    L15   2.2%
+  The other six leaves get under 0.5% each.
+  - L7 gets none of the 1,280,370 positions and L8 gets 20. Router 4 sends almost every league position to L9. L7 and L8
+    have trained on only 19,664 and 3,734 examples since they were made at v525-566.
+- The structure was revised once. The evidence is the state sizes and the models either side of each change
+  (bdt1486/1487, bdt1640/1641).
+  - The first run made all five splits by v566.
+  - Between v1486 and v1487 the test merged router 2's branch (five leaves, two splits) back into its shadow. That
+    shadow is today's L2: the leaf node 2 was at its split (v165-219), trained since on every position through it.
+  - In the same step leaf 8 (113.5M examples) split; it is now router 5.
+  - At v1640-1641 router 5's leaf 12 split.
+- The leaves differ far more than share3's.
+  - Win-loss weights correlate at a median of 0.9860 (lowest 0.9474). Draw weights: 0.9287 (lowest 0.8225).
+  - The routed leaf differs from the others' mean by a median of 0.53 nats, against 0.13 for share3.
+  - The two disagree on who is better in 13.3% of positions, against 2.6% for share3.
+- The specialised leaves are worse outside their region. Log-loss of who won, on decisive league positions:
+    the tree             0.3818
+    L2 everywhere        0.3835
+    endgame leaves       0.41-0.46
+    F-L-c                0.3911
+- The weights:
+  - The late-endgame leaves under router 5 (L10, L11, L13-L15) value a pawn at about 0.85. The other leaves value it
+    at 0.32-0.58; F-L-c at 0.49.
+  - The mean leaf values the queen at 1.71, close to F-L-c's 1.76.
+  - The board patterns match share3's.
+- Rating: v1659 was rated 1864.7 ± 20.1 as the field version at cycle 65 (the ten versions before averaged 1819.4,
+  SD 15.1). It has been the champion since: 1855.5 ± 7.6 at cycle 71.
+  - v1714, the latest version, is not rated yet. The 1819.8 ± 19.4 at cycle 71 belongs to v1705.
+- The merge falls between cycles 44 and 45. Fresh's rating above the league median went from 67 (cycles 40-44) to
+  108 (cycles 45-49). That is one event, against noise of about 17 Elo per version, so it does not show that the
+  merge helped.
+- From v1659 to v1714 (55 versions), every leaf's win-loss weights still correlate at 0.9989 or more. L13 and L14's
+  shares moved most: 6.4% to 4.8%, and 0.2% to 1.4%.
+
+
+3. The two compared
+
+- Same size: 11 leaves, 5 routers, depth up to 4.
+- How positions are spread:
+  - share3 splits the opening and the middlegame between two big leaves (L7 34%, L8 41%).
+  - fresh has one leaf for the opening and early middlegame (L2, 61%; it is the merged shadow) and puts more of its
+    small leaves deep in endgames.
+- Similarity:
+  - share3's leaves are near-copies.
+  - fresh's are distinct: their predictions differ about 4 times as much (0.53 nats against 0.13), and they disagree
+    on who is better 5 times as often.
+  - A share3 leaf and a fresh leaf correlate at a median of 0.974 (win-loss) and 0.911 (draw), so the two models
+    share broad patterns.
+  - Each tree's leaves correlate with the flat F-L-c at 0.985-0.994 (share3) and 0.97-0.99 (fresh).
+- How much the leaves have trained: AdaGrad sums of the bias, relative to F-L-c's, are 0.02-0.055 for share3's
+  leaves and 0.05-0.18 for fresh's. Both trees' leaves are much younger than F-L-c and still take larger steps.
+- Piece values: share3's mean leaf values the queen higher (2.12 against fresh's 1.71 and F-L-c's 1.76). fresh
+  values pawns higher (0.63 against 0.48), most of all in its endgame leaves.
+- Prediction, measured on the same league positions:
+  - log-loss of who won: share3's tree 0.3801, fresh's 0.3818, F-L-c 0.3911;
+  - neither tree beats its own best single leaf by more than about 0.002, which is within noise for positions
+    clustered in games.
+  These are raw probabilities. The league plays with calibrated values, and earlier studies found that offline loss
+  does not predict play. They don't rank the models.
+- What this does not show: whether near-copy leaves (share3) or distinct leaves (fresh) play better. The two
+  lineages differ in more than that: binary, leaf share, the revise test, age, and the merge. Each is one lineage.
+
+
+Caveats
+
+- The correlations are over the 820 weights F-L-c ever updated: raw win-loss (w0-w1) and draw (w2-(w0+w1)/2)
+  contrasts, all features.
+- The boards are gauge-fixed: a piece on a square against that square empty.
+- The prediction comparisons use white's winner log-odds, which is what play uses.
+  - The three-class log-loss is not used. Both lineages' recent self-play is 91% draws (last 50 rounds), so the
+    models give a draw 83-85% on average on league positions, of which 13.5% come from drawn games. That
+    mismatch dominates the three-class loss.
+  - share-c v618 gives a draw 17%.
+- Splits and merges are dated from the sizes of the cycle states, which only resolve cycles. The models either side
+  of fresh's two changes were read to pin those down.
+- Rating comparisons: one version swings about 17 Elo and windows of versions drift about 30. Nothing here is a
+  controlled test.
+
+
+Files (models/from-scratch/leafview/)
+  analyze.py share3|fresh    structure, routing, weights, similarity -> data-NAME.json, analysis-NAME.txt
+  functional.py share3|fresh how differently the leaves predict -> functional-NAME.json (functional.log)
+  render.py share3|fresh     -> NAME.html, with notes-NAME.json (the findings at the top of the page)
+  models/                    copies of bdt394, bdt618 (share-c), bdt1659, bdt1714, bdt1486/1487/1640/1641 (fresh),
+                             lr5399 (F-L-c)
+  leaves-share3/             share3's leaves as standalone LR models (chessai-whytrees leaves)
+  llcheck.py                 an earlier three-class log-loss check (superseded by functional.py)
+  analyze-share3-only.py.bak the share3-only analyze.py before it took both models; data.json, analysis.txt and
+                             analyze.log are its outputs
+
+CPU: about 10 minutes in all, at nice 19 with one thread per job. Three full analysis runs took 1.6-1.8 min each.

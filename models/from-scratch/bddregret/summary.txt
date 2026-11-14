@@ -1,0 +1,183 @@
+bddregret: router splits on routing regret (A) and R' trained on its sub-routers' leaves (B) (2026-11-08)
+
+VERDICT
+Router splits still don't clearly help, so nothing was staged.
+- The deciding comparison is each arm against a BDT with the same number of leaves, on held-out RR 84 at round 60.
+  Figures are the mean of two seeds, log-loss / winner log-loss:
+    BDD+A    -0.0012 [-0.0027, +0.0003] / -0.0009 [-0.0022, +0.0004]
+    BDD+B    -0.0008 [-0.0023, +0.0006] / -0.0001 [-0.0011, +0.0008]
+    BDD+A+B  -0.0008 [-0.0017, +0.0001] / -0.0008 [-0.0016, +0.0000]
+    BDD      +0.0010 [-0.0002, +0.0021] / +0.0010 [-0.0002, +0.0022]   (bddstudy)
+  No interval excludes zero, pooled or per seed. Two upper bounds sit at the edge: A's seed 1 (+0.00003) and A+B's
+  pooled winner log-loss (+0.00004). The staging rule (clearly beat the same-leaves BDT in both seeds or pooled) is not
+  met, so D-L-Ne-rs-c was not staged.
+- Every option beats the current BDD at round 60: -0.0027 [-0.0041, -0.0013] (A), -0.0022 [-0.0037, -0.0007] (B), and
+  -0.0023 [-0.0037, -0.0009] (A+B).
+  - Part of that is leaf count. The A arms end with 7 leaves, and a 7-leaf BDT beats a 9-leaf one by 0.0005 [0.0001,
+    0.0009].
+  - Against the same-leaves controls, the options move the router-split effect by -0.0018 to -0.0022 at round 60
+    (each interval excludes zero).
+  - The effect is not stable: at round 20 it went the other way, +0.0021 [+0.0009, +0.0033] for A.
+- Against the directive's named control, BDT-4 (9 leaves), the A and A+B intervals do exclude zero:
+  -0.0017 [-0.0033, -0.0001] and -0.0013 [-0.0023, -0.0003]. Those arms have 7 leaves, though, and BDT-3 is the same-leaves
+  control for them.
+- Neither option does what it was meant to.
+  - A re-splits fresh R' nodes. A new R''s sub-routers are copies that reach the same leaf, so its regret starts near
+    zero and can only rise as they diverge. Worse reads that rise as "stopped improving".
+    - Half of A's router splits (14 of 28) were re-splits of an R'. Their windows were 0.000-0.017 nats per position;
+      routers whose children are all leaves split at 0.096-0.124.
+  - B makes R' send nearly everything to its first sub-router. The copies' leaf losses tie exactly wherever they agree
+    (97% of positions at the end of the split's round), and the Best target gives ties to the first child.
+    - Right after the root's split, R' sent 95% / 83% to sub-router 1. At round 60, 4 of 7 and 2 of 8 R' nodes still
+      send at least 96% to one sub-router, and R' is level with always using its most-used one (+0.0000, -0.0001).
+    - A router split under B is close to a no-op: one sub-router carries on as the old router, and the other two stay
+      near-frozen snapshots.
+
+THE OPTIONS
+Binary chessai-bddregret (md5 2b76d0e2), built from bddregret-src = bddstudy-src plus the two options. Both options
+require --route error.
+- A, --delegator-split-on regret (default router-error).
+  - A delegator's window statistic is its prequential routing regret: the routed child's loss minus the best child's
+    loss, by --error. The pick is the router's argmax before it trains on the position.
+  - The regret goes into the node's window and into graph.router_errors.
+  - It splits by the leaves' SplitRule logic and split_z. Under Worse (the default, used here) the condition is
+    recent > previous + margin, and the "at least the mean of all routers" condition is dropped, as Worse has none
+    for leaves either. Under StallHigh that condition is kept, as the mean regret of all delegators over the window.
+  - An R''s "children" are its sub-routers, so its regret is measured against the leaves they reach.
+- B, --subrouter-target leaf (default routing).
+  - R' trains with normal error routing. Each sub-router's error is the loss of the leaf it would route to
+    (prediction_errors, routing through delegator children by argmax), as a BDT router trains on its children.
+  - The target is --error-target (Best here), with ties going to the first child.
+- New fields print in the state's params only when non-default, so old states stay byte-identical.
+- Tests: 139 passed, including the new ones:
+  - state round trips with the options;
+  - window sums equal probe-computed regrets;
+  - R''s classifier equals a clone trained on error_target(prediction_errors);
+  - delegators split on regret;
+  - regret without error routing panics.
+- Identity (identity.sh, identity.out):
+  - Without the options, or with them spelled at their defaults, the binary retrains bddstudy's bdd-s1 and bdt-s1
+    byte for byte over 8 rounds, through the root's router split at round 4. bdd8.state and train.log match
+    chessai-cyc5's (timings removed).
+  - bddb's round-3 models equal bddstudy's bdd-sN byte for byte.
+  - bdt3-s2 at round 20 scores exactly as bdt4-s2 and bdt-s2 (the same model by then).
+  - bdda's bdd-stats outputs are byte-identical to bdd's through round 5 (s1) and 6 (s2), where the two runs had made
+    the same splits. This also checks the new binary's bdd-stats against chessai-bddstudy's.
+
+SETUP
+bddstudy's setup.
+- Data: offline-c15, RRs 80-83 (2.31M positions) in 60 rounds (3 passes, bddstudy/train). The test set is RR 84 (575k
+  positions, 10 parts).
+- T-L-Ne-c's recipe: LR leaves, CNBP error routers, --error log, branch 3, forget 1, split threshold 100k, split limit
+  10, seeds 1 and 2, nice 19, single-threaded, at most 2 jobs. One slip: for about 4 minutes, 4 jobs ran. A waiter
+  keyed on /usr/bin/time's output file, which is created at start, so the two control jobs were paused (SIGSTOP)
+  until the A+B runs finished.
+- Arms (run.sh): bdda (A), bddb (B), bddab (A+B).
+- Controls: bddstudy's bdd, bdt (limit 10) and bdt4 (limit 4, 9 leaves), all trained with chessai-cyc5, plus new
+  bdt3 runs (run2.sh, limit 3, 7 leaves).
+  - Router splits count against the split limit, so the arms ended with 7 leaves (bdda, bddab, bddb-s1) or 9 leaves
+    (bddb-s2).
+  - The same-leaves control is bdt3-sN for 7 leaves and bdt4-sN for 9.
+- Measures:
+  - bdd-stats on RR 84 (stats.sh) at rounds 4, 5, 6, 8, 15, 30 and 60. Every arm's classifiers equal the BDT's
+    through round 3, so bddstudy's bdt-sN stats at rounds 3-8 are the exact no-split counterfactual.
+  - Held-out losses (evalcal.sh) at rounds 20, 40 and 60, with the calibration fitted on the other fold (even / odd
+    parts) and paired 95% t intervals over the 10 parts.
+  - analyze.py writes analysis.txt; --verbose writes analysis-verbose.txt, which lists every R' node.
+
+STRUCTURE (round 60)
+- BDD+A: 3 leaf and 7 router splits, the last at round 10. The root split at rounds 4, 6, 7 and 9 in both seeds.
+  7 leaves, 24 delegators, depth 8; effective leaves 5.3 / 5.8 (exp of the test-traffic entropy).
+- BDD+B: 3 + 7 (s1) and 4 + 6 (s2) splits, the last at round 17. The root split at round 4 (s1), and at 4 and 16 (s2).
+  7 / 9 leaves; effective leaves 6.0 / 7.4.
+- BDD+A+B: 3 + 7 splits, the last at round 9. The root split at 4, 6, 7 (s1) and 4, 6, 7, 9 (s2). 7 leaves, 24
+  delegators, depth 9; effective leaves 6.0 / 5.7.
+- BDD: 4 + 6 splits, the last at round 15; 9 leaves, depth 8; effective leaves 7.7 / 7.1.
+- BDT-3: 7 leaves, depth 2, effective 5.2 / 6.6. BDT-4: 9 leaves, effective 6.3 / 7.8. BDT: 21 leaves, effective
+  16.9 / 17.9.
+
+Q1. REGRET BEFORE AND AFTER SPLITS
+No split lowers the root's regret for long, and the tree's loss doesn't move.
+- Measure: the root's base regret (the routed leaf's loss minus the best of the root's three base children), per test
+  position, arm minus the no-split BDT at the same round.
+- A takes its first split at round 4, the same as the BDD, and routes and predicts exactly as the BDD through round
+  5 (s1) or 6 (s2). It then re-splits R'. By round 8 its regret is above the BDT's by +0.0197 [+0.0146, +0.0247] and +0.0055
+  [+0.0006, +0.0104]; tree loss +0.0028 [-0.0012, +0.0067] and +0.0006 [-0.0025, +0.0037].
+- B at round 4: -0.0018 [-0.0024, -0.0011] and +0.0011 [+0.0005, +0.0016]; tree loss -0.0003 [-0.0006, -0.0001] and
+  -0.0000.
+- B at round 8: +0.0023 [+0.0013, +0.0034] and +0.0012 [-0.0010, +0.0035]; tree loss -0.0000 and -0.0020 [-0.0038,
+  -0.0002].
+- (The BDD in bddstudy: -0.0084 / -0.0068 at round 5, +0.0170 / +0.0037 at round 8.)
+- Right after a split, R' routes like the old router. Under B, at the root's split in round 4: R' 0.1535 / 0.1519;
+  sub-routers alone 0.1521-0.1539 / 0.1508-0.1523; the no-split BDT 0.1553 / 0.1509. The BDT's own root regret
+  drifts 0.150-0.185 from round to round.
+
+Q2. SIBLING SUB-ROUTER AGREEMENT OVER TIME
+Median over R' nodes with at least 2% of the test positions, rounds 4 -> 15 -> 30 -> 60:
+  BDD     s1 96 -> 88 -> 78 -> 68%    s2 94 -> 88 -> 80 -> 88%
+  A       s1 96 -> 89 -> 88 -> 87%    s2 94 -> 93 -> 85 -> 82%
+  B       s1 97 -> 97 -> 92 -> 90%    s2 97 -> 95 -> 91 -> 91%
+  A+B     s1 97 -> 94 -> 92 -> 88%    s2 97 -> 93 -> 91 -> 89%
+B keeps the copies most alike, because R' starves all but the first.
+
+Q3. R' AGAINST ITS MOST-USED SUB-ROUTER
+"Stack" is R''s routed regret minus that of always using its most-used sub-router, summed over all R' nodes, per test
+position, at round 60. Negative means R''s routing helps.
+  BDD   -0.0028 [-0.0052, -0.0005]   +0.0056 [+0.0023, +0.0089]
+  A     -0.0021 [-0.0049, +0.0007]   -0.0020 [-0.0050, +0.0011]
+  B     +0.0000 [-0.0003, +0.0003]   -0.0001 [-0.0013, +0.0011]
+  A+B   -0.0003 [-0.0022, +0.0016]   +0.0003 [-0.0044, +0.0049]
+A is the only arm whose R' nodes lean useful in both seeds, and neither seed is clear. Under B, R' is a pass-through.
+
+HELD-OUT (RR 84, calibrated on the other fold): log-loss / winner log-loss (leaves)
+                round 20                 round 40                 round 60
+  bdt-s1        0.6342 / 0.3386 (11)     0.6264 / 0.3336 (21)     0.6249 / 0.3323 (21)
+  bdt-s2        0.6275 / 0.3367 (7)      0.6402 / 0.3431 (17)     0.6230 / 0.3328 (21)
+  bdt4-s1       0.6314 / 0.3363 (9)      0.6242 / 0.3324 (9)      0.6233 / 0.3311 (9)
+  bdt4-s2       0.6275 / 0.3367 (7)      0.6230 / 0.3315 (9)      0.6226 / 0.3318 (9)
+  bdt3-s1       0.6307 / 0.3359 (7)      0.6238 / 0.3321 (7)      0.6226 / 0.3308 (7)
+  bdt3-s2       0.6275 / 0.3367 (7)      0.6226 / 0.3312 (7)      0.6223 / 0.3317 (7)
+  bdd-s1        0.6288 / 0.3365 (9)      0.6249 / 0.3331 (9)      0.6232 / 0.3328 (9)
+  bdd-s2        0.6270 / 0.3359 (9)      0.6235 / 0.3325 (9)      0.6247 / 0.3322 (9)
+  bdda-s1       0.6300 / 0.3371 (7)      0.6227 / 0.3320 (7)      0.6214 / 0.3307 (7)
+  bdda-s2       0.6291 / 0.3375 (7)      0.6216 / 0.3315 (7)      0.6211 / 0.3301 (7)
+  bddb-s1       0.6309 / 0.3378 (7)      0.6243 / 0.3320 (7)      0.6217 / 0.3309 (7)
+  bddb-s2       0.6279 / 0.3366 (9)      0.6227 / 0.3320 (9)      0.6218 / 0.3315 (9)
+  bddab-s1      0.6305 / 0.3373 (7)      0.6233 / 0.3314 (7)      0.6218 / 0.3305 (7)
+  bddab-s2      0.6271 / 0.3355 (7)      0.6229 / 0.3316 (7)      0.6216 / 0.3305 (7)
+Arm minus the same-leaves BDT, log-loss, mean of two seeds:
+                round 20                    round 40                    round 60
+  A       +0.0005 [-0.0011, +0.0020]   -0.0010 [-0.0024, +0.0003]   -0.0012 [-0.0027, +0.0003]
+  B       +0.0003 [-0.0012, +0.0018]   +0.0002 [-0.0011, +0.0014]   -0.0008 [-0.0023, +0.0006]
+  A+B     -0.0003 [-0.0015, +0.0009]   -0.0001 [-0.0009, +0.0008]   -0.0008 [-0.0017, +0.0001]
+Per seed at round 60:
+  A    -0.0012 [-0.0025, +0.0000] / -0.0012 [-0.0038, +0.0014]
+  B    -0.0009 [-0.0029, +0.0011] / -0.0008 [-0.0035, +0.0019]
+  A+B  -0.0008 [-0.0025, +0.0008] / -0.0008 [-0.0024, +0.0009]
+The point estimates drift toward the DAG from round 20 to round 60, so a longer run might separate them. That is
+untested.
+Other round-60 contrasts, mean of two seeds:
+- Against BDT-10: A -0.0027 [-0.0049, -0.0005], B -0.0022 [-0.0040, -0.0003], A+B -0.0023 [-0.0042, -0.0003].
+- Controls: BDT-3 minus BDT-4 -0.0005 [-0.0009, -0.0001]; BDT-3 minus BDT -0.0015 [-0.0037, +0.0007].
+
+WHY, AND WHAT TO TRY NEXT
+Both options inherit a problem from copies.
+- A. Raw regret against a node's own children is not a skill measure. It is about zero for an R' over fresh copies
+  and grows as any children diverge. Even the root's first split (0.098 -> 0.107) came two rounds after the leaf
+  split that made its children, and a rise there can come from the children changing rather than from the router.
+  - Next: measure an R''s regret against its base children (the routed leaf against the best of the shared
+    children), so a new R' starts at the old router's level.
+  - Or use a skill score, for example regret relative to always taking the router's most-used child.
+- B. Leaf-loss targets tie exactly wherever the sub-routers agree.
+  - Next: skip R''s update on positions where every sub-router reaches the same leaf, since they carry no information.
+  - Or break ties by the sub-routers' routing errors.
+  - Either would let the copies get traffic and diverge, as the leaves after a leaf split do: LR leaf losses never tie.
+These are one-factor tests in the same setup, about 8 CPU-minutes each for two seeds. They were not run.
+
+CPU: about 25 CPU-minutes.
+- Training the 6 arms: 13.5 min. The A+B arms cost the most (2.8 min each), against 2.1 for A and 1.6-1.9 for B.
+- The BDT-3 controls: 1.7 min.
+- bdd-stats: 44 runs, 5.5 min.
+- Held-out evaluations: 2.4 min.
+- Build and tests: about 1.5 min. Identity: 0.3 min.
+The live run was not touched.

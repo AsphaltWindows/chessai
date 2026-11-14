@@ -1,0 +1,351 @@
+
+=== ply 1: leela-fl-p1 (5 entries, 90 round-robins; Elo 0 = the library peers' mean)
+    +60.0 +- 21.2  F-L peer, best, ladder 828       capped-l-f10-p1:F-L#1.loc@319
+    +42.0 +- 21.0  F-L peer, typical, ladder 807    filtered-p1:F-L.loc@352
+    +37.9 +- 21.0  F-L peer, best, ladder 818       lr-share-p1:F-L#2.loc@342
+     +7.6 +- 20.9  F-L peer, typical, ladder 806    grow-l-p1b:F-L#1.loc@347
+   -147.5 +- 23.2  Leela F-L 50M                    
+  Leela F-L 50M: rank 5 of 5; - best peer -207.5 +-31.4; - peers' mean -184.4 +-23.2; - peers' median -187.4  (4 peers)
+
+=== ply 1: leela-fp-p1 (5 entries, 130 round-robins; Elo 0 = the library peers' mean)
+    +77.9 +- 18.4  F-P peer, best, ladder 839       probit-widen-p1c:F-P#1.loc@250
+    +73.4 +- 18.3  F-P peer, best, ladder 823       error-growth-p1:F-P#1.loc@449
+    +57.6 +- 18.2  F-P peer, typical, ladder 789    stall-p1:F-P#2.loc@392
+    +32.2 +- 18.1  F-P peer, typical, ladder 789    probit-f10-p1:F-P#2.loc@337
+   -241.1 +- 23.6  Leela F-P 50M                    
+  Leela F-P 50M: rank 5 of 5; - best peer -319.0 +-29.9; - peers' mean -301.4 +-23.6; - peers' median -306.6  (4 peers)
+
+=== ply 1: leela-tp-p1 (5 entries, 200 round-robins; Elo 0 = the library peers' mean)
+   +102.6 +- 15.6  T-P peer, best, ladder 914       error-growth-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@449
+    +93.5 +- 15.6  T-P peer, best, ladder 917       error-dag-probit-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@366
+    +72.4 +- 15.4  T-P peer, typical, ladder 878    probit-f10-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@337
+    +62.8 +- 15.4  T-P peer, typical, ladder 878    stall-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@392
+   -331.3 +- 24.5  Leela capped T-P 50M             
+  Leela capped T-P 50M: rank 5 of 5; - best peer -433.9 +-29.0; - peers' mean -414.1 +-24.5; - peers' median -414.2  (4 peers)
+
+=== ply 1: leela-dag-cap-p1 (5 entries, 200 round-robins; Elo 0 = the library peers' mean)
+    +87.8 +- 15.5  DAG peer, best, ladder 919       error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#1.loc@366
+    +85.2 +- 15.5  DAG peer, best, ladder 916       router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-hg+log-router-stats#2.loc@299
+    +84.8 +- 15.5  DAG peer, typical, ladder 900    error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#2.loc@366
+    +71.3 +- 15.4  DAG peer, typical, ladder 897    router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#2.loc@299
+   -329.2 +- 24.3  Leela DAG capped 50M             
+  Leela DAG capped 50M: rank 5 of 5; - best peer -417.0 +-28.8; - peers' mean -411.5 +-24.3; - peers' median -414.2  (4 peers)
+
+=== ply 2: leela-fl-p2 (5 entries, 90 round-robins; Elo 0 = the library peers' mean)
+    +64.7 +- 21.3  F-L peer, best, ladder 1572      lr-settings-new:F-L+lr-rate=0.0125.loc@193
+    +40.5 +- 21.0  F-L peer, typical, ladder 1511   flat-p2-b:F-L#1.loc@334
+    +29.5 +- 21.0  F-L peer, best, ladder 1528      base-lr-p2:F-L#2.loc@599
+    +16.2 +- 20.9  F-L peer, typical, ladder 1512   flat-p2:F-L#4.loc@244
+   -151.0 +- 23.4  Leela F-L 50M                    
+  Leela F-L 50M: rank 5 of 5; - best peer -215.7 +-31.6; - peers' mean -188.7 +-23.4; - peers' median -186.0  (4 peers)
+
+=== ply 3: leela-fl-p3 (5 entries, 70 round-robins; Elo 0 = the library peers' mean)
+    +10.9 +- 23.0  F-L peer, typical, ladder 2082   flat-p3:F-L#2.loc@199
+     +4.5 +- 23.0  F-L peer, best, ladder 2115      flat-p3-w4-w3f1:F-L#4.loc@96
+     -1.0 +- 23.0  Leela F-L 50M                    
+     -4.0 +- 23.0  F-L peer, best, ladder 2117      flat-p3-b:F-L#1.loc@199
+    -10.4 +- 23.0  F-L peer, typical, ladder 2082   flat-p3:F-L#1.loc@199
+  Leela F-L 50M: rank 3 of 5; - best peer  -11.9 +-32.5; - peers' mean   -1.2 +-23.0; - peers' median -1.2  (4 peers)
+
+=== ply 2: leela-fp-p2 (5 entries, 200 round-robins; Elo 0 = the library peers' mean)
+   +155.0 +- 19.4  F-P peer, best, ladder 1604      fponly-p2:F-P#2.loc@320
+   +138.1 +- 19.3  F-P peer, typical, ladder 1566   fponly-p2-720:F-P#4.loc@559
+   +135.3 +- 19.3  F-P peer, typical, ladder 1568   fponly-p2b:F-P#3.loc@352
+   +124.2 +- 19.3  F-P peer, best, ladder 1591      weight-p2:F-P-w+weight-by-uncertainty=score#2.loc@299
+   -552.7 +- 50.6  Leela F-P 50M                    
+  Leela F-P 50M: rank 5 of 5; - best peer -707.7 +-54.2; - peers' mean -690.9 +-50.6; - peers' median -689.4  (4 peers)
+
+=== ply 3: leela-fp-p3 (3 entries, 200 round-robins; Elo 0 = the library peers' mean)
+   +185.9 +- 26.0  F-P peer, all, ladder 2088       probit-p3:F-P#1.loc@301
+   +176.7 +- 25.8  F-P peer, all, ladder 2070       probit-p3:F-P#2.loc@301
+   -362.6 +- 40.1  Leela F-P 50M                    
+  Leela F-P 50M: rank 3 of 3; - best peer -548.5 +-47.8; - peers' mean -543.9 +-40.1; - peers' median -543.9  (2 peers)
+
+=== ply 2: leela-tp-p2 (5 entries, 200 round-robins; Elo 0 = the library peers' mean)
+   +153.0 +- 18.2  T-P peer, best, ladder 1537      diversity-p2d:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299
+   +130.8 +- 18.1  T-P peer, typical, ladder 1508   replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@542
+   +129.1 +- 18.1  T-P peer, best, ladder 1538      probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@399
+    +88.8 +- 17.9  T-P peer, typical, ladder 1516   diversity-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@314
+   -501.7 +- 42.4  Leela capped T-P 50M             
+  Leela capped T-P 50M: rank 5 of 5; - best peer -654.7 +-46.1; - peers' mean -627.1 +-42.4; - peers' median -631.6  (4 peers)
+
+=== ply 3: leela-tp-p3 (3 entries, 200 round-robins; Elo 0 = the library peers' mean)
+   +241.4 +- 32.2  T-P peer, all, ladder 2094       probit-p3:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@301
+   +196.3 +- 31.5  T-P peer, all, ladder 2088       probit-p3:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@301
+   -437.7 +- 54.1  Leela capped T-P 50M             
+  Leela capped T-P 50M: rank 3 of 3; - best peer -679.1 +-63.0; - peers' mean -656.5 +-54.1; - peers' median -656.5  (2 peers)
+
+=== ply 2: leela-dag-cap-p2 (4 entries, 200 round-robins; Elo 0 = the library peers' mean)
+   +170.2 +- 22.2  DAG peer, fill, no ladder rating std-v1-p2-x3:D-P-Ne-ctx-grow+router-chain=2+router-trial-z=-2.loc@436
+   +155.0 +- 22.0  DAG peer, fill, ladder 1539      base-probit-p2:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#2.loc@599
+   +145.8 +- 22.0  DAG peer, fill, ladder 1536      base-probit-p2:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#1.loc@599
+   -471.0 +- 46.1  Leela DAG capped 50M             
+  Leela DAG capped 50M: rank 4 of 4; - best peer -641.2 +-51.2; - peers' mean -628.0 +-46.1; - peers' median -626.0  (3 peers)
+
+=== ply 4: leela-fl-p4 (5 entries, 80 round-robins; Elo 0 = the library peers' mean)
+    +36.1 +- 21.9  F-L peer, all, no ladder rating  flat-p3-w4:F-L#1.loc@178
+    +22.4 +- 21.8  F-L peer, all, no ladder rating  flat-p3-w4:F-L#4.loc@178
+    +13.5 +- 21.8  F-L peer, all, no ladder rating  flat-p3-w4:F-L#2.loc@178
+    +12.6 +- 21.8  F-L peer, all, no ladder rating  flat-p3-w4:F-L#3.loc@178
+    -84.7 +- 22.5  Leela F-L 50M                    
+  Leela F-L 50M: rank 5 of 5; - best peer -120.8 +-31.4; - peers' mean -105.8 +-22.5; - peers' median -102.7  (4 peers)
+
+=== 11-13 19:59 PLAY-ARTIFACT CHECK (coordinator 19:55): NONE. Leela F-P vs fponly-p2 F-P#2@320, ply 2, 200 games each (leela/artifact/fp-p2): arena-like 2.0%, float = identical games, FX_CHECK silent, uncalibrated 1.8%, argmax 0.0%. The verdicts above stand (no -fix reruns).
+
+=== ply 1: leela-tl-p1 (5 entries, 120 round-robins; Elo 0 = the library peers' mean)
+    +83.1 +- 19.0  T-L peer, best, ladder 884       error-dag-p1:T-L-Ne+split-limit=4+split-threshold=1000000#1.loc@361
+    +55.3 +- 18.8  T-L peer, best, ladder 890       filtered-p1-twin:T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc@379
+    +44.2 +- 18.7  T-L peer, typical, ladder 870    capped-l-f10-p1:T-L-Ne+split-limit=4+split-threshold=1000000#2.loc@319
+    +34.4 +- 18.6  T-L peer, typical, ladder 868    capped-l-f10-p1:T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10#1.loc@319
+   -217.0 +- 23.2  Leela capped T-L 50M             
+  Leela capped T-L 50M: rank 5 of 5; - best peer -300.1 +-30.0; - peers' mean -271.2 +-23.2; - peers' median -266.8  (4 peers)
+
+=== ply 2: leela-tl-p2 (4 entries, 200 round-robins; Elo 0 = the library peers' mean)
+   +129.0 +- 17.5  T-L peer, fill, ladder 1552      base-lr-p2:T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+revise=2#1.loc@599
+    +79.1 +- 17.0  T-L peer, all, no ladder rating  std-v1-p2-x3:T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc@436
+    +63.5 +- 16.9  T-L peer, fill, ladder 1510      base-lr-p2:T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+revise=2#2.loc@599
+   -271.5 +- 23.5  Leela capped T-L 50M             
+  Leela capped T-L 50M: rank 4 of 4; - best peer -400.5 +-29.3; - peers' mean -362.0 +-23.5; - peers' median -350.6  (3 peers)
+
+=== ply 1: leela-dl-cap-p1 (5 entries, 110 round-robins; Elo 0 = the library peers' mean)
+    +60.2 +- 19.5  D-L peer, best, ladder 887       error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#1.loc@361
+    +59.9 +- 19.5  D-L peer, best, ladder 886       error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#2.loc@361
+    +43.0 +- 19.4  D-L peer, typical, ladder 880    error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#2.loc@361
+    +42.4 +- 19.4  D-L peer, typical, ladder 864    error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#1.loc@361
+   -205.5 +- 23.6  Leela DAG-L capped 50M           
+  Leela DAG-L capped 50M: rank 5 of 5; - best peer -265.7 +-30.6; - peers' mean -256.9 +-23.6; - peers' median -256.9  (4 peers)
+
+=== ply 2: leela-dl-cap-p2 (4 entries, 120 round-robins; Elo 0 = the library peers' mean)
+    +70.2 +- 20.2  D-L peer, all, ladder 1519       base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#2.loc@599
+    +64.7 +- 20.1  D-L peer, all, ladder 1515       base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#1.loc@599
+     -7.0 +- 19.7  D-L peer, all, no ladder rating  std-v1-p2-x3:D-L-Ne-ctx-grow+router-chain=2+router-trial-z=-2+grow-mdl=0+forget-factor=10.loc@436
+   -127.9 +- 21.4  Leela DAG-L capped 50M           
+  Leela DAG-L capped 50M: rank 4 of 4; - best peer -198.1 +-29.4; - peers' mean -170.5 +-21.4; - peers' median -192.6  (3 peers)
+
+=== ply 1: leela-dl-unb-p1 (5 entries, 110 round-robins; Elo 0 = the library peers' mean)
+    +60.2 +- 19.5  D-L peer, best, ladder 887       error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#1.loc@361
+    +59.9 +- 19.5  D-L peer, best, ladder 886       error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#2.loc@361
+    +43.0 +- 19.4  D-L peer, typical, ladder 880    error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#2.loc@361
+    +42.4 +- 19.4  D-L peer, typical, ladder 864    error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#1.loc@361
+   -205.5 +- 23.6  Leela DAG-L unbounded 50M        
+  Leela DAG-L unbounded 50M: rank 5 of 5; - best peer -265.7 +-30.6; - peers' mean -256.9 +-23.6; - peers' median -256.9  (4 peers)
+
+=== ply 2: leela-dl-unb-p2 (4 entries, 120 round-robins; Elo 0 = the library peers' mean)
+    +70.2 +- 20.2  D-L peer, all, ladder 1519       base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#2.loc@599
+    +64.7 +- 20.1  D-L peer, all, ladder 1515       base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#1.loc@599
+     -7.0 +- 19.7  D-L peer, all, no ladder rating  std-v1-p2-x3:D-L-Ne-ctx-grow+router-chain=2+router-trial-z=-2+grow-mdl=0+forget-factor=10.loc@436
+   -127.9 +- 21.4  Leela DAG-L unbounded 50M        
+  Leela DAG-L unbounded 50M: rank 4 of 4; - best peer -198.1 +-29.4; - peers' mean -170.5 +-21.4; - peers' median -192.6  (3 peers)
+
+=== ply 2: leela-rule-l-p2 (5 entries, 120 round-robins; Elo 0 = the field's mean)
+    +56.7 +- 18.3  Leela DAG-L capped 50M           
+    +54.8 +- 18.3  Leela DAG-L unbounded 50M        
+    +44.4 +- 18.2  Leela F-L 50M                    
+    -21.3 +- 18.1  Leela DAG-L unbounded 20M        
+   -134.7 +- 19.7  Leela capped T-L 50M             
+  capped D-L 50M: - Leela F-L 50M  +12.3 +-25.8; - Leela capped T-L 50M +191.4 +-26.9; - Leela DAG-L unbounded 50M   +1.9 +-25.9
+  unbounded D-L 50M - Leela F-L 50M  +10.4 +-25.8; unbounded D-L 50M - its 20M  +76.1 +-25.7
+
+=== ply 3: leela-rule-l-p3 (5 entries, 120 round-robins; Elo 0 = the field's mean)
+    +61.9 +- 18.4  Leela DAG-L unbounded 50M        
+    +59.1 +- 18.3  Leela F-L 50M                    
+    +43.8 +- 18.2  Leela DAG-L capped 50M           
+    -42.7 +- 18.2  Leela DAG-L unbounded 20M        
+   -122.1 +- 19.4  Leela capped T-L 50M             
+  capped D-L 50M: - Leela F-L 50M  -15.3 +-25.8; - Leela capped T-L 50M +165.9 +-26.6; - Leela DAG-L unbounded 50M  -18.1 +-25.9
+  unbounded D-L 50M - Leela F-L 50M   +2.8 +-26.0; unbounded D-L 50M - its 20M +104.6 +-25.9
+
+=== THE PRE-REGISTERED LR-DAG RULE (models/NEXT-EXPERIMENTS.md, the LR twins' entry 11-13 ~20:3x; measured in leela-rule-l-p2/-p3)
+  Leela DAG-L unbounded 50M - Leela F-L 50M: ply 2  +10.4 +-25.8, ply 3   +2.8 +-26.0
+  Leela DAG-L unbounded 20M -> 50M: ply 2  +76.1 +-25.7, ply 3 +104.6 +-25.9; mean +90.3
+  VERDICT: FAIL: the DAG-L unbounded is within 15 of F-L at plies 2 and 3: CLOSED
+
+=== SUMMARY: each Leela model (50M final) against its plateaued same-architecture peers trained at the ply (Elo 0 = the peers' mean; +- = 95% in-run interval)
+  arena              Leela model                  peers  rank    - peers mean     - best peer  best peer
+  leela-fl-p1        Leela F-L 50M                    4  5/5   -184.4 +-23.2   -207.5 +-31.4  capped-l-f10-p1:F-L#1.loc@319
+  leela-fl-p2        Leela F-L 50M                    4  5/5   -188.7 +-23.4   -215.7 +-31.6  lr-settings-new:F-L+lr-rate=0.0125.loc@193
+  leela-fl-p3        Leela F-L 50M                    4  3/5     -1.2 +-23.0    -11.9 +-32.5  flat-p3:F-L#2.loc@199
+  leela-fl-p4        Leela F-L 50M                    4  5/5   -105.8 +-22.5   -120.8 +-31.4  flat-p3-w4:F-L#1.loc@178
+  leela-fp-p1        Leela F-P 50M                    4  5/5   -301.4 +-23.6   -319.0 +-29.9  probit-widen-p1c:F-P#1.loc@250
+  leela-fp-p2        Leela F-P 50M                    4  5/5   -690.9 +-50.6   -707.7 +-54.2  fponly-p2:F-P#2.loc@320
+  leela-fp-p3        Leela F-P 50M                    2  3/3   -543.9 +-40.1   -548.5 +-47.8  probit-p3:F-P#1.loc@301
+  leela-tp-p1        Leela capped T-P 50M             4  5/5   -414.1 +-24.5   -433.9 +-29.0  error-growth-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@449
+  leela-tp-p2        Leela capped T-P 50M             4  5/5   -627.1 +-42.4   -654.7 +-46.1  diversity-p2d:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299
+  leela-tp-p3        Leela capped T-P 50M             2  3/3   -656.5 +-54.1   -679.1 +-63.0  probit-p3:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@301
+  leela-dag-cap-p1   Leela DAG capped 50M             4  5/5   -411.5 +-24.3   -417.0 +-28.8  error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#1.loc@366
+  leela-dag-cap-p2   Leela DAG capped 50M             3  4/4   -628.0 +-46.1   -641.2 +-51.2  std-v1-p2-x3:D-P-Ne-ctx-grow+router-chain=2+router-trial-z=-2.loc@436
+  leela-tl-p1        Leela capped T-L 50M             4  5/5   -271.2 +-23.2   -300.1 +-30.0  error-dag-p1:T-L-Ne+split-limit=4+split-threshold=1000000#1.loc@361
+  leela-tl-p2        Leela capped T-L 50M             3  4/4   -362.0 +-23.5   -400.5 +-29.3  base-lr-p2:T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+revise=2#1.loc@599
+  leela-dl-cap-p1    Leela DAG-L capped 50M           4  5/5   -256.9 +-23.6   -265.7 +-30.6  error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#1.loc@361
+  leela-dl-cap-p2    Leela DAG-L capped 50M           3  4/4   -170.5 +-21.4   -198.1 +-29.4  base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#2.loc@599
+  leela-dl-unb-p1    Leela DAG-L unbounded 50M        4  5/5   -256.9 +-23.6   -265.7 +-30.6  error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#1.loc@361
+  leela-dl-unb-p2    Leela DAG-L unbounded 50M        3  4/4   -170.5 +-21.4   -198.1 +-29.4  base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#2.loc@599
+  peers per (architecture, ply): F-L p1 4, F-L p2 4, F-L p3 4, F-L p4 4, F-P p1 4, F-P p2 4, F-P p3 2, F-P p4 0, T-P p1 4, T-P p2 4, T-P p3 2, T-P p4 0, DAG p1 4, DAG p2 3, DAG p3 0, DAG p4 0, T-L p1 4, T-L p2 3, T-L p3 0, T-L p4 0, D-L p1 4, D-L p2 3, D-L p3 0, D-L p4 0
+
+=== 11-13 20:35 NOTE: the LR twins above (leela-tl-p1/-p2, leela-dl-cap-p1/-p2, leela-dl-unb-p1/-p2, leela-rule-l-p2/-p3; lines T-L-Ne-cap, D-L-Ne-ctx-grow-cap/-unb) ran on the probit's settings (forget 1, grow-mdl 1), not the training standard's LR settings: a CONTROL only, superseded by the standard-settings lines (T-L-Ne-cap-f10, D-L-Ne-ctx-grow-cap-std/-unb-std; arenas leela-tl-f10, leela-dl-cap-std, leela-dl-unb-std, leela-rule-l-std). The LR-DAG rule is re-registered for them.
+
+=== ply 1: leela-tl-f10-p1 (5 entries, 110 round-robins; Elo 0 = the library peers' mean)
+    +73.7 +- 19.6  T-L peer, best, ladder 884       error-dag-p1:T-L-Ne+split-limit=4+split-threshold=1000000#1.loc@361
+    +53.6 +- 19.5  T-L peer, best, ladder 890       filtered-p1-twin:T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc@379
+    +41.6 +- 19.4  T-L peer, typical, ladder 870    capped-l-f10-p1:T-L-Ne+split-limit=4+split-threshold=1000000#2.loc@319
+    +32.1 +- 19.3  T-L peer, typical, ladder 868    capped-l-f10-p1:T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10#1.loc@319
+   -201.0 +- 23.4  Leela capped T-L std 50M         
+  Leela capped T-L std 50M: rank 5 of 5; - best peer -274.7 +-30.5; - peers' mean -251.2 +-23.4; - peers' median -248.6  (4 peers)
+
+=== ply 2: leela-tl-f10-p2 (4 entries, 170 round-robins; Elo 0 = the library peers' mean)
+   +108.3 +- 18.2  T-L peer, fill, ladder 1552      base-lr-p2:T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+revise=2#1.loc@599
+    +70.3 +- 17.7  T-L peer, all, no ladder rating  std-v1-p2-x3:T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc@436
+    +44.5 +- 17.5  T-L peer, fill, ladder 1510      base-lr-p2:T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+revise=2#2.loc@599
+   -223.1 +- 22.2  Leela capped T-L std 50M         
+  Leela capped T-L std 50M: rank 4 of 4; - best peer -331.4 +-28.7; - peers' mean -297.5 +-22.2; - peers' median -293.4  (3 peers)
+
+=== ply 1: leela-dag-unb-p1 (5 entries, 200 round-robins; Elo 0 = the library peers' mean)
+    +99.0 +- 16.0  DAG peer, best, ladder 919       error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#1.loc@366
+    +98.2 +- 16.0  DAG peer, best, ladder 916       router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-hg+log-router-stats#2.loc@299
+    +96.2 +- 16.0  DAG peer, typical, ladder 900    error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#2.loc@366
+    +83.0 +- 15.9  DAG peer, typical, ladder 897    router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#2.loc@299
+   -376.4 +- 28.1  Leela DAG unbounded 50M          
+  Leela DAG unbounded 50M: rank 5 of 5; - best peer -475.4 +-32.3; - peers' mean -470.5 +-28.1; - peers' median -473.6  (4 peers)
+
+=== ply 1: leela-dl-cap-std-p1 (5 entries, 100 round-robins; Elo 0 = the library peers' mean)
+    +60.4 +- 20.3  D-L peer, best, ladder 887       error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#1.loc@361
+    +55.1 +- 20.3  D-L peer, best, ladder 886       error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#2.loc@361
+    +40.2 +- 20.2  D-L peer, typical, ladder 880    error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#2.loc@361
+    +30.2 +- 20.1  D-L peer, typical, ladder 864    error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#1.loc@361
+   -185.9 +- 23.7  Leela DAG-L capped std 50M       
+  Leela DAG-L capped std 50M: rank 5 of 5; - best peer -246.3 +-31.2; - peers' mean -232.4 +-23.7; - peers' median -233.6  (4 peers)
+
+=== ply 2: leela-dl-cap-std-p2 (4 entries, 140 round-robins; Elo 0 = the library peers' mean)
+    +87.1 +- 19.4  D-L peer, all, ladder 1515       base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#1.loc@599
+    +85.0 +- 19.3  D-L peer, all, ladder 1519       base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#2.loc@599
+    +12.5 +- 18.8  D-L peer, all, no ladder rating  std-v1-p2-x3:D-L-Ne-ctx-grow+router-chain=2+router-trial-z=-2+grow-mdl=0+forget-factor=10.loc@436
+   -184.6 +- 22.3  Leela DAG-L capped std 50M       
+  Leela DAG-L capped std 50M: rank 4 of 4; - best peer -271.7 +-29.6; - peers' mean -246.1 +-22.3; - peers' median -269.6  (3 peers)
+
+=== ply 2: leela-dag-unb-p2 (4 entries, 200 round-robins; Elo 0 = the library peers' mean)
+   +191.7 +- 25.8  DAG peer, fill, no ladder rating std-v1-p2-x3:D-P-Ne-ctx-grow+router-chain=2+router-trial-z=-2.loc@436
+   +180.6 +- 25.7  DAG peer, fill, ladder 1539      base-probit-p2:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#2.loc@599
+   +173.0 +- 25.7  DAG peer, fill, ladder 1536      base-probit-p2:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=20+router-split-limit=4#1.loc@599
+   -545.3 +- 60.6  Leela DAG unbounded 50M          
+  Leela DAG unbounded 50M: rank 4 of 4; - best peer -737.0 +-65.9; - peers' mean -727.1 +-60.6; - peers' median -725.9  (3 peers)
+
+=== ply 2: leela-rule-p2 (6 entries, 200 round-robins; Elo 0 = the field's mean)
+   +443.8 +- 29.8  Leela F-L 50M                    
+    +44.4 +- 15.5  Leela F-P 50M                    
+    -62.3 +- 15.0  Leela DAG capped 50M             
+   -125.1 +- 15.2  Leela DAG unbounded 50M          
+   -144.5 +- 15.4  Leela capped T-P 50M             
+   -156.3 +- 15.5  Leela DAG unbounded 20M          
+  capped DAG 50M: - Leela F-P 50M -106.7 +-21.6; - Leela capped T-P 50M  +82.2 +-21.5; - Leela DAG unbounded 50M  +62.8 +-21.4
+  unbounded DAG 50M - Leela F-P 50M -169.5 +-21.7; unbounded DAG 50M - its 20M  +31.2 +-21.7
+
+=== ply 3: leela-rule-p3 (6 entries, 200 round-robins; Elo 0 = the field's mean)
+   +593.2 +- 47.3  Leela F-L 50M                    
+    +26.7 +- 17.5  Leela F-P 50M                    
+    -95.3 +- 17.0  Leela DAG capped 50M             
+   -110.1 +- 17.0  Leela DAG unbounded 50M          
+   -197.6 +- 17.5  Leela DAG unbounded 20M          
+   -217.0 +- 17.7  Leela capped T-P 50M             
+  capped DAG 50M: - Leela F-P 50M -122.0 +-24.4; - Leela capped T-P 50M +121.7 +-24.5; - Leela DAG unbounded 50M  +14.8 +-24.0
+  unbounded DAG 50M - Leela F-P 50M -136.8 +-24.4; unbounded DAG 50M - its 20M  +87.5 +-24.4
+
+=== THE PRE-REGISTERED RULE (models/NEXT-EXPERIMENTS.md 11-13 19:08; measured in leela-rule-p2/-p3)
+  Leela DAG unbounded 50M - Leela F-P 50M: ply 2 -169.5 +-21.7, ply 3 -136.8 +-24.4
+  Leela DAG unbounded 20M -> 50M: ply 2  +31.2 +-21.7, ply 3  +87.5 +-24.4; mean +59.4
+  VERDICT: FAIL: the DAG unbounded is below F-P + 15 at plies 2 and 3 (under F-P by more than 15 at one or both): CLOSED
+
+=== SUMMARY: each Leela model (50M final) against its plateaued same-architecture peers trained at the ply (Elo 0 = the peers' mean; +- = 95% in-run interval)
+  arena              Leela model                  peers  rank    - peers mean     - best peer  best peer
+  leela-fl-p1        Leela F-L 50M                    4  5/5   -184.4 +-23.2   -207.5 +-31.4  capped-l-f10-p1:F-L#1.loc@319
+  leela-fl-p2        Leela F-L 50M                    4  5/5   -188.7 +-23.4   -215.7 +-31.6  lr-settings-new:F-L+lr-rate=0.0125.loc@193
+  leela-fl-p3        Leela F-L 50M                    4  3/5     -1.2 +-23.0    -11.9 +-32.5  flat-p3:F-L#2.loc@199
+  leela-fl-p4        Leela F-L 50M                    4  5/5   -105.8 +-22.5   -120.8 +-31.4  flat-p3-w4:F-L#1.loc@178
+  leela-fp-p1        Leela F-P 50M                    4  5/5   -301.4 +-23.6   -319.0 +-29.9  probit-widen-p1c:F-P#1.loc@250
+  leela-fp-p2        Leela F-P 50M                    4  5/5   -690.9 +-50.6   -707.7 +-54.2  fponly-p2:F-P#2.loc@320
+  leela-fp-p3        Leela F-P 50M                    2  3/3   -543.9 +-40.1   -548.5 +-47.8  probit-p3:F-P#1.loc@301
+  leela-tp-p1        Leela capped T-P 50M             4  5/5   -414.1 +-24.5   -433.9 +-29.0  error-growth-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@449
+  leela-tp-p2        Leela capped T-P 50M             4  5/5   -627.1 +-42.4   -654.7 +-46.1  diversity-p2d:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299
+  leela-tp-p3        Leela capped T-P 50M             2  3/3   -656.5 +-54.1   -679.1 +-63.0  probit-p3:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@301
+  leela-dag-cap-p1   Leela DAG capped 50M             4  5/5   -411.5 +-24.3   -417.0 +-28.8  error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#1.loc@366
+  leela-dag-cap-p2   Leela DAG capped 50M             3  4/4   -628.0 +-46.1   -641.2 +-51.2  std-v1-p2-x3:D-P-Ne-ctx-grow+router-chain=2+router-trial-z=-2.loc@436
+  leela-dag-unb-p1   Leela DAG unbounded 50M          4  5/5   -470.5 +-28.1   -475.4 +-32.3  error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#1.loc@366
+  leela-dag-unb-p2   Leela DAG unbounded 50M          3  4/4   -727.1 +-60.6   -737.0 +-65.9  std-v1-p2-x3:D-P-Ne-ctx-grow+router-chain=2+router-trial-z=-2.loc@436
+  leela-tl-p1        Leela capped T-L 50M             4  5/5   -271.2 +-23.2   -300.1 +-30.0  error-dag-p1:T-L-Ne+split-limit=4+split-threshold=1000000#1.loc@361
+  leela-tl-p2        Leela capped T-L 50M             3  4/4   -362.0 +-23.5   -400.5 +-29.3  base-lr-p2:T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+revise=2#1.loc@599
+  leela-dl-cap-p1    Leela DAG-L capped 50M           4  5/5   -256.9 +-23.6   -265.7 +-30.6  error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#1.loc@361
+  leela-dl-cap-p2    Leela DAG-L capped 50M           3  4/4   -170.5 +-21.4   -198.1 +-29.4  base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#2.loc@599
+  leela-dl-unb-p1    Leela DAG-L unbounded 50M        4  5/5   -256.9 +-23.6   -265.7 +-30.6  error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#1.loc@361
+  leela-dl-unb-p2    Leela DAG-L unbounded 50M        3  4/4   -170.5 +-21.4   -198.1 +-29.4  base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#2.loc@599
+  leela-tl-f10-p1    Leela capped T-L std 50M         4  5/5   -251.2 +-23.4   -274.7 +-30.5  error-dag-p1:T-L-Ne+split-limit=4+split-threshold=1000000#1.loc@361
+  leela-tl-f10-p2    Leela capped T-L std 50M         3  4/4   -297.5 +-22.2   -331.4 +-28.7  base-lr-p2:T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+revise=2#1.loc@599
+  leela-dl-cap-std-p1 Leela DAG-L capped std 50M       4  5/5   -232.4 +-23.7   -246.3 +-31.2  error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#1.loc@361
+  leela-dl-cap-std-p2 Leela DAG-L capped std 50M       3  4/4   -246.1 +-22.3   -271.7 +-29.6  base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#1.loc@599
+  peers per (architecture, ply): F-L p1 4, F-L p2 4, F-L p3 4, F-L p4 4, F-P p1 4, F-P p2 4, F-P p3 2, F-P p4 0, T-P p1 4, T-P p2 4, T-P p3 2, T-P p4 0, DAG p1 4, DAG p2 3, DAG p3 0, DAG p4 0, T-L p1 4, T-L p2 3, T-L p3 0, T-L p4 0, D-L p1 4, D-L p2 3, D-L p3 0, D-L p4 0
+
+=== ply 1: leela-dl-unb-std-p1 (5 entries, 110 round-robins; Elo 0 = the library peers' mean)
+    +59.6 +- 19.5  D-L peer, best, ladder 887       error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#1.loc@361
+    +58.2 +- 19.5  D-L peer, best, ladder 886       error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#2.loc@361
+    +56.1 +- 19.5  D-L peer, typical, ladder 880    error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#2.loc@361
+    +35.9 +- 19.4  D-L peer, typical, ladder 864    error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=0+router-split-limit=4#1.loc@361
+   -209.7 +- 23.8  Leela DAG-L unbounded std 50M    
+  Leela DAG-L unbounded std 50M: rank 5 of 5; - best peer -269.3 +-30.8; - peers' mean -262.1 +-23.8; - peers' median -266.9  (4 peers)
+
+=== ply 2: leela-dl-unb-std-p2 (4 entries, 200 round-robins; Elo 0 = the library peers' mean)
+   +115.2 +- 17.3  D-L peer, all, ladder 1515       base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#1.loc@599
+   +114.2 +- 17.3  D-L peer, all, ladder 1519       base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#2.loc@599
+    +39.6 +- 16.8  D-L peer, all, no ladder rating  std-v1-p2-x3:D-L-Ne-ctx-grow+router-chain=2+router-trial-z=-2+grow-mdl=0+forget-factor=10.loc@436
+   -269.1 +- 23.3  Leela DAG-L unbounded std 50M    
+  Leela DAG-L unbounded std 50M: rank 4 of 4; - best peer -384.3 +-29.0; - peers' mean -358.8 +-23.3; - peers' median -383.3  (3 peers)
+
+=== ply 2: leela-rule-l-std-p2 (5 entries, 160 round-robins; Elo 0 = the field's mean)
+   +196.5 +- 19.3  Leela F-L 50M                    
+    +31.0 +- 16.4  Leela capped T-L std 50M         
+    +18.4 +- 16.3  Leela DAG-L capped std 50M       
+   -110.0 +- 17.1  Leela DAG-L unbounded std 50M    
+   -135.9 +- 17.5  Leela DAG-L unbounded std 20M    
+  capped D-L-std 50M: - Leela F-L 50M -178.1 +-25.3; - Leela capped T-L std 50M  -12.6 +-23.1; - Leela DAG-L unbounded std 50M +128.4 +-23.6
+  unbounded D-L-std 50M - Leela F-L 50M -306.5 +-25.8; unbounded D-L-std 50M - its 20M  +25.9 +-24.5
+
+=== ply 3: leela-rule-l-std-p3 (5 entries, 160 round-robins; Elo 0 = the field's mean)
+   +207.5 +- 19.7  Leela F-L 50M                    
+    +54.0 +- 16.9  Leela capped T-L std 50M         
+    +40.3 +- 16.8  Leela DAG-L capped std 50M       
+   -132.4 +- 17.8  Leela DAG-L unbounded std 50M    
+   -169.3 +- 18.6  Leela DAG-L unbounded std 20M    
+  capped D-L-std 50M: - Leela F-L 50M -167.2 +-25.9; - Leela capped T-L std 50M  -13.7 +-23.8; - Leela DAG-L unbounded std 50M +172.7 +-24.5
+  unbounded D-L-std 50M - Leela F-L 50M -339.9 +-26.6; unbounded D-L-std 50M - its 20M  +36.9 +-25.7
+
+=== THE RE-REGISTERED LR-DAG RULE, standard LR settings (models/NEXT-EXPERIMENTS.md 11-13 ~20:4x; measured in leela-rule-l-std-p2/-p3)
+  Leela DAG-L unbounded std 50M - Leela F-L 50M: ply 2 -306.5 +-25.8, ply 3 -339.9 +-26.6
+  Leela DAG-L unbounded std 20M -> 50M: ply 2  +25.9 +-24.5, ply 3  +36.9 +-25.7; mean +31.4
+  VERDICT: FAIL: the DAG-L unbounded std is below F-L + 15 at plies 2 and 3 (under F-L by more than 15 at one or both): CLOSED
+
+=== SUMMARY: each Leela model (50M final) against its plateaued same-architecture peers trained at the ply (Elo 0 = the peers' mean; +- = 95% in-run interval)
+  arena              Leela model                  peers  rank    - peers mean     - best peer  best peer
+  leela-fl-p1        Leela F-L 50M                    4  5/5   -184.4 +-23.2   -207.5 +-31.4  capped-l-f10-p1:F-L#1.loc@319
+  leela-fl-p2        Leela F-L 50M                    4  5/5   -188.7 +-23.4   -215.7 +-31.6  lr-settings-new:F-L+lr-rate=0.0125.loc@193
+  leela-fl-p3        Leela F-L 50M                    4  3/5     -1.2 +-23.0    -11.9 +-32.5  flat-p3:F-L#2.loc@199
+  leela-fl-p4        Leela F-L 50M                    4  5/5   -105.8 +-22.5   -120.8 +-31.4  flat-p3-w4:F-L#1.loc@178
+  leela-fp-p1        Leela F-P 50M                    4  5/5   -301.4 +-23.6   -319.0 +-29.9  probit-widen-p1c:F-P#1.loc@250
+  leela-fp-p2        Leela F-P 50M                    4  5/5   -690.9 +-50.6   -707.7 +-54.2  fponly-p2:F-P#2.loc@320
+  leela-fp-p3        Leela F-P 50M                    2  3/3   -543.9 +-40.1   -548.5 +-47.8  probit-p3:F-P#1.loc@301
+  leela-tp-p1        Leela capped T-P 50M             4  5/5   -414.1 +-24.5   -433.9 +-29.0  error-growth-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@449
+  leela-tp-p2        Leela capped T-P 50M             4  5/5   -627.1 +-42.4   -654.7 +-46.1  diversity-p2d:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299
+  leela-tp-p3        Leela capped T-P 50M             2  3/3   -656.5 +-54.1   -679.1 +-63.0  probit-p3:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@301
+  leela-dag-cap-p1   Leela DAG capped 50M             4  5/5   -411.5 +-24.3   -417.0 +-28.8  error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#1.loc@366
+  leela-dag-cap-p2   Leela DAG capped 50M             3  4/4   -628.0 +-46.1   -641.2 +-51.2  std-v1-p2-x3:D-P-Ne-ctx-grow+router-chain=2+router-trial-z=-2.loc@436
+  leela-dag-unb-p1   Leela DAG unbounded 50M          4  5/5   -470.5 +-28.1   -475.4 +-32.3  error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#1.loc@366
+  leela-dag-unb-p2   Leela DAG unbounded 50M          3  4/4   -727.1 +-60.6   -737.0 +-65.9  std-v1-p2-x3:D-P-Ne-ctx-grow+router-chain=2+router-trial-z=-2.loc@436
+  leela-tl-p1        Leela capped T-L 50M             4  5/5   -271.2 +-23.2   -300.1 +-30.0  error-dag-p1:T-L-Ne+split-limit=4+split-threshold=1000000#1.loc@361
+  leela-tl-p2        Leela capped T-L 50M             3  4/4   -362.0 +-23.5   -400.5 +-29.3  base-lr-p2:T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+revise=2#1.loc@599
+  leela-dl-cap-p1    Leela DAG-L capped 50M           4  5/5   -256.9 +-23.6   -265.7 +-30.6  error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#1.loc@361
+  leela-dl-cap-p2    Leela DAG-L capped 50M           3  4/4   -170.5 +-21.4   -198.1 +-29.4  base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#2.loc@599
+  leela-dl-unb-p1    Leela DAG-L unbounded 50M        4  5/5   -256.9 +-23.6   -265.7 +-30.6  error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#1.loc@361
+  leela-dl-unb-p2    Leela DAG-L unbounded 50M        3  4/4   -170.5 +-21.4   -198.1 +-29.4  base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#2.loc@599
+  leela-tl-f10-p1    Leela capped T-L std 50M         4  5/5   -251.2 +-23.4   -274.7 +-30.5  error-dag-p1:T-L-Ne+split-limit=4+split-threshold=1000000#1.loc@361
+  leela-tl-f10-p2    Leela capped T-L std 50M         3  4/4   -297.5 +-22.2   -331.4 +-28.7  base-lr-p2:T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+revise=2#1.loc@599
+  leela-dl-cap-std-p1 Leela DAG-L capped std 50M       4  5/5   -232.4 +-23.7   -246.3 +-31.2  error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#1.loc@361
+  leela-dl-cap-std-p2 Leela DAG-L capped std 50M       3  4/4   -246.1 +-22.3   -271.7 +-29.6  base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#1.loc@599
+  leela-dl-unb-std-p1 Leela DAG-L unbounded std 50M     4  5/5   -262.1 +-23.8   -269.3 +-30.8  error-dag-p1:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=160+router-split-limit=4#1.loc@361
+  leela-dl-unb-std-p2 Leela DAG-L unbounded std 50M     3  4/4   -358.8 +-23.3   -384.3 +-29.0  base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#1.loc@599
+  peers per (architecture, ply): F-L p1 4, F-L p2 4, F-L p3 4, F-L p4 4, F-P p1 4, F-P p2 4, F-P p3 2, F-P p4 0, T-P p1 4, T-P p2 4, T-P p3 2, T-P p4 0, DAG p1 4, DAG p2 3, DAG p3 0, DAG p4 0, T-L p1 4, T-L p2 3, T-L p3 0, T-L p4 0, D-L p1 4, D-L p2 3, D-L p3 0, D-L p4 0

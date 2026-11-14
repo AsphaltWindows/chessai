@@ -1,0 +1,49 @@
+Is M-L4-N-c just one LR doing the work? 2026-11-09 ~00:25. v338 (champion, d2 entry 1853.7) and v274 (previous champion).
+Files: models/ (copies), experts/ (analysis/extract.py: each expert's lines copied out as a logreg model; the predictions
+match the model's own experts exactly, largest logit difference 0 on every position), offline/ (chessai-expertcmp
+expert-eval, built from expertcmp-src = hybrid2-src plus that subcommand; bin/), cal/, match/, analysis/, run.sh.
+
+Play (chessai-hybrid3 arena, the league's way: log-odds-softmax T0.1, each side's own calibration from 600 d1 games, seed 5,
+calibrated on heldout-lr-d2-s555; the v338 and F-L-c v4696 calibration games are byte-identical to cycles/champ/owncal;
+2000 games, seed 11). Expert 1 has the most gate mass (0.39) and is the offline best on s555; expert 3 is the offline best on d2play.
+                                       d1                    d2
+  v338 full vs expert 1                73 [64, 83]           46 [32, 61]
+  v338 full vs expert 3               126 [116, 137]         92 [77, 107]
+  expert 1 vs F-L-c v4696             -96 [-106, -85]        19 [5, 34]
+  expert 3 vs F-L-c v4696            -150 [-162, -139]        -
+  v338 full vs F-L-c v4696            -25 [-34, -16]         76 [61, 91]
+  League: v338-2 1853.7 vs F-L-c-v4696-2 1793.6 (60); v338-1 958.6 vs F-L-c-v4696-1 987.3 (-29). The direct matches
+  agree: M-L4-N-c leads the field at depth 2 only, and is below F-L-c at depth 1.
+
+Offline, log-loss with a calibration fitted to each variant; differences with block-bootstrap 95% CIs (contiguous blocks
+of 200 positions, 1000 resamples; analysis/offline.txt):
+  d2play (287k, 75% decisive): full 0.9087 (F-L-c v4696 0.9167, eval-loss); hard (the gate's top expert alone)
+    0.0011 [0.0008, 0.0014] worse; best single expert (3) 0.0239 [0.0159, 0.0317] worse; experts 1, 2, 0: 0.031, 0.034, 0.052.
+  s555 (163k, 93% decisive): full 0.6688 (F-L-c v4696 0.6815); hard 0.0012 [0.0008, 0.0015]; best expert (1)
+    0.0193 [0.0121, 0.0268]; experts 3, 2, 0: 0.021, 0.043, 0.047.
+  v274: the same picture (hard 0.0011-0.0013, best expert 0.019-0.027).
+
+Specialisation (rows: positions by the gate's top expert, 15-39% each; columns: each expert alone with its calibration):
+  The routed expert is the best on its rows in 3 of 4 rows on both sets: it beats the best other expert by 0.008-0.023,
+  and by 0.019 [0.007, 0.032] on d2play's row 3. The exception is row 0, where expert 1 beats the routed expert 0 by
+  0.018-0.019. When each cell's calibration is refitted on its own positions (offline/*.out), expert 1 is best or level
+  on every d2play row and on two of four s555 rows. So a good part of what makes each expert better on its own region is
+  its scale and offsets, not a different ranking.
+  The experts still predict differently: the mean total-variation distance between their calibrated predictions is
+  0.08-0.14, and the mean |difference in expected score| is 0.07-0.11. Their win-loss weight vectors correlate 0.89-0.96
+  with each other (0.93-0.97 with F-L-c), and their draw vectors 0.66-0.84. D-L-Nc-c's leaf 3 correlated 0.995-0.997 with
+  F-L-c. From v274 to v338 each expert's vector moved little (0.993-0.996).
+
+Youth (analysis/weights.txt): the experts' bias squared-gradient sums are 0.019-0.040 of F-L-c v4696's (D-L-Nc-c leaf 3:
+  0.37), and their median AdaGrad step is 0.66-1.06e-3 against F-L-c's 0.112e-3, so 6-9 times larger. M-L4-N-c started
+  from scratch at the champion run's cycle 1 and is at v338; F-L-c is at v4696. But youth doesn't carry the experts on
+  their own: alone they lose to F-L-c by 96-150 at d1, and expert 1 is only 19 [5, 34] ahead at d2.
+  Caveat (the league-data confound): M-L4-N-c trains on ~12-14% league positions a cycle, F-L-c on ~3%.
+
+Cost: about 18 CPU minutes in all: matches 14.5, own-cal games 0.5, offline evaluations and bootstrap about 3.
+
+Conclusion: not one LR. Unlike D-L-Nc-c, whose full model played as its leaf 3 (1 [-14, 15]), M-L4-N-c's gate splits
+positions among four different LR experts, and the split is worth 46-73 Elo in play over its best expert alone and
+0.019-0.024 nats offline. Hard routing loses almost nothing (0.001), so it plays as a one-level tree with four LR leaves.
+Of its 76-Elo edge over F-L-c at d2, about 19 is expert 1 alone and the rest is the routing. Part of what the routing
+buys is per-region calibration rather than different rankings.

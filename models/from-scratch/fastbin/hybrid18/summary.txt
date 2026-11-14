@@ -1,0 +1,97 @@
+chessai-hybrid18 (2026-11-12; the implementation fork for candidates 1 and 2 of the ~12:50 review)
+=================================================================================================
+
+Binary  models/from-scratch/bin/chessai-hybrid18, md5 392eab6a628c580afa3ffa1c78706fa5 (installed with cp -n at 14:17:05).
+Source  fastbin/hybrid18-src, a copy of fastbin/hybrid17-src; hybrid18/hybrid18.patch against it (src/search.rs,
+        src/compound.rs, src/fastprobit.rs, src/main.rs; Cargo files unchanged). nice -n 15 cargo build --release -j 2.
+        A first candidate (cand/chessai-hybrid18-a1326, md5 577a99b9..., built 13:26) differed only in reading
+        CHESSAI_FX_DEEP per search instead of once per Search (allow_bounds, so the unit tests can toggle it); it ran
+        suites A-C and D's first run, and every one of those comparisons was repeated on the final build against the
+        kept hybrid17 runs (suite E). The unit tests ran on the final source.
+
+What (values-only search, root_values: tournaments, arenas, replay-games/self-games; depth 3 and more)
+  1. Trees and DAGs on the compound fixed-point path (<= 64 nodes, log-odds values, the direct path): the search
+     keeps the compound state (one compound::Acc per depth, child_into; compound::Changes per move; no encode()).
+     A depth-1 node scans its replies' estimates (Compound::reply: value and error bound) in the float search's order
+     (hybrid10's captures first when a cutoff is possible): it fails high as soon as an estimate's top v+e <= -beta (returning
+     -(v+e)); after the scan, it fails low when alpha > -inf and every bottom v-e >= -alpha (returning -min(v-e));
+     otherwise Compound::best values in full only the replies that can be the minimum and runs the float loop in
+     order. Keys at depth >= 2 come from the estimates in the exact float order (order_by_bounds: sorted by the
+     interval tops; the exact key, Compound::exact_of, only inside groups whose intervals overlap; ties in index
+     order; anything non-finite valued in full). Leaves' hashes as hybrid11 (reversible moves only).
+  2. Flat probit at ply 3+: the same scan and key order from hybrid8's ln Phi table (fastprobit::estimate / best),
+     the same code (leaves_p / leaf_p in place of leaves_c), in hybrid12's staged move order.
+  Why exact: fail-soft alpha-beta; each node fails low, is exact or fails high exactly as the float search does,
+  with the same exact values, so alpha moves only on the same values and every visited node above the leaves is the
+  same; only the bound a failing node returns can differ, and both are valid bounds. Full root windows give
+  bit-equal root values (the move order is identical, so even the sign of a zero); hybrid13's windowed roots cut
+  the same moves with the same exact values.
+  Unchanged: the outcome search (root_outcomes, expected_outcome, outcome, resolve, child, negamax, child_fx
+  verbatim; the blocks added to the generic negamax_fx and depth1_from are gated by !OUTCOME: fndiff.txt,
+  outcome-gating.txt), depths 1-2, flat LR and NB, FM, MoEs, graphs over 64 nodes (float), Value::Score.
+  Switches: CHESSAI_FX_DEEP=off gives hybrid17's search; CHESSAI_FX_CHECK=1 asserts every decision (each bound
+  against the float value, each order against the stable sort of the exact keys, root values bit-equal to the
+  float / hybrid17 search); CHESSAI_FX_STATS=1 prints "deep fx:" counters.
+
+Identity (against bin/chessai-hybrid17; byte-identical: games.csv, every tour file but tournament.log, game_cpu.csv
+without its CPU column, every saved game, stdout with times masked). Logs suite-a..f.log; scripts tour18.py (both
+binaries), tour18b.py (the final build against a kept hybrid17 run), replay18.py, replay18b.py.
+  Field (field/models, reflinks): TP1/TP2 = probit-p3's capped T-P-Ne v135 (review-1112c/m), FP1/FP2 its F-P,
+  TL = T-L-Ne (library capped-l-f10-p1, bdt319), TLL = T-L-Lc (LR routers, cluster-error bdt637), TLT = T-L-Tc (TAN
+  routers, cluster-error), DC = DAG with cells (error-dag-p1 z 0, bdd361, pathcontext 1 4), DN = cell-less ctx DAG
+  (z 160, pathcontext 1 0), TBIG = 121-node tree (offline-c15 tn-c-10k-l40-s01 bdt4, over the 64-node cap),
+  FL = F-L (base-lr-p2 lr599), random.
+  run                         games  plies   first candidate (A-D)   final build (E, D after 13:55)
+  ply 3 T 0.1   (12 players)   132   11,243  SAME                    SAME
+  ply 3 T 0.02                 132   11,579  SAME                    SAME
+  ply 3 argmax                 132   11,395  SAME                    SAME
+  ply 3 T 0.1 check mode       132   11,243  SAME                    SAME
+  ply 3 T 0.02 check mode      132   11,579  SAME                    SAME
+  ply 4 T 0.02  (10 players)    90    9,116  SAME                    SAME
+  ply 4 argmax                  90    7,931  SAME                    SAME
+  ply 4 T 0.1                   90    9,942  SAME                    SAME
+  ply 4 T 0.02 check mode       90    9,116  -                       SAME (608 CPU-s)
+  ply 5 T 0.02  (TP FP DC rnd)  12      865  SAME                    SAME
+  ply 5 argmax                  12      733  SAME                    SAME
+  ply 5 T 0.1                   12    1,035  SAME                    SAME
+  ply 5 T 0.02  (TL TLL TLT DN rnd) 20 1,218  SAME                   SAME
+  ply 5 argmax                  20    1,335  -                       SAME
+  ply 5 T 0.1                   20    1,317  -                       SAME
+  self-games ply 3 T 0.1 (11 entries x 2 rounds)  22 games, 88 files    SAME / SAME
+  self-games ply 3 T 0.02 (x 1 round)             11 games, 44 files    SAME / SAME
+  Unit tests: 205 pass on the final source (test-all.txt), 3 new (order_by_bounds_is_the_stable_sort_of_the_exact_keys,
+  compound deep_searches_value_exactly, probit_bounds_keep_root_values_past_ply_2).
+  Outcome search: fndiff.txt (per-function comparison), outcome-gating.txt (the added blocks, all !OUTCOME-gated).
+
+Speed (bench.log: ABBA h17 h18 h18 h17, RAYON_NUM_THREADS=1, nice 19, taskset -c 4-7; games.csv identical in all four)
+  workload                                              h17 us/ply      h18 us/ply     game CPU ratio (pairs)
+  T-P-Ne x2 + F-P x2 (probit-p3's kinds), ply 3, T 0.1   1,371 / 1,334     849 / 839    x0.624 (0.619, 0.629)
+  T-P-Ne v T-P-Ne, ply 3, T 0.02                         1,818 / 1,810   1,010 / 997    x0.553 (0.555, 0.551)
+  F-P v F-P, ply 3, T 0.02                                 736 / 705       582 / 570    x0.799 (0.790, 0.808)
+  T-L-Ne + LR-router tree + cell DAG, ply 3, T 0.02      2,571 / 2,502     901 / 899    x0.355 (0.351, 0.359)
+  T-P-Ne v T-P-Ne, ply 4, T 0.02                        18,070 / 18,362  8,675 / 8,650  x0.476 (0.480, 0.471)
+  T-P-Ne v F-P, ply 5, T 0.02                           87,322 / 86,201 53,045 / 52,267 x0.607 (0.607, 0.606)
+  Unpinned whole fields (process CPU, 2 threads): ply 3 x0.57-0.62, ply 4 x0.48-0.53, ply 5 x0.37-0.53.
+  CHESSAI_FX_STATS=1 (probit-p3's kinds, ply 3, T 0.1, 3 round-robins): 2.95 M nodes above the leaves, 94% failed
+  high on a bound, none failed low on bounds; 8.86 M leaves estimated; 2.95 M keys, 0.16% valued in full; depth-1
+  replies valued in full 1.5% (trees, 5.56 M) and 2.0% (probit, 4.69 M).
+
+probit-p3 (swap18.py; swap16.py's procedure)
+  14:17:10 config.json's tournament binary replaced atomically (temp file, fsync, os.replace) while cycle 234 was in
+  its tournament, right after its calibration; driver not stopped; one line in driver.log; p3/config-before/ keeps the
+  old config.json and lines.csv. Cycle 235 is the first on hybrid18 (own calibration games, tournament, self-games).
+  Check of cycle 235 against a hybrid17 replay (swap18.log): tournament from tour/ after cycle 234 with cycle 235's
+  players: 8 tour files and 2,912 saved-game files identical, 728 games, 80,746 plies, stdout the same; self-games:
+  104 game lines and 416 files identical; the 4 own calibrations made in cycle 235: identical. SAME.
+  Control before the swap (rehearsal.log, swap18.py --check p3-rehearsal): cycle 203, hybrid17 against hybrid17, the
+  same snapshots and replays: SAME (2,912 + 416 files, 4 own calibrations).
+  Live (measure18.py, run_measured's footers; measure18.txt): 15 cycles before (220-234) against 12 after (236-247;
+  cycle 235 also refitted every calibration once): tournament 100.8 -> 63.3 CPU-s a cycle (x0.63; SD 2.1 / 1.4),
+  self-games 14.9 -> 9.2 (x0.62), own calibration 3.6 -> 3.5 (depth 1, unchanged code): ~43 CPU-s a cycle saved,
+  the binary's ~119 -> ~76 CPU-s (x0.64; training, hybrid6, unchanged). Tournament wall 37.7 -> 21.4 s and
+  self-games 5.3 -> 2.9 s, though the machine also got lighter as this fork's suites ended. At ~43 CPU-s a cycle:
+  ~0.8 CPU-h from cycle 235 to the floor (300), ~2.0 CPU-h to the cap (400).
+
+Files: cand/ (chessai-hybrid18 = the final build; chessai-hybrid18-a1326 = the first candidate; the rebuilt copy),
+field/, st/ (identity and bench runs), bench/, p3/ (the swap's snapshots and replays), p3-rehearsal/, measure18.py,
+swap18.py, fndiff.py, hybrid18.patch, ledger-section.md. Nothing deleted anywhere.

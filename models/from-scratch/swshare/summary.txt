@@ -1,0 +1,53 @@
+Leaf sharing for the switch trees and the cell-assigned DAG (batch 2, job 1; the coordinator's fork, 2026-11-08 day).
+
+Verdict: no share line. No recipe clears the bar set for this batch (a log-loss gain of at least 0.002 with the 95%
+interval excluding 0). The closest, T-L-NLs/T-L-NNs at share 0.1, gains 0.0018 [0.0005, 0.0031].
+
+Setup (run.sh -> run.out), as leshare/run.sh:
+- offline-c15: train on cycle 15's round-robins 80-83, one pass, 4 rounds; test on round 84.
+- The league recipes at a 100k split threshold: T-L-NLs-c (CNBP cluster routers, LR error routers, --route-switch 3),
+  T-L-LLs-c (LR routers, switch 3) and T-L-NNs-c (CNBP routers, switch 3), on chessai-sparsefit; D-L-Nc-c (9 cells, 3
+  shared LR leaves, CNBP cluster router) on its own chessai-dag.
+- Calibrated log-loss; paired 95% intervals over tanroute/parts p0-p9 (tanroute/summarise.py).
+- D-L-Nc-c is included because --leaf-share means the same thing on chessai-dag: on a DAG's LR leaves it is the same
+  AdaGrad step on share x log-loss from the leaf's own prediction as sparsefit's (dag-src delegation.rs train_leaf ->
+  logreg train_weighted = predict, then step(weight); lrshare-src: predict, then step(share)).
+
+Identity at share 0:
+- chessai-cyc5 (the switch lineages' binary) and chessai-sparsefit give md5-identical model files for all three switch
+  recipes. eloss's nls-100k (chessai-eloss) is identical too.
+- d-0 reproduces the dag topic's d93 (dag/offline) exactly.
+
+Results, mean log-loss over the 10 parts, and paired differences against share 0 (negative: sharing better):
+
+| recipe | share 0 | 0.1 | 0.3 | 0.1 - 0 | 0.3 - 0 |
+|---|---|---|---|---|---|
+| T-L-NLs = T-L-NNs (offline) | 0.6089 | 0.6071 | 0.6073 | -0.0018 [-0.0031, -0.0005] | -0.0016 [-0.0037, 0.0006] |
+| T-L-LLs | 0.6116 | 0.6116 | 0.6115 | 0.0000 [0.0000, 0.0000] | -0.0001 [-0.0001, 0.0000] |
+| D-L-Nc (DAG) | 0.6129 | 0.6129 | 0.6115 | 0.0000 [-0.0014, 0.0015] | -0.0014 [-0.0026, -0.0002] |
+
+- Winner log-loss: NLs/NNs -0.0016 [-0.0021, -0.0011] at 0.1 and -0.0020 [-0.0030, -0.0011] at 0.3; DAG -0.0015
+  [-0.0025, -0.0005] at 0.3.
+- References on the same parts: flat LR 0.6116; T-L-Nc at 100k (nc-100k) 0.6077. NLs/NNs at share 0 are 0.0011
+  [0.0002, 0.0020] worse than nc-100k, and the DAG 0.0013 [-0.0001, 0.0028] worse than flat LR. At 0.3 the DAG reaches
+  flat LR's level.
+- Leaf-pair disagreement (mean |log-odds difference| on test): NLs/NNs 0.52 -> 0.31 (0.1) -> 0.17 (0.3); DAG 0.85 ->
+  0.44 -> 0.22.
+
+Why the switch trees can't be judged fully offline:
+- Offline, no delegator of any switch recipe switches to its error router (as eloss found: the error router's gain is
+  never positive on this benchmark). So T-L-NLs and T-L-NNs train the same tree (error routers aren't saved in the
+  model file), and the check measures only their cluster-routed phase. Sharing there acts like it did on nc-s01
+  (-0.0010 [-0.0023, 0.0003], lrshare).
+- In the league they did switch: T-L-NLs-c 2 delegators, T-L-NNs-c 1, T-L-LLs-c 1 ("switched to error routing" in
+  cycles/runs/<lineage>.log). Error-routed delegators are where sharing helped most offline (T-L-Ne -0.0058 at 0.1,
+  T-L-Le -0.0063 at 0.3), so this check probably understates sharing for the league's switch trees.
+- T-L-LLs with LR cluster routers is flat LR offline (lls-0 - lr: 0.0000 [-0.0001, 0.0000]); its 7 leaves predict
+  alike, so sharing has nothing to act on.
+
+CPU: training 353 CPU-s over 15 runs (about 19 s a run without sharing, 25-31 s with: 1.3-1.6x), plus about 150
+evaluations (a few CPU-min). Two single-threaded jobs, nice 19.
+
+Idea (IDEAS.md, 2026-11-08 day): judge sharing on switched trees by resumed twins, not from scratch. A twin resumed
+from the league lineage's current state with --leaf-share added differs from it in that one factor from then on, and
+it starts with the switched delegators the offline benchmark can't produce.

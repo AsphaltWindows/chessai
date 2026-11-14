@@ -1,0 +1,18 @@
+Openings (2026-11-12 ~15:05-; the implementation fork for the user's ~15:03 "I'm not sure different opening moves will
+help but we can test it"; analyst 6.91: K 6, uniform, the opening plies train). Full write-up: leagues/BUILD.md,
+section "Openings"; the option's format: leagues/FORMATS.md (config.json, Changes).
+
+Binary   models/from-scratch/bin/chessai-hybrid19, md5 f88040dd27273a4f689c8bb368e06270 (cp -n 15:21:38); source
+         fastbin/hybrid19-src (hybrid18-src + src/selfplay.rs, src/tournament.rs, src/main.rs); build log
+         fastbin/build-hybrid19.log; unit tests test-all.txt (206 + 2 pass).
+Identity suite.sh, tour19.py, replay19.py -> suite.log (15 of 15 SAME against hybrid18 without the flags);
+         openrep.py (replay-games replays opening tournaments exactly; st/open2-*).
+Driver   leagues/patch_openings.py (+ openings_test.py.txt) -> leagues/.leagues-openingswip.py; repro_open.py and
+         repro.sh -> repro.log (three runs, no key: byte for byte); run_openings_test.py -> otest3.out; quick.out
+         (rule checks); selftest.out (the full selftest); a copy of the swapped file: leagues/dot-leagues-openingswip.py.
+Docs     leagues/patch_formats_openings.py, leagues/build_section.md.
+Dashboard dash/patch_dashboard_openings.py, compare_pages.py; a copy: dash/dot-dashboard-openingswip.py.
+Drafts   drafts/make_drafts.py -> leagues/specs/batch6/{treeonly,fponly}-p1-open.DRAFT.json; checked by creating them
+         in drafts/root-*.
+Measured meas/: make_field.py (T8, F8, S10 with own calibration remade, fits equal to the runs'), play.py, run_meas.sh
+         -> meas.log, runs/; diversity.py; scale.py.

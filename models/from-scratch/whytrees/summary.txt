@@ -1,0 +1,133 @@
+Why do the good routed models win, what routing works, and is there routing headroom? (Q4, Q6, part of Q1)
+2026-11-09 01:20-02:30, models/from-scratch/whytrees/. One job at a time, nice 19, at most 2 threads.
+
+TOOLS
+  bin/chessai-whytrees: whytrees-src = a copy of expertcmp-src (hybrid2-src, which builds the tournament binary) plus:
+    - leaf-eval (bdt/hybrid/nbgate): per position, the full model, each leaf/expert alone and the own top one alone;
+      part A on all positions (as l4ncmp: one calibration per variant, plus the per-cell refit table); part B/C
+      headroom on alternating 2000-position blocks (train/test) or cross-set (--train-games);
+    - leaves also writes a hybrid's experts as standalone models.
+  Play: chessai-hybrid3 arena, the league's way (log-odds-softmax T0.1; each side's own calibration from 600 d1 games,
+  seed 5, calibrated on heldout-lr-d2-s555); 2000 games, seed 11; RAYON_NUM_THREADS=2 (results identical to the
+  unlimited run on the one match run both ways). run.sh, leafcal.sh; results in matches.txt, match/.
+  Offline sets: heldout-d2play (287k positions, 75% decisive) and heldout-lr-d2-s555 (163k, 93% decisive).
+
+STEP 1: CENSUS (census.py; league ratings at d2, current entry; F-L-c 1798 now, best 1804)
+  NB (CNBP) routers and gates lead; LR routers trail; TAN in between (only two lineages).
+    T-L-Nc (NB cluster)   share 1852, base 1815, merge 1786, fresh 1776
+    T-L-Ne (NB error)     base 1844, fresh 1835, pre 1792, merge 1778, share 1740 (champion v428 1816)
+    M-L-N (NB gate)       M-L4-N-c 1822 (best 1839)
+    switch (NNs/NLs/LLs)  merge 1811/1803/1802; non-merge 1806/1721/retired 1610
+    T-L-Te (TAN error)    merge 1788 (champion v833 1830), base 1716 (14 cycles)
+    T-L-Le (LR error)     1647-1780
+    M-L-L (LR gate)       M-L4-L-c 1778, M-L8-L-c 1644
+    M-LP-L (LR+probit)    c 1555, hard 1522 (4 cycles)
+  Merge hurts the NB-routed trees but rescues the switch trees. Confounds: league-data share (routed 3-10%, M-L4-N-c
+  14%, F-L-c 3%), age, and peak selection (best values are maxima over many entries).
+
+STEP 2: DIAGNOSIS
+  Models: T-L-Nc-share-c v545 (top, champion), T-L-Ne-c v1878 (champion), T-L-Ne-share-c v428 (champion, the twin
+  subject), T-L-Te-merge-c v833 (champion), M-LP-L-c v62 (current).
+
+  Leaves (analysis/weights.txt; F-L-c v4724 as the reference):
+    Nc-share v545  11 leaves, near-identical: pairwise win-loss weight correlation median 0.994 (min 0.988), draw 0.979;
+                   bias squared-gradient sums 3-5% of F-L-c's (median AdaGrad step 5x larger).
+    Ne v1878       11 leaves, distinct: win-loss median 0.967 (min 0.936), draw 0.888; sums 4-16% (steps 2.6-4.9x).
+    Ne-share v428  11 leaves, near-identical: 0.995, draw 0.979; sums 1.4-6% (steps 5-8x).
+    Te-merge v833  3 near-copies: 0.998; sums 19-20% (steps 2.3x).
+    M-LP-L-c v62   LR expert sums 1.8% of F-L-c's; probit expert s2 59x F-P-tau0-c v4095's.
+
+  Offline, part A (calibrated log-loss, one calibration per variant; d2play / s555):
+                   full            best single leaf (which)        own routing shares (d2play)
+    Nc-share v545  0.9059 / 0.6722  L9: level / 0.004 worse          L9 24%, L8 15%, L12 15%, ...
+    Ne v1878       0.9064 / 0.6737  0.014 / 0.013 worse (L4, L7)     L7 31%, L10 19%, L4 17%, L15 15%
+    Ne-share v428  0.9090 / 0.6745  L13 0.004 better / 0.0005 worse  L9 23%, L10 18%, L7 17%, L15 13%
+    Te-merge v833  0.9105 / 0.6796  L1 0.002 better / about level    L2 65%, L1 31%, L3 4%
+    M-LP-L-c v62   0.9399 / 0.7017  the gate gives the LR expert ~100%: full = LR expert; probit 0.987 / 0.728
+  Per-cell refit (rows by routed leaf, a calibration fitted per cell): the routed leaf is the best predictor of its own
+  region in only 0-3 of 9-11 rows (Te: 1 of 3); the best leaf per region, each with a region-fitted calibration, is
+  0.002-0.014 better on d2play and 0.001-0.003 on s555 (in-sample).
+  So what routing buys offline is mostly per-region scale and offsets, not a better ranking of positions.
+
+  Play (full minus the single leaf, Elo [95% range]):
+                    d1                          d2
+    Nc-share v545   L9 (busiest=best) 69 [59, 80]     40 [26, 55]
+    Ne v1878        L7 (busiest)      56 [47, 65]    -12 [-26, 2]
+                    L4 (offline best) 23 [13, 32]    171 [154, 187]
+    Ne-share v428   L9 (busiest)      46 [37, 56]    -41 [-56, -27]   (the busiest leaf alone is stronger at d2)
+                    L13 (offline best)51 [42, 61]     21 [7, 36]
+    Te-merge v833   L2 (busiest)      26 [18, 35]     10 [-4, 24]
+                    L1 (offline best)  0 [-8, 9]      85 [70, 100]
+    M-LP-L-c v62    probit expert     43 [35, 52]    -44 [-59, -29]   (the starved probit expert beats the mix at d2)
+                    LR expert         -2 [-11, 7]     - (identical predictions)
+
+  Reading at d2, the depth the league's top ratings come from:
+    (a) routing matters: T-L-Nc-share-c v545 only (40 over its best and busiest leaf).
+    (b) one efficient leaf: T-L-Ne-c v1878 (its busiest leaf L7 alone is level), T-L-Ne-share-c v428 (its busiest leaf
+        L9 alone is 41 stronger) and T-L-Te-merge-c v833 (L2 alone about level). Those leaves are young: AdaGrad sums
+        16%, 5% and 20% of F-L-c's (median steps 2.9x, 4.9x and 2.3x F-L-c's). This can't separate youth from filtered
+        data: each leaf saw 23-65% of the positions (plus the leaf share in Ne-share). The twin stream's leaf-data 2x2
+        is the test for that.
+    At d1 every tree beats its busiest leaf (26-69), so the answer depends on depth. The offline-best leaf is a poor
+    guide to the strongest one in play (Ne v1878: L4 is offline best but 171 below the tree at d2; L7 is level).
+    Q1: M-LP-L-c combines nothing yet. Its gate starves the probit expert, which still beats the mix (= its LR
+    expert) by 44 at d2 and loses by 43 at d1, the LR/probit depth pattern again.
+
+STEP 3: ROUTING HEADROOM (offline/*.out part C, analysis/schemes.txt; each scheme scored as one model with one
+calibration fitted on its routed train outputs; d2play / s555 block split; minus own routing, log-loss [95% CI])
+  Learned flat routers (LR or CNBP over the 70-feature encoding, trained on 144k positions with responsibility or hard
+  targets, with or without the own pick as a feature): none beats own routing.
+    Ne v1878 0.017-0.038 worse; Nc-share and Ne-share 0.002-0.009 worse; Te about level.
+  Region re-assignment (each own region gets its train-best leaf; the DAG re-pointing idea): Ne-share v428 -0.0049
+    [-0.0097, -0.0002] / -0.0017 n.s.; Nc-share and Te n.s.; Ne v1878 0.012-0.021 worse.
+  Oracle by label (per position, the leaf that gave the result the highest probability): 0.06-0.22 below own, largest
+    for Ne v1878 (the most distinct leaves, 0.19-0.22), smallest for Te (3 near-copies, 0.06-0.07). A loose ceiling.
+  M-LP-L-c (Q1): a learned gate between its LR and probit experts does worse than its own gate (= the LR expert alone):
+    0.008-0.050; the oracle between the two is 0.11-0.14 below.
+  Per-region calibration (own routing, one calibration per region; leafcal-like): large offline gains:
+    Nc-share -0.032 [-0.041, -0.022] / -0.001 n.s.; Ne -0.025 / -0.009; Ne-share -0.041 / -0.012;
+    Te -0.032 / -0.009. Best leaf per region with its region calibration: a further 0.003-0.012 on d2play, none on s555.
+  In play the per-leaf calibration hurts (leafcal: a calibration per leaf fitted on the own-cal games, against the
+  league's single calibration on the same games; d1): Ne v1878 -43 [-53, -32], Nc-share -59 [-70, -49], Ne-share -93
+  [-104, -83], Te -19 [-28, -10]; at d2 worse still: Ne v1878 -101 [-116, -86], Ne-share -147 [-163, -132].
+  Where the offline gain sits: on d2play about half on decisive positions and half on draws, on s555 (93% decisive)
+  mostly on draws; the decisive part includes the draw mass, so the win-vs-loss part, the only one play uses, was not
+  separated. Ne v1878's per-leaf fits differ widely (winner slope 0.54-2.23, the whole model's 1.53), so moves whose
+  positions land in different leaves are scored on different scales. Untested which part costs the Elo: the scales
+  (temperature; see the calibration confound), the offsets, or the small own-play fit sets (143-30k positions a leaf).
+  Conclusion: no realistic routing headroom found. The big offline gain from per-region calibration turns into a loss
+  in play, so held-out log-loss is a poor guide to play strength here. Caveat: the flat routers saw 144k positions,
+  the trees' routers 100M+ online, so the router test is a weak lower bound.
+  Cross-set results (trained on s555, tested on d2play) are confounded by calibration transfer between sets with
+  different draw rates (93% vs 75% decisive) and are set aside.
+
+ANSWERS
+  Q6 (why the good routed models win): at d2, where the league's top ratings are, only T-L-Nc-share-c v545 gains from its
+    routing (40 over its best and busiest leaf). The other three champions play as one leaf: the busiest leaf alone is
+    level with the tree (Ne v1878, Te-merge v833) or better (Ne-share v428, by 41). Those leaves are young (AdaGrad sums
+    5-20% of F-L-c's). Youth vs filtered data is still open; the twin stream's leaf 2x2 tests it. The twin replay found
+    the tree's lead over a flat LR at v122 is all data, consistent with this.
+  Q4 (what routing works): NB (CNBP) routers and gates lead the league (T-L-Nc-share-c 1852, T-L-Ne-c 1844, M-L4-N-c
+    1822); LR routers trail and LR gates collapse (moespec); TAN sits between, on two lineages. At d1 every routed tree
+    beats its busiest leaf (26-69), so routing does real work at d1; at d2 that survives only for Nc-share.
+  Q5 (how much better routing could give, the case for DAGs): no realistic headroom found. Learned flat routers never
+    beat own routing; re-pointing regions to their best leaf gains at most 0.005 (Ne-share, d2play only); the oracle's
+    0.06-0.22 is unreachable by any router tried. The big offline gain is per-region calibration, and it loses in play.
+    Headroom gives no case for router re-splits in these models.
+  Q1 (an LR+probit MoE): M-LP-L-c v62's gate gives its LR expert ~100%, so the mix is its LR. The starved probit expert
+    alone beats the mix at d2 (44) and loses at d1 (43). A learned gate between the two does no better offline, and held-out
+    log-loss favours the LR (on draws), so a gate trained on likelihood will keep starving the probit. A mix that helps at
+    d2 needs a signal other than held-out log-loss.
+
+CAVEATS
+  - One version per lineage (champions, and M-LP-L-c's current); d2 versions swing 40-70 Elo (sharedrop), and champions
+    are peaks.
+  - Offline log-loss did not predict play anywhere here: per-region calibration, offline-best leaves (171 and 85 below
+    their trees at d2), LR vs probit. Held-out log-loss includes draws, which the play policy ignores.
+  - The learned routers saw 144k positions, the trees' own routers 100M+ online: "no headroom" bounds what a small router
+    learns offline, not what a bigger one could.
+  - A leaf alone is the leaf as the tree left it, never retrained alone.
+  - leafcal was fitted on the own-cal games (600 d1 games, the league's way), the offline per-region fits on held-out sets.
+  - The census confounds (league-data share, age, peaks) are untouched here; the solo lineages and the twin address them.
+
+COST: about 1 h CPU: matches 30 min (measured), offline ~25 min (from wall time), builds ~5, own-cal sets ~1.

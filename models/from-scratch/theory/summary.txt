@@ -1,0 +1,452 @@
+theory: proofs, counterexamples and holes for the error-routed tree/DAG construction (2026-11-10, overnight)
+
+Read-only on code and experiments. Code read: bddhome2-src/src/{delegation,bdd,bdt,cnbp,logreg}.rs, bddctx-src/src/{pathctx,bdd,
+delegation,cnbp}.rs, fastbin/bal-q9-src/src/delegation.rs (Balanced), bddhome/summary.txt, bddfix/summary.txt,
+NEXT-EXPERIMENTS.md sections 3 and 6. Simulations: sim_targets.py, sim_dynamics.py, sim_extra.py here (outputs in *.out;
+about 3 CPU-minutes in all, pure Python).
+
+Labels: THEOREM (with proof), COUNTEREXAMPLE, CONJECTURE, SIMULATION. Each result states the claim first, then the argument,
+then what it implies for the design. Section 9 ranks the implications.
+
+NOTATION. At a position x the outcome y is in {W, D, L} with true conditional p(y|x). Child k (a leaf or a subtree) predicts
+q_k(y|x). Its loss on the realised outcome is l_k(y) = -ln q_k(y) (error log), or 1 - q_k(y) (error abs; for a one-hot label),
+or -ln(q_k(y) / (q_k(W) + q_k(L))) on decisive games only (error winner). Its expected loss at x is L_k(x) = E_y[l_k(y)].
+The routed loss of router h is J(h) = E[l_{h(x)}(y)]. "Consistent" means: the router's Bayes-optimal response to the target
+(the response of an unrestricted, calibrated learner that sees x) picks argmin_k L_k(x) at every x. The code's facts used:
+Best = one-hot on argmin_k l_k, ties to the first child; Soft = exp(-l_k) / sum_j exp(-l_j), which for error log equals
+q_k(y) / sum_j q_j(y); Balanced = Best with the router's step weighted by 1 / (B pbar_best) clipped to [0.1, 10], pbar an EMA
+of how often each child is best; train_router_on trains the router and then routes by the updated router (train-then-route).
+
+
+1. ROUTER TARGET CONSISTENCY (question 1, and addendum A)
+
+1.1 THEOREM (the routed loss is a cost-sensitive classification problem). For any router h,
+    J(h) = E[min_k l_k(y)] + E[c_{h(x)}(y)],  c_k(y) = l_k(y) - min_j l_j(y) >= 0.
+Proof: add and subtract the minimum. The first term does not depend on h. So minimising J over routers is cost-sensitive
+multiclass classification with the example-dependent cost vector c(y). For B = 2 one of the two costs is zero, so it is
+weighted binary classification: label argmin, weight |l_1(y) - l_2(y)|; examples with equal losses carry weight zero. This
+is exactly the decision-node subproblem of TAO (Carreira-Perpinan and Tavallali, NeurIPS 2018): pseudo-label the better
+child, weight the loss gap, drop ties. Note that TAO's weight does not depend on the node's current decision (see 1.9).
+
+1.2 THEOREM (Best is inconsistent; the binary case exactly). Take two outcomes {W, L}, two children with a = q_A(W) > b = q_B(W).
+Then l_A(W) < l_B(W) and l_A(L) > l_B(L), so the Best label is A exactly when y = W, and the Bayes-optimal router output is
+t_A(x) = p(W|x). Best picks A iff p(W|x) > 1/2. The expected-loss-optimal pick is A iff p(W|x) > p*(a, b) with
+    p*(a, b) = ln((1-b)/(1-a)) / [ ln(a/b) + ln((1-b)/(1-a)) ],
+from -p ln a - (1-p) ln(1-a) < -p ln b - (1-p) ln(1-b). p* = 1/2 iff a(1-a) = b(1-b) iff a = 1-b. So Best is consistent only
+for the symmetric pair a = 1 - b and picks the worse child for every x with p(W|x) strictly between 1/2 and p*(a, b).
+COUNTEREXAMPLE with numbers: p(W) = 0.6, q_A(W) = 0.95, q_B(W) = 0.6. Best picks A (A is closer to the outcome 60% of the
+time). L_A = 1.229, L_B = 0.673: Best picks the child with nearly twice the expected loss. The loss gap on the 40% of
+outcomes where A is wrong (-ln 0.05 = 3.0) outweighs its small gain on the 60% (-ln 0.95 vs -ln 0.6).
+Implication: Best rewards confidence in the commoner outcome, not accuracy. This is the mechanism behind the code comment on
+ErrorTarget::Best and behind "routers route by who's winning" (see 1.4).
+
+1.3 THEOREM (Soft is consistent for the Brier score in the binary two-child case, and inconsistent for log-loss). With the
+notation of 1.2, the expected Soft share of A minus B is
+    S_A - S_B = p (a-b)/(a+b) + (1-p) (b-a)/(2-a-b) = (a-b) [ p/(a+b) - (1-p)/(2-a-b) ],
+which is positive iff p > (a+b)/2 iff |a-p| < |b-p| iff A has the smaller expected squared error. So Soft routes to the
+child with the smaller Brier score, and it picks the wrong child for log-loss on every x with p(W|x) between (a+b)/2 and
+p*(a, b). COUNTEREXAMPLE: p(W) = 0.85, q_A(W) = 0.99, q_B(W) = 0.6: midpoint 0.795 < 0.85 < p* = 0.8805, so Soft picks A,
+L_A = 0.699 > L_B = 0.572. SIMULATION (sim_targets.py, 20,000 random triples per setting): with two outcomes and two
+children Soft agrees with the Brier-optimal child 100% of the time and with the log-loss-optimal child 97.6%; Best agrees
+80.9%. With three outcomes and two children: Soft wrong 4.0%, Best 21.5%. With three outcomes and three children: Soft wrong
+19.1% (mean regret 0.040 nats), Best 33.4% (0.110 nats); with peaked distributions (Dirichlet 0.3) Soft 16.9% (0.131), Best
+26.1% (0.246). Implication: Soft is the less wrong of the two, and it is Brier-consistent for binary outcomes, which is why
+it looked reasonable; with three outcomes and three children it still errs on a fifth of positions. Also: Soft uses the
+posterior responsibilities of a uniform-prior mixture, HME's E-step without the gate prior (section 6.1).
+
+1.4 THEOREM (every error router is an evaluator in disguise). For two distinct predictive distributions q_A != q_B the set
+S_A = {y : q_A(y) > q_B(y)} is non-empty and proper (both sum to one), so the Best label depends on y, and the router's
+Bayes target is t_A(x) = p(S_A | x), an outcome probability. With error winner the Best label is the child with the larger
+q(winner)/q(decisive), so for a white-leaning A the target is P(white wins | x, decisive): the router is trained to be a
+win predictor. With the consistent targets of 1.6 the target is sign of sum_y p(y|x) ln(q_A(y)/q_B(y)), still a functional
+of p(.|x), but one whose magnitude is large only where one child is much better (region of competence), so the weighted
+examples spend the router's capacity where routing matters. Implication: when children differ by a direction of
+disagreement (one leans white), as near-copies do, the router must learn who is winning to route well, and it is a weaker
+evaluator (NB over 70 squares) than the LR leaves it routes. Routing adds skill only when children differ by region of
+competence. Testable prediction: in error-routed trees the leaf identity predicts the outcome (P(outcome | leaf) differs
+across leaves well beyond the base rates). This is cheap to check with the routing-health tool.
+
+1.5 THEOREM (Balanced is inconsistent even where Best is consistent). Balanced weights each step by 1/(B pbar_best), so the
+router learns t_k(x)/pbar_k (renormalised) and routes by lift. Take the symmetric pair of 1.2 (Best consistent), with child A
+best on 60% of positions overall (pbar_A = 0.6). At an x with t = (0.55, 0.45), Best picks A (correct); lift is 0.917 for A
+and 1.125 for B, so Balanced picks B. Balanced is a coverage device that pays in expected loss; it also depends on the
+node's history through the EMA, so its target is not a function of x.
+
+1.6 THEOREM (consistent targets).
+(a) B = 2, pairwise gap: label argmin, weight |l_1(y) - l_2(y)|. The expected class mass of A at x is E[(l_B - l_A)^+] and of B
+    is E[(l_A - l_B)^+]; A's exceeds B's iff E[l_B - l_A] > 0 iff L_A < L_B. Consistent. This is the classic cost-sensitive
+    binary reduction (Zadrozny, Langford and Abe 2003) and TAO's subproblem.
+(b) Any B, fractional class labels: give class k the count or weight w_k(y) = M - l_k(y), M an upper bound on the loss. The
+    expected class-k mass is M - L_k(x), so the argmax of the expected mass is argmin_k L_k(x). With error abs, M = 1 and
+    w_k(y) = q_k(y): Soft without its per-example normalisation (the normalisation 1/sum_j q_j(y) is what breaks Soft). With
+    error log the loss is unbounded; clip at M, which keeps consistency wherever the clipped and unclipped expected losses
+    order alike (at M = 4, q below e^-4 = 0.018 is clipped). SIMULATION: 0% wrong in sim_targets.py by construction; in
+    sim_dynamics.py section A (B = 3) and sim_extra.py section 2 (B = 2) its loss is comparable with Best's (better in two seeds of three at B = 3, worse in one) with less routing by outcome (3.2).
+(c) Weighted all-pairs (Beygelzimer, Dani, Hayes, Langford and Zadrozny 2005): B(B-1)/2 binary routers, each by (a); vote.
+    Since the pairwise relation comes from the scalar L_k there is no cycle in the population; with learned routers a cycle
+    is possible and should be broken by the summed weights. 0% wrong in sim_targets.py.
+What each costs. NB router: (a) is one train_weighted call; (b) is B weighted one-hot calls, or one call with label w/sum(w)
+and weight sum(w) (counts are linear, so these are identical); (c) is three CNBPs. LR router: (a) is one AdaGrad step scaled by
+the gap, as the Balanced code already does; (b) must be ONE weighted step on the normalised label w/sum(w) with weight sum(w)
+(gradient sum(w) p - w). B separate weighted one-hot steps are wrong with AdaGrad: the per-step gradients are large and
+cancel only in their sum, so the accumulators grow B-fold on noise and the router freezes at its first examples (SIMULATION:
+sim_dynamics.py section B, "mloss lr", stuck at 0/100 for 10-30k examples; sim_extra.py section 2 with the one-step version:
+50/50 and a loss at or below Best's). All of these are negligible against the leaves' cost.
+Caveat for every target: consistency is a statement about the Bayes-optimal response. An NB router is consistent only under
+its independence assumption, and an LR router only if the optimal routing is linear in the one-hot squares. The point of
+1.2-1.5 is that Best, Soft and Balanced are wrong even for an oracle router.
+
+1.7 COUNTEREXAMPLE (the obvious B = 3 shortcut is worse than Best). Label argmin, weight = runner-up gap (second smallest
+loss minus smallest). The class-k mass is E[(min_{j != k} l_j - l_k)^+], not a monotone function of L_k. SIMULATION: wrong
+35.2% of the time with mean regret 0.180 nats, against Best's 33.4% and 0.110 (sim_targets.py, "gap"). Do not use it.
+
+1.8 THEOREM (regret weights that depend on the router's own pick have no fixed point). Weight w = l_pick(y) - min_k l_k(y)
+with label argmin. When the pick is best, w = 0; otherwise the example says "go elsewhere". So at an x where both children
+are sometimes best, picking A yields mass only for B and picking B only for A: the router oscillates. For a count router
+the counts balance at the tie, and the long-run share of A is
+    f_A = E[(l_B - l_A)^+] / E|l_A - l_B|,
+which is above 1/2 when A is better but never 1. SIMULATION (sim_extra.py section 3; p(W) = 0.7, A overconfident at
+q_A(W) = 0.97, B at 0.75, B better by 0.46 nats): Best sends 100% to A (wrong), the pairwise gap 0% (right), the
+pick-dependent weight 22.1% to A, against the formula's 22.06%. Implication: the addendum's phrasing "loss of the router's
+current pick minus min loss" must be read as TAO's pick-independent gap; the pick-dependent version is a stochastic
+time-sharing rule, inconsistent but non-starving. In the TAO batch setting the pick-dependent weight also fails: it drops
+the examples the current router handles well, so the new router is free to get them wrong.
+
+1.9 THEOREM (right after a split, every consistent target is silent). The copies made by a split are identical, so
+l_1 = l_2 = l_3 on every example: pairwise gaps are zero, M - l_k is the same for all k, and TAO drops the example. The router
+is not trained at all and keeps routing by ties, to the first child, until the children differ. They differ only once child
+1 has trained, so symmetry is broken by the data child 1 receives: child 2 (the untouched original) is then preferred only
+on positions where child 1 got WORSE by training elsewhere, and child 3 only where both 1 and 2 did. So with consistent
+targets a B-way split of copies uses its children one at a time and rarely all three (SIMULATION: sim_dynamics.py section A,
+"mloss", two of three seeds end with a starved leaf, and those are the runs with the best loss because the toy has two
+regimes). Best does something different: with copies and ties to the first child, child 1 trains, and from then on the
+frozen copies are "best" on a y-dependent set with probability about 1/2 per example, so children 2 and 3 get targets from
+outcome noise. That noise is the construction's only symmetry breaking, and it is also what makes routing by outcome
+(1.4). Implication: symmetry breaking must be explicit and label-free (section 9).
+
+
+2. FUNCTION PRESERVATION (question 2)
+
+2.1 THEOREM (leaf split, F = 1). The copies equal the leaf; the new router picks some child; every child predicts as the leaf
+did. No prediction changes, for any leaf kind. The new router's output: LR with zero weights is uniform, CNBP with no counts
+is uniform; argmax of a uniform vector is index 0, so the first child is picked everywhere until the router trains.
+
+2.2 COUNTEREXAMPLE (leaf split, F > 1, CNBP, alpha > 0). Dividing counts by F gives the factor (n_cfv/F + alpha)/(n_c/F +
+d_f alpha) = (n_cfv + F alpha)/(n_c + F d_f alpha): the same counts smoothed by F alpha. The posterior changes unless
+alpha = 0. Per feature, the log-odds between classes c and c' move by ln((n_cfv + F alpha)/(n_cfv + alpha)) minus the same
+for c', minus the normaliser terms. For a rare value (n_cfv = 2, n_c'fv = 20, alpha = 1, F = 10) that is ln 4 - ln(30/21) =
+1.03 nats from one square. So the "copies keep predicting the same" claim holds for F = 1 and fails for F > 1 on rare
+feature values and small classes (draws). For LR leaves, F divides only the AdaGrad sums: predictions are unchanged for any F,
+and the next steps are sqrt(F) larger. The same applies to router copies at a router split: CNBP copies with F > 1 predict
+differently from R at once (bddfix's C with F = 16 "parted at once" for this reason, not only through faster learning), LR
+copies do not.
+
+2.3 THEOREM (router split with home targets, F = 1). R' = R and R_i = R. For every x: R' picks i = argmax R(x), then R_i = R
+picks argmax R(x) = i, so the position reaches C_i as before. With routing targets (default) R' is fresh, picks child 1
+everywhere, and R_1 = R routes as before: also preserved, and degenerate. Path cells do not disturb this (2.4).
+
+2.4 THEOREM (neutral cells). LR: zero weights add zero to every logit. CNBP: a cell with no counts contributes
+(0 + alpha)(B+1)/(0 + (B+1) alpha) = 1.0 exactly in IEEE arithmetic (both products are alpha*(B+1) in some order), so no bit
+of any prediction changes. Confirmed in pathctx.rs: insert_cell adds zeros; cnbp_factors uses that formula.
+
+2.5 Holes in "and the targets are the pre-operation ones".
+(a) Leaf split: the children's errors are all equal, so Best's target is one-hot child 1 on every example (ties), and the
+    consistent targets are silent (1.9). The pre-split leaf had no target; the new router's targets are degenerate until the
+    children diverge.
+(b) Router split with home targets: R''s target is R's target (argmin over the base children's errors) and each copy's
+    target is the same. THEOREM: true at the moment of the split and ever after, because the home target never looks at the
+    copies. HOLE: R''s pick i delivers R_i(x), not C_i. R' is trained to answer "which base child is best" but its decision
+    sends the position to a sub-router that overrules the home child on 35-40% of positions (bddhome). So R' optimises a
+    counterfactual that is realised only where the copies agree with their home. In the population limit with consistent
+    targets, R' converges to argmin_i L_{C_i}(x), while the realised loss of picking i is L_{C_{R_i(x)}}(x); nothing ties
+    the two once the copies drift. With path cells the mismatch is sharper: home_errors_ctx scores C_j with cell value j
+    (through the home chain), while a position R' sends to copy i and R_i overrules to C_j reaches C_j with cell value i,
+    whose parameters R' never scores. A target that is both tie-free and realised: Best over the copies' subtrees (what
+    routing targets measure), ties broken in favour of the home pick of the base target when it is among the tied children,
+    else the first.
+(c) Router split with routing targets: identical copies, identical routing errors, ties to child 1 forever until child 1's
+    router drifts; then R' learns from the noise of "the trained copy vs the frozen copies", as in 1.9. This is the
+    pass-through degeneracy the user found.
+(d) Path cells, CNBP, right after the first example. A cell's factor for class c is (n_cv + alpha)(B+1)/(N_c + (B+1) alpha)
+    with N_c the class total since the cell started. For a leaf reached by one route only (value v constant) n_cv = N_c and
+    the factor is (N_c + alpha)(B+1)/(N_c + (B+1) alpha), which depends on c while N_c is small: after 100 examples with class
+    counts (60, 30, 10) and alpha = 1, B = 3 the factors are 3.81, 3.65, 3.14, so the draw odds against W are shrunk by 21%.
+    It is a transient second copy of the class prior, decaying as 1/N_c, re-created at every split below (every new cell).
+    LR cells have no such term.
+
+2.6 COUNTEREXAMPLE (a CNBP path cell can hurt in the population; an LR cell cannot). The cell value is a deterministic function
+of the board through the routers, so conditional on the class it is dependent on the board features; NB multiplies it in as
+if independent. Let a router route by one square f (P(f = 1 | W) = 0.8, P(f = 1 | L) = 0.2, equal priors) into a leaf shared by
+both routes. The leaf's posterior odds from f alone are 4:1; with the cell, whose value is f + 1, they are 16:1. If the truth
+is 0.8 the leaf's log-loss on such positions rises from 0.500 to 0.612 nats. In general the cell squares the likelihood ratio
+of whatever the upstream routers route by. For LR, THEOREM: the leaf with cells is the leaf's convex class plus extra
+one-hot inputs, a nested class, so the population optimum is no worse than without cells, and AdaGrad on the fixed-routing
+stream converges to it (section 5.4). Implication: path cells are safe for LR leaves and not for CNBP leaves; a CNBP cell
+behaves like a random intercept only if the routing is independent of the board given the class, which it never is.
+
+
+3. LEAF-USAGE DYNAMICS (question 3)
+
+3.1 THEOREM (with consistent targets, starvation of a redundant leaf is the correct attractor). Two leaves of the same class
+estimate p(y|x) on the same region from a stationary stream. The leaf with more data has the lower expected loss (in
+expectation, at the AdaGrad-saturated or count-saturated regime where more data means lower variance), so a consistent
+router prefers it, so it gets more data: rich-get-richer, with the starved leaf frozen (it predicts and is scored but does
+not train) at a constant loss while the fed leaf's loss falls. "All leaves used" is stable only where regions exist on
+which separate leaves beat one shared leaf by more than the variance cost of splitting the data. That is a property of the
+data, not of the target: one leaf is the right answer for one region. Balanced forces usage at a loss cost (1.5).
+
+3.2 THEOREM (with Best, the attractor is decided by the direction of the initial perturbation, not by quality). Two copies
+diverge by a small perturbation; one becomes W-leaning at x. By 1.2, Best routes x to the W-leaning leaf iff p(W|x) > 1/2,
+whatever the magnitudes. The W-leaning leaf then trains on W-favoured positions, which raises its W base rate: the lean is
+self-reinforcing, and the stable partition is the winning-side partition, with the router a win predictor and the leaves
+outcome specialists. A leaf can starve while being the better one in expectation (1.2's numbers: the calibrated child gets
+nothing). SIMULATION (sim_dynamics.py section A, three LR copies, NB router, toy with two true regimes): with Best the mutual
+information between the trained leaf and the outcome on the stream was 0.36, 0.13, 0.05 nats across seeds, against 0.04,
+0.10, 0.01 for Soft and 0.09, 0.10, 0.02 for the fractional-label target; MI with the regime (the useful partition) was
+0.56, 0.50, 0.26 for Best and 0.19-0.63 for the others. A leaf starved in one seed of three under Best and in two of three
+under the consistent targets, where it coincided with the best loss (two regimes, two leaves).
+
+3.3 THEOREM (a starved leaf does not recover on a stationary stream). Its loss is constant; the fed leaves' losses are
+non-increasing in expectation; so its "best" probability at every x is non-increasing, and a consistent router's estimate of
+it converges below the fed leaf's. Under Best the same holds unless the fed leaf drifts to lean the other way. Recovery
+routes: (i) the data drifts against the fed leaves and the frozen leaf happens to sit on the right side (transient: the fed
+leaves track the drift, the frozen one does not); (ii) the fed leaf is split and its copies forget (F > 1) or are reset; (iii)
+Balanced or any pick-dependent scheme (1.8) time-shares. With NB routers the starved child's class also loses its prior as
+the others' counts grow, and its feature statistics freeze, so its posterior decays like alpha/N. Path cells and home targets
+do not touch leaf usage: cells change what a leaf predicts per route, home targets change what routers learn.
+
+3.4 SIMULATION (what forgetting and the router kind do in the toy; sim_dynamics.py sections B, D, E). F = 10 on LR copies
+(AdaGrad sums divided by 10) gave slightly lower loss than F = 1 at every checkpoint with the same starvation pattern: the
+copies part faster. With B = 2 the consistent pairwise target with an LR router found the true two-regime partition in two
+seeds of three (shares 50/50, MI with the regime 0.64 = nearly ln 2) and had the lowest loss of all variants; with an NB
+router it kept both leaves in every seed. Routers trained on targets independent of x collapse to the most frequent target
+class with both LR and NB routers (100/0/0 in every seed): an NB router does NOT produce an arbitrary x-dependent partition
+from noise targets once its counts are large (I had conjectured it would; the simulation refutes it). So "LR routers collapse,
+NB routers stay healthier" is not explained by their response to noise targets; the remaining candidates are the NB
+posterior's extreme confidence at the boundary (a hard partition that moves slowly with counts, F = 1) against LR's bias
+terms following the marginal, and the leak of 4.1, which is larger for an LR router early. CONJECTURE, untested.
+
+3.5 CONJECTURE (the size of the split cost on equal data). For a well-specified LR leaf with d free parameters the excess
+log-loss after n examples is about d/(2n) nats (classical asymptotics). Splitting its data B ways by an uninformative router
+raises this to B d/(2n). The gain from a genuine partition is a constant g nats. The split pays off once n > (B-1) d/(2g).
+With d around 2,700 (70 squares times 13 values times 3 classes, minus redundancy), B = 3 and g = 0.003 nats (the size of
+every measured routing effect), n* is about 900,000 positions per leaf, or 2-3M positions in all: the order of the 80-cycle
+recovery the league shows. Non-stationarity adds to it (5.6).
+
+
+4. TRAINING ROUTING LEAKS THE LABEL (addendum C)
+
+4.1 THEOREM (the leak exists and has one sign). train_router_on updates the router on the target one-hot(argmin_k l_k(y)) and
+routes by the updated router. A one-step update moves the router's output towards that child, so if the pick changes it
+changes TO the child that was best on the realised outcome (an LR step on a one-hot target raises exactly that logit relative
+to the others; a CNBP count raises exactly that class's posterior at x). So, compared with routing by the pre-update pick,
+the child a position trains on has, in expectation, a lower loss on that very outcome: each leaf's training stream is
+selected towards the outcomes it already favours, which is the self-reinforcement of 3.2 by another route.
+
+4.2 SIMULATION (size). sim_extra.py section 1, three LR copies, Best: the pick flipped on 0.07-0.24% of examples overall and on
+1-3% of a router's first 2,000 examples; the routed child's loss on its own training example fell by 0.0000-0.0005 nats.
+In chess terms: a CNBP router with counts of order 10^5 changes its log-odds at x by about sum_f 1/n_cfv per example, 10^-3
+or less, so only positions within that margin of a tie flip; an LR router with AdaGrad sums of order 10^5 moves each used
+weight by 0.05/300, about 0.01 in the logit over 71 weights. The leak is negligible for a mature router and total for a
+fresh one: an LR router with zero weights routes its first example by that example's label (the first AdaGrad step on a
+fresh coordinate is a full step of size rate regardless of the gradient's size). Since new routers are created at every leaf
+split with copies that tie, the first examples route by ties anyway; the leak bites in the window after the copies first
+differ and before the router has history. Implication: route by the pre-update pick (one line: compute route before
+train); it costs nothing and removes a bias whose direction is always the bad one. Expect no measurable change in mature
+trees, a small one in the window after a split.
+
+
+5. DRIFT, DESCENT AND THE FUNCTION CLASS (question 4, addenda B and D)
+
+5.1 THEOREM (descent with exact alternating steps). Fix a dataset. Alternate: (i) refit each leaf on the examples routed to it
+(exact minimisation within its class); (ii) replace each router by one that does not increase the cost-sensitive loss of 1.1
+on the examples reaching it (exact minimisation, or keep the old router when the new one is worse). Then the routed loss
+sum_i l_{leaf(x_i)}(y_i) is non-increasing. Proof: (i) decreases each leaf's own sum with the assignment fixed; (ii) with the
+leaves fixed the routed loss at the node equals sum_i min_k l_ik + sum_i c_i,h(x_i) by 1.1, and the first sum is constant.
+This is TAO's monotonicity and the classification-EM of Celeux and Govaert (1992) with a classifier-constrained E-step.
+Where the construction departs:
+(a) Best, Soft and Balanced are not steps on the cost-sensitive loss (section 1): step (ii) can raise the routed loss, so no
+    descent, even with exact steps. The pairwise gap (B = 2) or fractional labels fix this at the population level; online
+    they are stochastic steps on a calibrated surrogate (weighted log-loss) of the cost-sensitive 0-1 loss, which bounds the
+    router's regret but gives no monotonicity.
+(b) The leaf update IS an unbiased stochastic gradient of the global objective J(h, theta) = E[l_{theta_h(x)}(x, y)] with
+    respect to the routed leaf's parameters, for fixed routing: J = sum_k E[1{h(x) = k} l_k], and the routed leaf's gradient on
+    its example is a sample of the k-th term. So the leaves do SGD on J.
+(c) The routers cannot do SGD on J: J is piecewise constant in a hard router's decisions (zero gradient almost everywhere),
+    hence the surrogate, hence (a).
+(d) One pass: "refit" is one step per example; with routing fixed each leaf's objective is convex (LR) and AdaGrad's regret
+    bound applies; with the routers moving, each leaf's stream is non-stationary and the bound applies per epoch of constant
+    routing. The time-scale separation that makes this benign in practice is real here: NB routers with F = 1 move at rate
+    1/n, LR leaves at rate 1/sqrt(n); routers are the slow variables, leaves track them. Fixed points of the coupled system are
+    CEM fixed points; nothing says they are reached or good.
+(e) Self-play: the distribution of (x, y) depends on the model (and the league), so J moves with the model; there is no
+    objective to descend, only a game. Whatever is proved above is for a fixed distribution.
+(f) Non-stationary children: when a copy or a shared leaf changes, every router's target changes; TAO handles this by
+    sweeping depths in order; online there is no order.
+
+5.2 THEOREM (what the DAG with home targets computes). Every router in a chain under a base set of children C_1..C_B learns the
+same target (argmin over the C's), and a position descends R' -> R_i -> R_ij -> ... -> C_k with k the last router's pick.
+So the DAG with home splits is a BDT over the SAME leaves whose router is a depth-k tree of NB (or LR) classifiers into B
+classes: router splits grow the gate, leaf splits grow the experts. Its gain over the tree is bounded by the routing headroom
+on those leaves, which the user measured at about 0.001-0.003 nats. A chain of identical-class routers that are all
+consistent for the same target would converge to the same function restricted to their regions; the gain exists only because
+piecewise-NB is richer than NB (an NB router cannot carve what a tree of NB routers can).
+
+5.3 THEOREM (function class with path cells). A node reached through sibling sets S_1..S_m with member numbers v_1..v_m
+(0 if skipped) predicts, for LR, softmax(W x + sum_j b_{j, v_j}): the slopes (the piece-square table) are shared across all
+routes into the node, and each route gets an intercept that is ADDITIVE over the sets, not a free intercept per route (a
+chain of m sets has up to B^m routes but m (B+1) 3 cell parameters). This is a fixed-effects (per-route intercept) model,
+and equals a tree with one copy of the leaf per route, copies sharing their slopes. For CNBP it is the same in log space with
+ln P(v_j | c) as the intercepts, learned generatively, with the double counting of 2.6. Relative to a plain tree with the
+same leaves it is strictly more expressive, by 3 numbers per (set, value); relative to a residual network it shares only
+zero-initialised growth and conditional computation: nothing flows down the path but log_2(B) bits per level, and each
+"layer" contributes a constant per class, not a function of a representation. The addendum's additive nodes (5.4) are the
+natural generalisation, Daume's augmentation per level.
+
+5.4 ADDITIVE RESIDUAL NODES (addendum B). Model: every node n holds a weight table delta_n (per feature value and class, plus
+a bias), zero at creation; the prediction for a position with path pi(x) is softmax(sum_{n in pi(x)} delta_n . phi(x)); every
+node on the path takes the same gradient (p - y) phi(x).
+(i) THEOREM: with the routing fixed the loss is convex in all node weights jointly. For a fixed path the logit is linear in the
+    concatenation of the path's tables (the feature map is phi(x) tensor one-hot(path)), and log-sum-exp of linear functions
+    is convex; a sum over examples stays convex. Not strictly convex: adding v to a node and subtracting it from every node
+    below leaves the function unchanged, so the minimiser is a set; harmless.
+(ii) THEOREM: a new zero node adds zero to every logit, so no prediction changes; and the grown class contains the old one
+    (set the new table to zero), so the minimum of the training loss cannot rise. The online TRAJECTORY can rise: a fresh
+    table's first AdaGrad steps are full-size (rate times the sign of the gradient), so the new node is the fastest-moving
+    parameter in the model and injects noise for a while.
+(iii) THEOREM (AdaGrad regret from the moment of growth): diagonal AdaGrad's bound (Duchi, Hazan and Singer 2011) is a sum of
+    per-coordinate terms, each depending only on that coordinate's own gradient history, for a convex objective. With routing
+    fixed from time T0 the grown objective is convex (i), so for any fixed comparator theta* in the grown space the regret
+    from T0 is bounded by (D^2/(2 eta) + eta) sum_i ||g_{T0:T, i}|| plus a constant from the old coordinates' pre-T0
+    accumulators (which only shrink their steps). It fails as soon as the routers move (the objective changes) and it bounds
+    regret, not tracking speed. D is the sup-norm distance to the comparator, assumed bounded as usual.
+(iv) THEOREM (tracking a common drift; the addendum's hypothesis). Let a drift require every leaf's bias to move by delta.
+    With copies, each copy sees 1/B of the stream; in the AdaGrad-saturated regime (accumulator G0 much larger than the new
+    squared gradients) a coordinate moves per example by about rate g / sqrt(G0), so after T examples of the whole stream a
+    copy has moved about rate delta' T / (B sqrt(G0)) and a shared root about rate delta' T / sqrt(G0): B times faster per
+    unit time. In the fresh regime the movement is rate sqrt(T/B) against rate sqrt(T): sqrt(B) faster. Forgetting at the
+    split (F) buys the copies sqrt(F) in step size, once, at the cost of 2.2 for CNBP and of noise for LR. SIMULATION
+    (sim_dynamics.py section F; the common class biases shifted by +1.5/-1.5 at 30k): the copy tree was WORSE than the flat
+    control for 3,000-6,000 examples after the drift (+0.022 to +0.057 nats at +1k) and recovered by +10k; the additive model
+    stayed 0.06-0.15 nats BELOW the control throughout, and was already below the copies before the drift (-0.042/-0.085/
+    -0.038 against -0.028/-0.056/-0.016). So in the toy the hypothesis holds in both regimes. Whether self-play drift is
+    "common" enough for this to be the 70-150 Elo is a CONJECTURE; the mechanism and its B-fold size are proved.
+(v) Relations. Daume (2007, "frustratingly easy domain adaptation") augments phi(x) to (phi(x), phi(x) 1{domain = k}): a
+    shared weight plus a per-domain weight, exactly a depth-1 additive tree whose domains are the router's regions; Finkel and
+    Manning (2009) give the hierarchical-prior reading and the multi-level (tree) version, which is the additive node model
+    with each delta shrunk towards zero. The user's path cells are the intercept-only special case (the delta has a bias row
+    only). Logistic Model Trees (Landwehr, Hall and Frank 2005) fit a child's LR by continuing LogitBoost from the parent's
+    LR on the child's data: child = parent + a stagewise delta, parent frozen. Boosting and cascade-correlation (Fahlman and
+    Lebiere 1990) likewise fit each new term to the current residual gradient and then freeze it. The additive node model is
+    the jointly trained version of all three; the joint version is the one that tracks drift through the shared part (iv),
+    the frozen versions are what copy-on-split with saturated AdaGrad effectively is.
+(vi) Cost and a caveat. Parameters: one table per node instead of one per leaf, so a chain of routers above a leaf adds a
+    table per router. Every node on the path trains on every example that passes, so the root trains on everything: the
+    root's AdaGrad accumulator grows B times faster than a leaf's and its steps shrink accordingly; in the saturated regime
+    that is still a net B-fold advantage in movement (iv). The routers still route by argmax of their own classifiers, trained
+    on the same (inconsistent or consistent) targets as now; the additive structure changes the experts, not the gate.
+
+5.5 THEOREM (growth that provably does not hurt, and where it breaks). In the population limit with consistent targets and
+exact refits: (a) a home router split does not raise the routed loss, because R' = R and each copy, refit within R's class
+on its region, is no worse than R there; (b) an LR path cell does not raise the loss (nested convex class, 2.6); (c) an
+additive node does not (5.4 ii). With finite data: (a) each copy sees 1/B of R's stream, so its variance rises; with F = 1 and
+NB counts the old counts dominate for a long time and the copies barely move (bddstudy: 94-97% agreement), which is why the
+split neither helps nor hurts; (b) and (c) add fresh fast-moving coordinates whose transient noise is real. With Best targets
+none of (a)-(c) is guaranteed: the refit copy can route worse than R on its region (1.2). Under realizability (the optimal
+router in the class) consistent targets recover it; copies cannot do better than a correct R, so router splits are useful
+only when R's class is too small, which is the piecewise argument of 5.2.
+
+5.6 What "drift to fill gaps" can mean, precisely. (a) For LR leaves with cells and fixed routing: the intercepts converge to
+the per-route residual bias of the shared slopes; guaranteed, convex, and worth zero where the routes do not differ in base
+rate (THEOREM via 2.6). (b) For routers with home targets: each copy converges to the consistent routing on its region if the
+target is consistent; with Best it converges to the win predictor restricted to its region (1.4). (c) Nothing makes the
+routers carve regions where (a) has anything to fill; the gaps are wherever the routers' partition happens to put them.
+(d) The residual-layer intuition is right about one thing: zero-initialised additive growth with joint training is the only
+one of the construction's operations with a monotone guarantee (5.4 ii), and it is the one the construction does not do.
+
+
+6. RELATIONS TO THE LITERATURE (addendum, briefly)
+
+6.1 HME trained by EM (Jordan and Jacobs 1994): soft gate g_k(x), E-step responsibilities h_k = g_k q_k(y) / sum_j g_j q_j(y),
+M-step fits the gate to h and each expert to its h-weighted data; EM ascends the mixture log-likelihood. Soft here is h with a
+uniform g (the gate's own prior dropped), the experts train hard (only the routed one), and prediction is hard. So it is not EM
+for any likelihood: not the mixture's (prediction is hard) and not the classification likelihood (the gate target is not the
+hard assignment). Classification EM (Celeux and Govaert 1992) with a classifier-constrained E-step is the right reference, and
+its monotone version is 5.1.
+6.2 Net2Net (Chen, Goodfellow and Shlens 2016): a leaf split is Net2Wider on the expert set (duplicate, no halving needed since
+selection is hard); a home-target router split is Net2Deeper (insert a layer that initially reproduces the parent's decision,
+2.3). Net2Net breaks symmetry with explicit noise on the duplicated weights. The construction has no explicit breaking; it
+relies on ties-to-first and on Best's outcome noise (1.9).
+6.3 Splitting steepest descent (Liu, Wang, Liu and Lin 2019) splits a neuron into copies with opposite offsets when the loss is
+stationary; both copies see the same inputs, so the first-order term cancels and the gain is second-order (the splitting
+matrix's most negative eigenvalue). THEOREM (first-order gain of a routed split): split leaf theta into theta + d on region A
+and theta - d on region B (a partition realisable by the router class). The loss changes by d . (G_A - G_B) + O(|d|^2) with
+G_A = sum_{i in A} grad l_i(theta). At a stationary leaf G_A = -G_B, so the change is 2 d . G_A and the best direction gives
+-2 |d| |G_A|: a first-order gain whenever the gradient restricted to some realisable region does not vanish. So the
+principled split criterion here is first-order and cheap: the norm of the leaf's mean gradient over a candidate region (for
+instance per feature value: a d x 3 running table), which is zero for a leaf that is optimal on every sub-region and large
+where a partition would help. The current trigger (window error stopped falling) measures stalling, which every leaf does as
+d/(2n) flattens, not heterogeneity; that is why it fires on every leaf and router eventually (bddfix's finding).
+6.4 Cascade-correlation: 5.4 (v).
+
+
+7. OTHER THINGS FOUND WRONG OR FRAGILE (question 5)
+
+7.1 Ties go to the first child at every level (argmin and argmax). With identical copies ties are the rule right after every
+split, so the first child is privileged systematically: it is the one that trains first and, under consistent targets, the
+one that stays (1.9). A random or hash-based tie-break removes a bias that costs nothing to remove.
+7.2 The split trigger confounds "the leaf stalled" with "the router changed what the leaf sees". A leaf's window error rises
+when a router upstream starts sending it harder positions; the Worse rule with margin 0 reads that as a stall. For routers
+the user already found the trigger fires on a rise that happens anyway. 6.3 gives a trigger that measures the right thing.
+7.3 error winner trains routers on decisive games only and applies them to all positions; drawn positions are routed by a
+router that has never been told anything about draws, and the leaves see draws through that routing. Harmless for routing
+accuracy on decisive games, but the routing partition is blind to drawishness by construction.
+7.4 error abs and error log give the same Best target for one-hot labels (argmin of 1 - q(y) is argmax q(y) is argmin
+-ln q(y)), so the error measure changes only windows and Soft (THEOREM, trivial). For partial labels they differ.
+7.5 The home target of 2.5 (b) and the counterfactual cell values with path context.
+7.6 With CNBP routers at F = 1 the copies' prior counts dominate for a long time; the sub-router R_i trains on the conditional
+"R' picked i", where the target is mostly i, so its class-i prior grows: a home bias that is correct for its region in the NB
+sense but makes the copies' overrules rare early, and then mostly noise-driven. The 35-40% overrules at round 60 are the
+copies' counts finally dominating the inherited ones.
+7.7 AdaGrad asymmetry: any new parameter (new router, cell, delta) moves at full rate while the old ones are nearly frozen by
+their accumulators. Every growth operation therefore injects fast noisy parameters next to slow ones; this is what makes
+growth "do something" and also what makes every split cost at first. Forgetting (F) is the only knob and it acts on the
+old parameters, in the wrong place for CNBP (2.2).
+7.8 Caching: node_output caches per step; with path context the cache is keyed by the cell values too (cache_values), so a
+node scored under several paths in one step is recomputed correctly. No bug found there. train_with_table takes the LR step
+and the cell step from the same p: a correct joint gradient step.
+
+
+8. WHAT THE SIMULATIONS DO NOT SHOW
+The toy has 6 binary features, 64 cells, 3 LR copies and short streams (20k before the split, 60k after), so its leaves are not
+AdaGrad-saturated as the league's are and its routers see far more data per cell than a chess router does. It shows
+mechanisms and signs, not sizes. Everything labelled THEOREM is independent of it.
+
+
+9. DESIGN IMPLICATIONS, RANKED BY HOW MUCH THEY MATTER
+1. The router targets are the wrong objective (1.2-1.5). Best picks the overconfident child 19-33% of the time at the
+   population level and turns the router into a win predictor (1.4), which is a weaker evaluator than the leaves. Use the
+   pairwise gap for B = 2 and fractional labels M - loss for B = 3 (1.6): one weighted step for either router kind, zero
+   extra cost. Prediction to check first on the live trees: P(outcome | leaf) differs across leaves (1.4).
+2. Consistent targets are silent at a split (1.9), so symmetry must be broken explicitly and label-free: route the first
+   window of a new router by a hash or by a cluster target (route_switch already does this for cluster routers), or train
+   copies on disjoint halves of the first window; or start copies with small noise, Net2Net style. Otherwise a consistent
+   target makes every split a no-op that uses one child.
+3. Splitting data is the cost; sharing the common part is the fix (5.4). The additive node model has the only monotone
+   guarantee in the construction, tracks common drift B times faster than copies, and is Daume's augmentation per level;
+   the user's path cells are its intercept-only case and are safe for LR, unsafe for CNBP (2.6). If one thing is built next,
+   it is additive deltas for LR leaves with routers unchanged, measured against copy-on-split on the same stream.
+4. Home targets make R' optimise a counterfactual (2.5 b). Use realised subtree errors with the home pick as tie-break; it
+   keeps the tie-freedom that motivated home targets.
+5. Function preservation holds for F = 1 and for LR under any F, and fails for CNBP with F > 1 by up to a nat on rare squares
+   (2.2); CNBP cells transiently double the class prior (2.5 d) and permanently double-count whatever the routers route by (2.6).
+6. Replace the stall trigger by the first-order gain of 6.3 (the norm of the leaf's mean gradient over a candidate region).
+   It is zero for identical copies and for a leaf optimal on every sub-region, which is the quantity a split should test.
+7. Route by the pre-update pick (4.1); break ties at random (7.1). Both free; both remove a bias with a known bad direction.
+8. Expectation management: the DAG with home splits is a tree with a deeper gate over the same leaves (5.2); its ceiling is
+   the routing headroom already measured as 0.001-0.003 nats. Leaf splits buy a constant gain g against a variance cost
+   (B-1) d/(2n), which with d near 2,700 and g near 0.003 breaks even at about a million positions per leaf (3.5).
+
+FILES. sim_targets.py (population check of the targets), sim_dynamics.py (copies, routers, leak, noise targets, forgetting,
+drift against additive nodes; output sim_dynamics.out), sim_extra.py (leak size, one-step fractional-label LR, pick-dependent
+regret; output sim_extra.out). CPU: about 3 minutes in all, nice 19, python3 -I, no numpy.

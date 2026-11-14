@@ -1,0 +1,110 @@
+Topic 1 (2026-11-07/08 night): leaf sharing (--leaf-share) on the T-L-Le recipe (LR error routers, no merges).
+
+Verdict: it works, as it did for T-L-Ne. It is a league candidate as T-L-Le-share-c against T-L-Le-c.
+- Offline, sharing 0.1 brings the LR-router error tree from clearly worse than flat LR to level with it.
+- Sharing 0.3 is better still offline.
+- In self-play it is not broken: the split's loss to its shadow shrinks by a quarter, seams by a quarter, and the
+  leaves agree more.
+
+Offline (run.sh -> run.out): offline-c15 benchmark as lrshare/run.sh (train on round-robins 80-83, 4 rounds, test on
+round 84), 100k split threshold, LR routers, --route error --error log, no merges, chessai-sparsefit.
+- Identity: le-100k-ref, retrained with chessai-sparsefit, has the same model file (md5) as offline-c15's le-100k
+  (chessai-cyc5-labels).
+- Calibrated log-loss, with 95% paired intervals over the 10 test parts:
+
+| model | log-loss (full test) | winner | leaves | leaf-pair log-odds diff | against le-100k | winner |
+|---|---|---|---|---|---|---|
+| le-100k (no sharing) | 0.6257 | 0.3341 | 9 | 0.50 | | |
+| le-s01 (share 0.1) | 0.6211 | 0.3295 | 9 | 0.29 | -0.0047 [-0.0071, -0.0024] | -0.0046 [-0.0069, -0.0023] |
+| le-s03 (share 0.3) | 0.6197 | 0.3288 | 11 | 0.15 | -0.0063 [-0.0086, -0.0040] | -0.0053 [-0.0074, -0.0031] |
+
+- le-s03 minus le-s01: -0.0016 [-0.0026, -0.0005]; winner -0.0007 [-0.0015, 0.0002].
+- Against flat LR (lr):
+  - le-100k is 0.0042 [0.0024, 0.0060] worse;
+  - le-s01 is level, -0.0005 [-0.0022, 0.0011];
+  - le-s03 is about 0.0021 better (le-s03 - le-100k minus le-100k - lr).
+- Against the share-0.1 trees with CNBP routers (lrshare):
+  - ne-s01: le-s01 is 0.0025 [-0.0007, 0.0056] worse (n.s.);
+  - nc-s01: le-s01 is 0.0043 [0.0018, 0.0069] worse.
+  - So nc-s01 is still the best tree on this benchmark.
+- CPU: 77 s user (training 23 s per sharing run against 14 s without).
+
+Self-play smoke (smoke/run.sh -> smoke/run.out)
+- Setup: lrshare/smoke's scaled-down recipe (500 games a round, 150k threshold, 20 rounds, seed 21, depth 0,
+  2 threads), LR routers, --revise inf (each window's branch-over-shadow gain logged, nothing merged). Identical runs
+  until the first split.
+
+| run | revisions | mean gain per example | positive windows | seams mean (median) | leaves at v20 | leaf-pair diff | CPU user-s |
+|---|---|---|---|---|---|---|---|
+| le-log (T-L-Le-c) | 29 | -0.00147 | 1 | 0.090 (0.087) | 11 | 0.58 | 63 |
+| le-s0.1-log | 30 | -0.00111 | 2 | 0.067 (0.064) | 9 | 0.23 | 89 |
+
+- Decisive games: 12.3% and 12.5%.
+- v vs v-1 arenas stay near 0 late in both runs.
+- The extra CPU is all training: 44.6 s against 23.6 s on 2 threads. Every example trains every leaf.
+
+League line (one factor from T-L-Le-c: --leaf-share 0.1):
+  T-L-Le-share-c | T-L-Le | models/from-scratch/bin/chessai-lrshare | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router lr --route error --error log --leaf-share 0.1 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+- Binary:
+  - chessai-lrshare, as T-L-Ne-share-c.
+  - chessai-sparsefit and chessai-eloss train identically and could be used instead.
+  - Older binaries panic on sharing with LR leaves.
+- Tournament binary: no change.
+- Cost: as T-L-Le-c's until it splits. After that, training grows with the leaves: about 1.4x in all at 9-11 leaves.
+- Optional second line: T-L-Le-share3-c, the same with --leaf-share 0.3. It is 0.0016 better offline still, and its
+  leaves are closer (0.15).
+
+T-L-Nc-share-c (being deployed): the line in lrshare/summary.txt is one factor from T-L-Nc-c (--leaf-share 0.1;
+chessai-lrshare, whose existing kinds are identical to chessai-cyc5's). Confirmed:
+  T-L-Nc-share-c | T-L-Nc | models/from-scratch/bin/chessai-lrshare | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route cluster --leaf-share 0.1 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+
+CPU: about 4 min (offline 1.3, smoke 2.5).
+
+Dose sweep (2026-11-07/08 night; dose.sh -> dose.out, parts-dose.csv): the same benchmark at shares 0.3, 0.5 and
+1.0, on chessai-sparsefit.
+- Verdict: every family has an interior optimum. Error routers like 0.3; cluster routers like 0.1.
+
+Calibrated log-loss, mean over the 10 test parts (flat LR 0.6116):
+
+| family | 0.1 | 0.3 | 0.5 | 1.0 |
+|---|---|---|---|---|
+| T-L-Ne (CNBP error routers) | 0.6086 | 0.6075 | 0.6087 | |
+| T-L-Nc (CNBP cluster routers) | 0.6067 | 0.6074 | 0.6086 | |
+| T-L-Le (LR error routers) | 0.6111 | 0.6095 | 0.6101 | 0.6116 |
+
+Paired, 95% intervals:
+- Ne: 0.3 - 0.1 is -0.0011 [-0.0024, 0.0003], winner -0.0008 [-0.0011, -0.0004]. 0.5 - 0.1 is 0.0001
+  [-0.0015, 0.0017].
+- Nc: 0.3 - 0.1 is 0.0006 [-0.0000, 0.0012]. 0.5 - 0.1 is 0.0019 [0.0009, 0.0028].
+- Le: 0.5 - 0.3 is 0.0006 [0.0002, 0.0009]. 1.0 - 0.3 is 0.0021 [0.0010, 0.0031].
+- At 1.0 every leaf is the flat LR, equal to lr on every part: the children start as copies and then train on the
+  same examples.
+- Against flat LR:
+  - nc-s01: -0.0049 [-0.0063, -0.0034];
+  - ne-s03: -0.0041 [-0.0051, -0.0030];
+  - le-s03: -0.0021 [-0.0031, -0.0010].
+- ne-s03 against nc-s01: 0.0008 [-0.0004, 0.0020], not significant. nc-s01 stays the best tree on this benchmark.
+- Leaf-pair disagreement falls with the dose:
+  - Ne: 0.167 at 0.3, 0.097 at 0.5;
+  - Nc: 0.166, 0.094;
+  - Le: 0.152, 0.090, 0.000.
+- Leaves: Ne 9, Nc 7, Le 9 (11 at 0.3).
+
+Reading:
+- Error routing makes leaves specialise harder, so they need more borrowed data.
+- Cluster leaves are broader already, and more sharing only pulls them towards the flat model.
+- Near the optimum the curve is flat (0.1 to 0.3 differ by about 0.001), so a per-leaf schedule could add little.
+
+Lines:
+- T-L-Le-share3-c (0.3) is now the recommended T-L-Le share line. If only one is deployed, take it over
+  T-L-Le-share-c (0.1).
+- Optional and low priority: T-L-Ne-share3-c, one factor from T-L-Ne-share-c (0.1 -> 0.3). Its offline gain is small,
+  -0.0011 log-loss (not significant) and -0.0008 winner.
+- T-L-Nc-share-c stays at 0.1.
+- Binary: chessai-sparsefit trains these identically to chessai-lrshare, and it is the tournament binary.
+  T-L-Le-share3-c | T-L-Le | models/from-scratch/bin/chessai-sparsefit | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router lr --route error --error log --leaf-share 0.3 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+  T-L-Ne-share3-c | T-L-Ne | models/from-scratch/bin/chessai-sparsefit | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --leaf-share 0.3 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+- Cost: as the share-0.1 lines. Training time does not depend on the dose: every leaf steps on every example either
+  way.
+
+CPU: 6 trainings, 157 user-s, plus evaluations, about 4 CPU-min.

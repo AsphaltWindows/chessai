@@ -1,0 +1,48 @@
+Tree balance and routing lock-in (2026-11-08 afternoon, coordinator; scripts in this directory)
+
+Method: a tree file's node counts grow only along the path each training position is routed down, so the count
+difference between two versions with the same delegators is the routing of the training in between (self-play rounds,
+plus the own step on league games when it is kept). leafshare.py (two versions), timeline.py (sampled history),
+perround.py and topleaf.py (version by version).
+
+1. Balance over cycle 30's self-play (balance-c30.txt): cluster trees fairly even (T-L-Nc-share-c 8.2 effective
+   leaves of 11, T-L-Nc-c 8.5); NB error trees lopsided (T-L-Ne-c 5.0, T-L-Ne-share-c 5.8, T-L-Ne-pre-c 6.1).
+
+2. LR ERROR ROUTERS LOCK IN (per round):
+   - T-L-Le-c v1441-1538: every self-play round sends 97-100% of its positions to ONE leaf. The leaf changes at the
+     cycle boundaries: L12 (cycle 25), L6, L12, L6, L6, L4, L4, L12 then L11 (cycle 32), L4. The own-step rounds
+     (league games) spread: effective leaves 3.2-5.0, top leaf 42-75%.
+   - T-L-Le-pre-c v1206-1256: the same (L6 at 100% for a whole cycle, L7 after the next own step).
+   - T-L-Ne-c v1691-1750 (NB routers): every round 4.5-5.5 effective leaves, top leaf 43-49%. Steady.
+   - T-L-Le-share3-c v331-357 (LR routers, leaf sharing 0.3): 4.2-8.5 effective leaves, top 19-54%. No lock-in.
+   - Long windows (timeline.py) average over cycles with different locked leaves, so they look spread
+     (T-L-Le-c 2-5.5 effective leaves); only the per-round view shows the lock-in.
+   Reading: an LR router is calibrated; when the position barely predicts which child will be best, its argmax is
+   the child most often best, for nearly every self-play position. The locked leaf then gets all the self-play,
+   gets better on it, and stays the majority. An own step (league games, other positions) can shift the majority
+   to another leaf. NB routers are overconfident per position, so their argmax varies with the position and the
+   routing spreads (routercmp: on frozen leaves NB and LR route equally well; LR concentrates).
+   Consequences: in an LR-router tree only one leaf learns from each cycle's self-play; the others learn only from
+   the own step. That fits the Le trees' deficit (T-L-Le-c 1690 vs T-L-Ne-c 1800 champions) and why sharing
+   (share3 1796) closes it.
+   Idea: route by lift, argmax of log p(k|x) - log pbar(k) (pbar = the router's running mean prediction), to
+   remove the majority pull. One factor against T-L-Le-c.
+
+3. THE CELL DAG HAS COLLAPSED TOO (D-L-Nc-c; cells -> leaves over its history, sampled every 5 versions):
+   - Start (v21): cells -> leaves [1,2,3,1,2,3,1,2,3] (c mod 3).
+   - Re-pointing (dag_z 2, window 50k) fired from v56 on, nearly always towards leaf 3, with some flip-flopping
+     (cells 3 and 7 move between L1 and L3 many times). Latest (v1896): [3,2,3,3,3,3,1,3,3].
+   - Leaf 2 has had no positions since about v96 (4.5M total, unchanged to v1896). Leaf 1 has grown 1.9M since v1561.
+     Leaf 3 grew 80.6M over the same stretch: about 98% of recent positions.
+   - So D-L-Nc-c now plays almost as flat LR, which fits its champion (1784) matching flat LR's (1784).
+   - (Correction: the earlier note that re-pointing "never fired" was wrong for the live lineage.)
+   Same pull as the LR error routers: the leaf with the most data predicts every cell best, so the cells re-point to
+   it and it gets more data.
+
+4. Spread against strength (spread-vs-elo-c32.txt: median per-round effective leaves over cycle 32's self-play, and
+   each lineage's champion Elo in cycle 32's record). Among the LR-leaf trees that keep 9-11 leaves:
+   - The three that lock in (LR error routers without sharing, effective leaves 1.0-2.0) are the bottom three:
+     T-L-LLs-c 1647, T-L-Le-pre-c 1706, T-L-Le-c 1720.
+   - The spread ones (4.6-8.6 effective leaves) run from 1708 to 1811, with no clear order by spread:
+     T-L-Nc-share-c 8.2 / 1811, T-L-Le-share3-c 6.2 / 1797, T-L-Ne-c 5.0 / 1796, T-L-Nc-c 8.6 / 1771.
+   So lock-in goes with weak play; spreading is necessary but not sufficient.

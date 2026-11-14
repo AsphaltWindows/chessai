@@ -1,0 +1,125 @@
+bddhome: "home targets" for DAG (BDD) router splits. Built and checked offline overnight 2026-11-09/10. Nothing in
+the league was created, launched or changed.
+
+THE OPTION: --subrouter-target home (BDD with error routing; the default, routing, is unchanged)
+When a delegator R splits into R' over sub-routers R1-R3 (copies of R that all route among R's old children C1-C3):
+- R' keeps R's router instead of starting a new one. It goes on learning R's target: which of C1-C3 predicts best.
+- R''s class i sends the position to Ri. Ri's "home" is Ci.
+- The sub-routers train as before, as error routers over C1-C3, on the positions R' sends them.
+- Chains of splits work the same way. If R' splits again, or a sub-router splits, every router in the chain learns
+  the target over the children the chain's first router routed among.
+- With forget factor 1, nothing changes at the moment of the split. R' picks i where R picked Ci. Ri is a copy of R,
+  so it also picks Ci there.
+- R''s targets never depend on the sub-routers, so it can't tie between them.
+- Only training changes. Model files are as before, so chessai-hybrid4gfx loads and plays them.
+- State files record the option, and they resume only with it.
+- The option is refused with cluster routing or split trials. BDTs refuse it.
+
+BUILDS
+- bin/chessai-bddhome2 (md5 df2667b7), built from bddhome2-src. Use this one; the HAND recipe row points to it.
+  - It gives the same results as chessai-bddhome.
+  - It caches each router's home children per structure (bddhome2.patch, 117 lines).
+  - Its first 20 rounds of the mechanism run took 29 CPU s. The plain BDD took about 34.
+- bin/chessai-bddhome (md5 8dc8366b), built from bddhome-src: fastbin/hybrid4gfx-src plus the option (bddhome.patch;
+  329 changed lines, mostly tests).
+  - It is the first build, and the mechanism run below used it.
+  - It works out the home children afresh at every step, which walks the chains each time.
+  - Its 60-round run took 405 CPU s; the plain BDD took 101.
+  - It is kept because files in bin are never overwritten.
+
+CHECKS
+- Unit tests: 154 pass. The new ones check:
+  - routing is unchanged at a home split (CNBP and LR leaves);
+  - after a split, R''s router equals, step by step over 3,000 steps, a router trained on the shared children's
+    error target;
+  - splits of every kind work with home targets, the model file round-trips, and the cache gives what a fresh
+    computation gives;
+  - the default still starts R' afresh;
+  - home refuses cluster routing, and a BDT refuses home;
+  - the state round-trip test includes two home variants.
+- Identity without the option:
+  - chessai-bddhome trains D-L-Ne (bdd) and T-L-Ne (bdt) byte for byte as chessai-hybrid4gfx does. That covers
+    every model, the state, and train.log without times. The setup: threshold 100k, limit 10, bddstudy's first 8
+    rounds, seed 1. The comparison runs through the root's router split in round 4.
+  - chessai-bddhome2 does the same for D-L-Ne.
+  - chessai-hybrid4gfx in turn reproduces bddstudy's bdd-s1 and bdt-s1 checkpoints byte for byte. So the old controls
+    used below are same-code controls.
+- With the option:
+  - chessai-bddhome2's 20-round home run equals chessai-bddhome's (models and train.log), through all 10 splits.
+  - Resuming from a home state gives the same model and state with both binaries.
+- Play: the same tournament (one double round-robin, seed 7) played by chessai-hybrid4gfx and by chessai-bddhome gave
+  identical games.csv and game files. That held for plain models (12 games) and with two home-trained BDDs added
+  (20 games).
+- Resume: a home state resumes with the option. Without it, either binary refuses the state (options mismatch).
+
+MECHANISM CHECK (offline, seed 1). It checks the mechanism only and is not a strength claim.
+Setup: bddstudy's.
+- Data: offline-c15 RRs 80-83 in 60 rounds. Test set: RR 84 in 10 parts.
+- Recipe: LR leaves, CNBP error routers, --error log, branch 3, forget 1, threshold 100k, limit 10, plus
+  --subrouter-target home.
+- Controls, not retrained: bddstudy's bdd-s1 (the plain BDD), bdt-s1 and bdt4-s1, and bddregret's bdt3-s1.
+1. Splits. The trigger is unchanged, and so is the timing.
+   - Leaf splits came in rounds 2, 6, 7 and 10. Router splits came in rounds 4, 9, 11, 11, 14 and 15; the root split
+     4 times.
+   - The plain BDD's leaf splits came in the same rounds. Its router splits came in rounds 4, 9, 11, 13, 14 and 15;
+     the root split 3 times.
+   - Both ended with 9 leaves. The root ended as a chain of 5 routers.
+2. R' stays the old router.
+   - The root's class shares follow the unsplit BDT root's. Round 4: 39/42/19 (BDT 39/41/19). Round 8: 38/51/12
+     (BDT 36/48/16). Round 60: 38/48/14.
+   - The plain BDD's new root router drifted to 42/56/2 by round 8.
+3. The sub-routers drift away from their homes, because each sees only its own region.
+   - The root's sub-routers overruled their home on this share of positions: 4% (round 4), 10% (5), 14% (6),
+     22% (8), 29% (15), 40% (30) and 35% (60).
+   - The chain's newer levels started near 0-13% at round 15 and reached 35-47% by round 60.
+   - Sibling agreement fell from 95% (round 4) to 76% (round 8), with a median of 69% over the R' nodes at round 60.
+     The plain BDD went 96%, 80% and 68%.
+4. Early on, that re-routing hurt.
+   - Measure: R' minus its busiest sub-router alone, in routed regret per position at the node. Negative means R''s
+     choice helps.
+     - Home: 0.0016 [0.0006, 0.0027] at round 6 and 0.0014 [0.0005, 0.0023] at round 8.
+     - Plain: 0.0007 [-0.0003, 0.0016] and 0.0010 [0.0001, 0.0019].
+   - The tree's raw loss at round 6 was 0.0025 [0.0007, 0.0043] worse than the no-split BDT's. The plain BDD's was
+     0.0010 [-0.0010, 0.0030] worse.
+   - By round 60, the measure summed over all R' nodes is -0.0038 [-0.0073, -0.0004] per test position (plain
+     -0.0028 [-0.0052, -0.0005]).
+5. Held-out calibrated loss, as a sanity check. Home minus control, log-loss / winner log-loss, paired over the 10
+   parts:
+   - vs the plain BDD: round 20 -0.0004 [-0.0024, 0.0015] / 0.0003 [-0.0007, 0.0014]; round 40 -0.0014 [-0.0022,
+     -0.0006] / -0.0001 [-0.0013, 0.0011]; round 60 -0.0011 [-0.0024, 0.0002] / -0.0015 [-0.0029, -0.0002].
+   - vs BDT-4 (the same 9 leaves): round 20 -0.0031 [-0.0055, -0.0006] / 0.0005 [-0.0009, 0.0020]; round 40 -0.0007
+     [-0.0027, 0.0013] / 0.0005 [-0.0012, 0.0023]; round 60 -0.0013 [-0.0029, 0.0003] / 0.0001 [-0.0014, 0.0016].
+   - So it is level with the same-leaves BDT after round 20, and slightly ahead of the plain BDD at rounds 40-60. These
+     are differences of about 0.001 nats per position, from one seed.
+Reading: the option does what it was built for.
+- The split does no damage.
+- R' never falls onto one sub-router.
+- The sub-routers part because they see different positions.
+- Whether their re-routing helps play is a question for the league (the dag-home spec below). Offline, it cost a
+  little early on and was level or slightly better later.
+
+LEAGUE PREP (nothing created or launched)
+- leagues/make_recipes.py has a new HAND row, D-L-Ne-home: D-L-Ne plus --subrouter-target home, on chessai-bddhome2.
+  - leagues/recipes.txt was regenerated. Its diff against the previous file is just that row.
+  - leagues/FORMATS.md has a note on the row.
+- Spec draft: leagues/specs/batch3/5-dag-home.json, with F-L, T-L-Ne, D-L-Ne and D-L-Ne-home.
+  - Every tree has split limit 5 and threshold 1M.
+  - Local option, 300 cycles.
+  - make_config accepts it and writes nothing.
+  - Line ids: F-L.loc, T-L-Ne+split-limit=5+split-threshold=1000000.loc, D-L-Ne+split-limit=5+split-threshold=1000000.loc
+    and D-L-Ne-home+split-limit=5+split-threshold=1000000.loc.
+  - The two D lines differ only in --subrouter-target home and in the train binary (chessai-bddhome2).
+  - The tournament stays on chessai-hybrid4gfx; no override is needed.
+- Note: T-L-Ne's live recipe carries --reset-leaves inf. Those shadows only log, and the BDD refuses them.
+
+CPU: about 15 CPU-min. Builds and tests took about 5, the 60-round mechanism run about 7, stats and scoring about 2,
+and the identity, play and resume checks about 1.
+
+Files here:
+- run.sh: the arm.
+- stats.sh: bdd-stats at rounds 4, 5, 6, 8, 15, 30 and 60.
+- evalcal.sh: held-out scoring at rounds 20, 40 and 60.
+- analyze.py, which writes analysis.txt.
+- cal.csv, stats/ and m/home-s1/.
+- identity/: identity.sh, play.sh, the players files and their outputs.
+- bddhome.patch and bddhome2.patch.

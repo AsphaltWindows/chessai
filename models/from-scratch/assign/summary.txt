@@ -1,0 +1,102 @@
+Topic "assign" (2026-11-08): epsilon-random training assignment for error routers (--assign-epsilon E).
+
+Question (from eloss and leshare): error trees lose when the training router's pick narrows each leaf's data. The
+best-child target's noise and leaf sharing both keep the leaves broad. Does sending a random share of the examples
+to a random child do the same, and does it add anything to sharing?
+
+Verdict: negative as a league line. No lineage.
+- Offline it helps the unshared tree a little, about 40% of what sharing 0.3 does (E 0.2: -0.0027 [-0.0043,
+  -0.0011]). On top of sharing 0.3 it adds nothing at any E.
+- In play, the setting that passed offline (no sharing, E 0.2) is level with its comparator at equal data, pooled
+  over five version pairs: 9 (-2 to 20) at ply 1 and -17 (-41 to 7) at ply 2.
+- So it doesn't substitute for sharing, and there is nothing to add to T-L-Le-share3-c.
+
+Code: ../assign-src = ../sparsefit-src + assign.patch (assign-src/assign.patch).
+- DelegationParams::assign_epsilon. In Bdt::train_node, each delegator's router trains on the example as before;
+  then Graph::assigned_child sends the example, with probability E, to a child drawn uniformly (possibly the
+  router's own pick) instead of the router's pick. The error passed down is the error of the child that trains.
+  Both the scored path (error and cluster routing) and the unscored path draw.
+- The draw hashes the step count and the node index (splitmix64), so it uses no random state and is the same on
+  every run. The step count is in the state files, so resumed runs don't repeat draws. At E = 0 nothing is drawn.
+- Prediction, play and the model files are unchanged. State files record the option only when it is nonzero (the
+  params' Debug), so states without it are what they were.
+- CLI: --assign-epsilon E (0 to 1), --model bdt only (checked for train and self-play).
+- Four new unit tests: the examples spread evenly at E = 1 where the router sends more than 90% to one child at 0;
+  the draw moves an example with probability E (k - 1) / k and never at 0; the option is recorded only when used;
+  E must be a probability. 139 tests pass.
+
+Binary: ../bin/chessai-assign (md5 cbba11d5276945193ba29dd6a0a99ab9), a superset of chessai-sparsefit.
+- Identity at E = 0 against chessai-sparsefit (identity.sh -> identity.out), 0 non-log diff lines on each:
+  - probit/identity/run2.sh, 80 files;
+  - tanroute/identity/run.sh, 26 files;
+  - lrshare/identity/extra.sh, 25 files;
+  - eloss/identity/lrrouters.sh, 24 files (LR-router trees: train, self-play fresh and resumed, with and without
+    sharing; a switch tree).
+  - The logs differ only in timings.
+- On the benchmark itself, le-s03-e0 (--leaf-share 0.3 --assign-epsilon 0) has the same model file (md5 48261c69...)
+  as leshare's le-s03, so leshare's baselines are reused.
+
+Offline (offline.sh -> offline.out, parts.csv): offline-c15, as leshare/run.sh and eloss (train on round-robins
+80-83, 4 rounds, seed 1; test on round 84), 100k split threshold, LR routers, --route error --error log, no merges.
+Calibrated log-loss; paired 95% intervals over the 10 test parts (tanroute/parts). Negative: E better.
+
+T-L-Le's recipe (no sharing), against le-100k (0.6158 mean over parts):
+
+| E | log-loss (parts mean) | against le-100k | winner | leaf-pair diff | root regret (vs each position's best) |
+|---|---|---|---|---|---|
+| 0 (le-100k) | 0.6158 | | | 0.501 | 0.0028 (0.0713) |
+| 0.05 | 0.6141 | -0.0017 [-0.0031, -0.0003] | -0.0028 [-0.0044, -0.0013] | 0.448 | 0.0000 (0.0659) |
+| 0.1 | 0.6146 | -0.0012 [-0.0037, 0.0013] | -0.0039 [-0.0060, -0.0017] | 0.438 | 0.0005 (0.0593) |
+| 0.2 | 0.6131 | -0.0027 [-0.0043, -0.0011] | -0.0029 [-0.0052, -0.0007] | 0.418 | 0.0007 (0.0545) |
+
+T-L-Le-share3-c's recipe (--leaf-share 0.3), against le-s03 (0.6095):
+
+| E | log-loss (parts mean) | against le-s03 | winner | leaf-pair diff | root regret (vs each position's best) |
+|---|---|---|---|---|---|
+| 0 (le-s03) | 0.6095 | | | 0.152 | 0.0002 (0.0258) |
+| 0.05 | 0.6097 | 0.0001 [-0.0009, 0.0012] | -0.0001 [-0.0013, 0.0011] | 0.141 | 0.0007 (0.0253) |
+| 0.1 | 0.6100 | 0.0005 [-0.0006, 0.0016] | 0.0001 [-0.0011, 0.0014] | 0.141 | 0.0005 (0.0250) |
+| 0.2 | 0.6094 | -0.0002 [-0.0009, 0.0006] | -0.0002 [-0.0014, 0.0011] | 0.119 | 0.0004 (0.0202) |
+
+- Does epsilon substitute for sharing? No. Against the sharing trees:
+  - le-e20 - le-s03: 0.0036 [0.0014, 0.0058], winner 0.0023 [0.0005, 0.0041];
+  - le-e05 / le-e10 / le-e20 - le-s01: 0.0030 [0.0004, 0.0057] / 0.0035 [0.0013, 0.0057] / 0.0020 [-0.0002, 0.0043].
+  - Against flat LR (0.6116), le-e20 is 0.0015 [-0.0004, 0.0034] worse; le-s03 is 0.0021 [0.0010, 0.0031] better.
+- Leaves: 9 in every unshared tree; 11, 11 and 9 in the shared ones (le-s03: 11).
+- Reading:
+  - The direction supports the hypothesis: broader leaf data helps error trees. Leaf disagreement falls (0.50 to
+    0.42) and the root's routing regret against each group's best child falls from 0.0028 to 0.0000-0.0007, because
+    the children are more alike.
+  - But a random tenth or fifth of the examples is a weak way to broaden the leaves. Sharing gives every leaf a
+    weighted step on every example, and it cuts the disagreement to 0.15. Once the leaves share, the random
+    assignment's extra breadth is redundant (all level, intervals about 0.001 wide).
+  - The dose response is flat within the noise (0.05: 0.0017, 0.1: 0.0012, 0.2: 0.0027); about 0.001 per part is
+    the noise here.
+  - It doesn't touch what eloss found: that the router's pick also assigns the training data. Epsilon only dilutes
+    the assignment; the play router is the same router.
+
+Play check (arena.sh -> arena.out): only the setting that passed the bar (a gain of at least 0.002 with the
+interval excluding 0) was checked: T-L-Le's recipe with E 0.2. From scratch at equal data (E changes neither play nor
+training cost), with lrshare/smoke's scaled-down recipe as blendsp's b-hard: 500 games a round, 150k threshold,
+seed 21, depth 0, 2 threads.
+- Identity: chessai-assign at E 0 reproduces b-hard's v1-v3 model files (md5), so blendsp's b-hard is the E-0 arm
+  and its own games for v20-v24 are reused.
+- e20: 24 rounds at E 0.2, 78 user-s (b-hard: about 4.5 user-s a round, the same).
+- 600 own games at ply 1 per e20 version v20-v24 (league policy). Arenas of cal-own specs, e20 vk against b-hard vk
+  for k = 20..24 (seed k), league policy, chessai-sparsefit.
+
+| ply | games | e20 - b-hard, Elo (95%) | W / L / D | per pair |
+|---|---|---|---|---|
+| 1 | 2000 (5 x 400) | 9 (-2 to 20) | 526 / 473 / 1001 | -3, 44, 19, 8, -21 |
+| 2 | 600 (5 x 120) | -17 (-41 to 7) | 208 / 237 / 155 | 3, 3, -47, 3, -47 |
+
+- The self-play leaves are much closer: at v24 both trees have 11 leaves, with leaf-pair disagreement 0.418 (e20)
+  against 0.803 (b-hard) on the offline-c15 test round.
+- Reading: closer, broader leaves didn't make a stronger player. The offline gain (0.0027) is small, and the ply-2
+  result leans the other way. Sharing does the broadening better (0.0063 offline, and T-L-Le-share3-c leads the
+  T-L-Le lineages in the league). The play check doesn't support a line.
+
+Decision: no lineage (neither T-L-Le-eps-c nor T-L-Le-share3-eps-c). The flag stays in chessai-assign.
+
+CPU: offline.sh 183 user-s (its 7 trainings 146); identity.sh 25 user-s; arena.sh 173 user-s (e20 self-play 78,
+own games and arenas 95). About 6.4 CPU-min, builds (release and tests, about 2.5 min wall) excluded.

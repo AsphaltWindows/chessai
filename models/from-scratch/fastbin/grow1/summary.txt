@@ -1,0 +1,149 @@
+grow1: phase 1 of the growth rule (theory-2/growth-spec.md sections 0-1), the leaf rule --split-rule grow (2026-11-11)
+
+RESULT
+  Installed as models/from-scratch/bin/chessai-grow1, md5 5f134f9566c679eac1c9f53f2bfd8fd0 (cp -n; the build is
+  fastbin/grow1/cand/chessai-grow1). Source: fastbin/grow1-src, a copy of hybrid15-src (its pristine rebuild gave
+  hybrid15's md5 58717c38118eebc7e0748a67b8d98c88). Diff against hybrid15: fastbin/grow1/grow1.patch.
+  With no growth flags it is byte-identical to hybrid15 (and to hybrid6 for trees and flats) in training, model
+  files, state files, logs and play. The format of model files is unchanged; hybrid15 plays grow-trained models
+  identically. Exact resume holds. No league experiment was created or started.
+
+WHAT CHANGED (only consulted under --split-rule grow)
+  Flags: --split-rule grow; --grow-credit (D, default 5000000), --grow-credit-cap (C, 2), --grow-stall-z (2.0),
+    --grow-stall-windows (2), --grow-trial-z (2.0), --grow-mdl (1.0), --grow-subtree-share (0.9; phase 2, unused
+    by leaves), --grow-trials (2), --grow-warn-nodes (55).
+  The CLI refuses: --grow-* without grow; grow with a model other than bdt; grow with --split-z (nonzero),
+    --split-trial, --revise or --reset-leaves; grow without --trial-error log; --split-threshold < 20; credit < 1;
+    a negative mdl or invalid z/share values.
+  delegation.rs:
+    - Blocks: 20 blocks per window; the partial block is dropped.
+    - GrowStats per node: blocks, prev mean/se, prev model mean, streak, closes, back-off.
+    - GrowGraph: credits, next_credit_at, spent, refunded, trials_in_flight.
+    - mdl_bar.
+    - check_leaf_split under grow is the scheduling point (0.6): close, open, schedule.
+    - split_leaf under grow makes a trial with a shadow and blocks of split - shadow.
+    - end_trial: the verdict (1.3); an undo is today's undo, then a refund and back-off (0.8).
+    - end_step: credit accrual after every root example (0.5); called from Bdt::train.
+    - The log lines of 0.11; the node line and the warning of 0.9.
+    - The state fields of 1.5, written and read only under grow.
+  NodeModel::num_params (cnbp, lr, probit, tan).
+
+IDENTITY (no growth flags)
+  Training harness (train_idg1.txt): 14 configs x seeds 11 and 12 on the errdag fixed rounds.
+    - Configs: LR and probit; bdt, flat, bdd with and without path context; router-split z 0/5/30/inf;
+      split limit 4 and 8.
+    - Against hybrid15: 28 of 28 SAME (every model and state file, logs with times masked).
+    - Against hybrid6 (bdt, flat): 8 of 8 SAME.
+  5M stream (spec 1.6 a; id_p1.txt): P1 rounds 0-24 (~5.0M positions), the fields' T-P-Ne and T-L-Ne flags.
+    - SAME against hybrid15 and hybrid6 (26 files each, logs same).
+  Live states (live_train_idg1.txt): the 8 league cases from review-1111b/snap, each one round from its live state.
+    - Cases: DAG-L x2, DAG-P x2, T-L, T-P, the cluster trees.
+    - 16 of 16 SAME against hybrid15 and hybrid14.
+  Play (play_idg1.txt): play_id15's 161 jobs, at plies 1-3 and mixed, own calibration included.
+    - 161 of 161 SAME against hybrid15.
+  CPU: the harness reports show x2.0-2.4 against the old reference timings. That is machine load (the load average
+    was ~13), not the code. Interleaved A/B runs under the same load:
+    - training: p-bdt 5.48 vs 5.65 s, l-ctx 17.51 vs 17.12 s;
+    - play: d3 DAG 5.64 vs 5.67 s, d3 tree 2.85 vs 2.79 s.
+
+TESTS (unit-tests.log): 208 passed, 0 failed.
+  - All 196 of hybrid15's tests pass, by name.
+  - New, the spec's 1.6:
+    - b: window statistics from blocks, including a dropped partial block;
+    - c: stagnation streaks 0,0,0,1,2,3; a rise keeps it, a 3-se fall resets it;
+    - d: credits capped at 2, next at 6000; a spend then a refund restores 2;
+    - e: the schedule order is excess, then n, then index;
+    - f: the verdict at both sides of each bar, separately (mdl 0 / z 0);
+    - g: undo bookkeeping, back-off 1, 2, 4, eligibility;
+    - h: one split per scheduling point, trials <= T, made-on-trial excluded;
+    - i: one kept split per D on a stationary stream;
+    - j: a mid-trial model file loads in the old loader and plays; the state resumes the trial;
+    - a: the grow options are recorded only with the rule. The 5M-stream identity is the binary-level check above.
+  - New, beyond 1.6: two refusal tests; state_round_trip extended with grow variants (kept, undone).
+
+SMOKE (smoke/tpne-grow.summary, .log)
+  Run: T-P-Ne, the fields' flags with --split-rule grow --split-limit 1000000 --trial-error log, defaults
+    (D 5M, C 2, Z_S 2, K_S 2, Z_T 2, M 1, T 2). P1's 108 training rounds (21.6M positions), seed 7101.
+    Cost: 69 s CPU, 227 s wall, 55 MB.
+  Leaf curve (leaves in the model file; a split on trial counts, as in play):
+    v1-24: 1; v25-53: 3; v54-76: 5; v77-91: 7 (on trial); v92-98: 5; v99-108: 7 (on trial).
+  Credits: at 5M, 10M, 15M and 20M. Trial starts:
+    - root at 5.00M (v25): stagnant since its 3rd close at 3M; waited for the first credit.
+      Kept at 6.0M: gain 0.0592, block se 0.0022 (z 26.7); bars z 0.0044, mdl 0.0055 (k 4262, n 6.0M).
+    - leaf 3 at 10.69M (v54): kept at 12.24M: gain 0.0407, se 0.0025 (z 16.0); bars z 0.0051, mdl 0.0072 (n 4.56M).
+    - leaf 1 at 15.32M (v77): the hard leaf (mean error 0.97, excess 0.30).
+      UNDONE at 18.26M: gain 0.0022, se 0.00058 (z 3.8). It cleared the z bar 0.0012 but not mdl 0.0071.
+      Refund, back-off 1 window.
+    - leaf 4 at 19.66M (v99): level 2, a child of leaf 3; the only candidate (excess -0.24). Open at the end.
+  End state: 5 leaves kept, one trial open, 1 credit banked. Leaf 2 (a small share) never closed a window.
+  Checks:
+    - Every trial started on a leaf whose last close was stagnant and out of back-off. No split came before
+      stagnation; the root was stagnant 2M examples before its credit.
+    - Starts never exceeded credits earned (one per D) plus refunds. Consecutive starts were 5.69M, 4.63M and 4.34M
+      apart: a credit waits for the next scheduling point, and the last start used the credit refunded at 18.3M.
+      Kept splits: 6.0M and 12.2M.
+    - Every verdict agrees with both bars recomputed from the log.
+  Against the spec's section 3 prediction:
+    - Matches: root at ~5M (v25); 5-7 leaves kept by 21.6M with one trial open.
+    - Differs: "every level-1 trial passes on P1": 1 of 2 passed. Leaf 1's gain of 0.0022 also fails the spec's
+      ~0.004 bar.
+
+RESUME (spec 1.5, 1.6 j)
+  Unit test j and state_round_trip pass. CLI chain on real data (resume.txt):
+    - P1's first 30 rounds at W 200k, D 1M, in one process against 30 one-round processes chained by --start, as a
+      league line trains; process r's --seed makes its shuffle equal round r's.
+    - The chain saved states mid-window and mid-trial (trials spanned round ends).
+    - Results: 30 of 30 model files identical; the final state identical; all 75 growth log lines identical
+      (25 closes, 6 credits, 4 trial starts, 4 verdicts with 1 kept, 3 refunds with back-off 1 then 2).
+
+PLAYABILITY (play_grow.txt): 20 of 20 arenas SAME, hybrid15 against grow1. All game files and stdout match.
+  - Versions:
+    - v27: root split mid-trial;
+    - v80: mid-trial of the split later undone;
+    - v92: after the undo;
+    - v108: level-2 split mid-trial.
+  - Arenas: plies 1, 2 and 1-vs-2; plain bdt: and calibrated cal: specs; the own-calibration form.
+
+DEVIATIONS / CHOICES WHERE THE SPEC IS SILENT OR INCONSISTENT
+  1. Probit k: num_params = weights.len() + 1 = 853 (851 values + bias + the draw margin): one latent's posterior
+     means, not class_num x width as 0.7 lists for "Logreg / probit". LR is class_num x width. CNBP and TAN are
+     as 0.7 says.
+     A leaf split is k = 2 x 853 + 2556 (the CNBP router) = 4262, so bar_mdl = 0.0106 at n 3M and 0.0055 at 6M.
+     Section 3's "bar ~0.004 at n 3M" implies k ~ 1600 and is inconsistent with 0.7's own formula. --grow-mdl
+     rescales.
+  2. The n of the verdict is the split node's num_trained_total at the split plus the trial's examples, which is
+     n_v at judgement. The delegator's own counter restarts at the split (0.3).
+  3. The split node's restart (0.3) keeps closes, backoff_windows and eligible_after_close. Back-off after an undo
+     (0.8; test g: 1, 2, 4) needs them. Nodes made by a split start at zero.
+  4. Extra per-node state field prev_model_mean (the model's mean over the node's last closed window). The
+     excess of every candidate at a scheduling point uses its own last closed window.
+  5. BDD refused under grow. Phase 1 covers BDT; the spec also names BDD leaves. hybrid15 refuses split trials with
+     path context and with --router-split-limit (bdd.rs checked), and the fields' DAGs have both. Grow trials there
+     need new trial code (phase 2).
+  6. The node line's warning is printed with every node line while nodes >= 55 (after starts, keeps and undos),
+     not only at the crossing.
+  7. The first credit comes at N = D (next_credit_at starts at D). This fits test d's numbers and section 3's
+     "root split at ~5M".
+  8. A leaf's window closes at the check before its next example, as today, so closes log N = 1000001 and so on.
+  9. The made-on-trial exclusion cannot be reached in a BDT: the children see fewer than W examples within their
+     parent's W-example trial. It is kept as a safeguard and tested white-box.
+
+OBSERVATIONS FOR THE ANALYST
+  - "Exactly today's undo" sets the leaf's num_trained_total to the trial's examples (1M), although at forget
+    factor 1 the shadow keeps the leaf's whole posterior. A retry after an undo is judged at a smaller n, so its
+    MDL bar is higher. Leaf 1's retry, three windows after the undo, would be judged at n 5M (bar 0.0066)
+    instead of its lifetime 8.6M (bar 0.0040).
+  - With a single eligible leaf, the excess ordering does not matter: an easy leaf (excess -0.24) got the credit.
+    The trial decides.
+  - The block se of a trial's gain is ~7x the per-example se (0.0022 vs 0.00032 at the root), partly because the
+    gain grows over the trial.
+
+NOT VERIFIED
+  - Phase 2: the router rule and subtree stall. Under grow, subtree_share is parsed but unused.
+  - BDD leaves (see deviation 5).
+  - The >= 55-node warning path in a real run (the smoke reached 10 nodes).
+  - Runs on P2, D 2.5M, and the league test (section 4).
+
+FILES (fastbin/grow1): cand/, grow1.patch, unit-tests.log, build-pristine.log; train_idg1.py/.txt, id_p1.py/.txt,
+  live_train_idg1.py/.txt, play_idg1.py/.txt, timing.sh, timing/; smoke.py, smoke/; resume.py, resume/, resume.txt;
+  play_grow.py, play-grow/, play_grow.txt.

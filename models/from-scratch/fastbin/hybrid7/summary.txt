@@ -1,0 +1,129 @@
+HYBRID7: EXACT FASTER TOURNAMENT REPORTS (2026-11-10 ~08:45 to ~09:30, the report-speedup fork)
+
+Task: make the tournament's report step ("tables in N s") cheaper with byte-identical results and swap it into
+cluster-error as its tournament binary. The user has said yes to any exact, deterministic speedup.
+
+RESULT
+- Binary: models/from-scratch/bin/chessai-hybrid7 (md5 9c7c4c2b48494ea7e491a4ae2ab8c0a0).
+  - Source: models/from-scratch/fastbin/hybrid7-src, a copy of hybrid6-src. Same commands, flags and files.
+  - Training and play are hybrid6's (play = hybrid5's). Changed: the tournament's report step, its games.csv
+    reader, and the retired-name check of the tournament command.
+- Deployed as cluster-error's TOURNAMENT binary (it also plays the own-calibration arenas) after cycle 341: restarted
+  09:16:06, repeat.sh pid 1577790 (was 1506455). Train binaries unchanged (hybrid6). single-split and
+  single-split-probit were left on hybrid5 (they end ~10:30-10:40).
+- Measured on real snapshots (the same inputs for both binaries, nice 19, machine at load ~9-12; wall, peak RSS):
+  - The report step alone (history rewound by the cycle's 5 tournaments, as at the end of a cycle; the command's
+    whole run, so player loading and games.csv are in it):
+    - cluster-error at cycle 324 (8,993 players, 550 MB history): 12.0-17.3 s and 2.33 GB -> 6.7-9.5 s and 0.44 GB;
+      CPU 11.2 -> 7.9 s. Of hybrid7's run the report step itself is 2.7 s (the 5 prefix fits 2.25 s, ~0.4 s each,
+      with the full fit beside them; tables 0.45 s); the rest is loading the 46 players (calibration fits, ~2 s)
+      and games.csv.
+    - single-split at cycle 858 (11.8k players, 1.7 GB history): 18.5 s and 5.69 GB -> 7.4 s and 0.40 GB.
+  - A whole cycle's tournament (5 round-robins played, then the reports):
+    - single-split: 32.8 and 27.8 s -> 16.5 and 20.6 s (two cycles, chained); 5.7 GB -> 0.4 GB.
+    - cluster-error: 53.7 and 64.6 s -> 52.9 and 47.7 s; the games dominate there and the machine was loaded;
+      2.35 GB -> 0.48 GB.
+- Projection for cluster-error, cycles 343-1000. The old step's memory model matches both measurements: dense
+  head-to-head n^2 x 12 B, plus the history read and rewritten (2 x file), plus the running Elo of every tournament
+  (tournaments x n x 8 B). For example, 0.97 + 1.10 + 0.12 + 0.13 (games) = 2.3 GB at cycle 324.
+  - Peak memory at cycle 1000 (n ~28k players, a ~5.2 GB history): hybrid5 ~21 GB on this 30 GB machine (9.4 +
+    10.4 + 1.1), so a likely out-of-memory late in the run. hybrid7: ~1.2 GB (games, one prefix's copy of them, the
+    fit).
+  - Wall time: the old step's extra time grows with the square of the cycles, about 5 s at cycle 324 and an
+    estimated ~20-24 s by cycle 1000. Integrated over the remaining ~660 cycles, that is about 2-3 h less (an
+    extrapolation from two measured points).
+
+WHY IT WAS SLOW (hybrid5, the tournament binary of all three running experiments)
+- write_reports ran once per cycle and:
+  - read all of tour/elo_history.csv (read_to_string), split every row into a Vec, copied the kept rows into a new
+    String and rewrote the whole file. The file grows with the square of the cycles: rows per tournament = players
+    rated by then. single-split's was 1.64 GB at cycle 821; cluster-error's 550 MB at cycle 324, ~5 GB by 1000.
+  - built a dense head-to-head table over all players, retired ones included: n x n x 12 bytes (single-split
+    11.5k players: 1.6 GB; cluster-error at cycle 1000, ~28k players: ~9.4 GB), and summed every row of it.
+  - kept the running Elo after every tournament for every player (tournaments x players x 8 bytes).
+  - ran the cold full fit (with errors) and then the 5 warm-started prefix fits one after the other.
+- The tournament command also checked each retired name against all earlier ones (quadratic: 9k names = 40M string
+  compares at cycle 324, ~28k names = 390M by cycle 1000).
+- Peak RSS of the report-only step: 2.3 GB (cluster-error, cycle 324), 5.7 GB (single-split, cycle 858). By cycle
+  1000 cluster-error's would have reached ~15-20 GB on a 30 GB machine.
+
+WHAT CHANGED (every number computed by the same operations in the same order)
+1. elo_history.csv is appended to when it is as the last call left it (history_tail): elo_history.key records
+   this fit and is not older than the csv (the binary writes the csv, then the key), every tournament the key
+   records still has its number of games, and the csv starts with its header, ends with a newline, has no carriage
+   return in the part read, and ends with the rows of the last tournament the key records. The rows of that
+   tournament are read from the end of the file (their Elo, as written with one decimal, is the warm start of the
+   next prefix fit, as before). Only the new rows are made and appended. Otherwise (no key, another fit, changed
+   games, a csv written after its key, a cut or odd file) the original code runs: read, keep, rewrite.
+   - Why it is the same file: the original keeps the rows with tournament <= recorded (all of them, when the file
+     is as left: its rows are in tournament order and end with the recorded tournament's) and adds the same new
+     rows; the warm start is parsed from the same rows in the same way.
+2. The cold full fit runs on a thread of its own while the main thread runs the prefix-fit chain (independent; each
+   fit is the same function on the same inputs).
+3. Head-to-head counts for the pairs that played only (a hash map), and each player's wins, losses and draws counted
+   directly (integer sums, so the same). head_to_head.csv rows are sorted by (row player's place, column player's
+   place), the original's loop order.
+4. The running Elo keeps only the tournaments from the first new one on (the same arithmetic, the same order).
+5. games.csv is read line by line with no vector per line and a faster name index (FxHash); any file this reader
+   does not take (a carriage return, a bad line, an unknown player...) goes to the original reader, which gives the
+   same games or the same error.
+6. sparse_fit's pair tally uses the same fast hasher. Its iteration order only feeds the reachability search (a set)
+   and lists that are sorted by unique keys before use, so the fit is the same (it already ran with a random
+   SipHash seed per process).
+7. The tournament command's retired-name check uses a hash set instead of a scan of the earlier names (the same
+   check, the same first duplicate reported).
+- CHESSAI_REPORT_TIMES=1 prints the report step's phase times to stderr (off in the league: nothing changes).
+
+IDENTITY (chessai-hybrid5 against hybrid7, the same inputs and leagues.py's exact tournament flags; every output
+file compared byte for byte: games.csv, ratings.md/csv, head_to_head.md/csv, elo_history.csv/key, players.txt,
+every saved game in the pool dir, game_cpu.csv without its measured-CPU column, and stdout+stderr with times masked)
+suite.sh, 16 cases, all byte-identical (09:04-09:14):
+- single-split, snapshot at cycle 858 (4,290 tournaments, 11.5k retired, a 1.7 GB history): the report step
+  alone; a cycle (5 round-robins, 12,000 saved game files); a second cycle chained on each binary's own output
+  (so hybrid7 appends to a file it appended to).
+- cluster-error, snapshot at cycle 324 (1,620 tournaments): the report step alone; a cycle (41,400 game files);
+  a chained cycle; a key that no longer matches (both refit the last 5 prefixes on the slow path); a csv written
+  after its key (hybrid7 takes the slow path, confirmed with CHESSAI_REPORT_TIMES).
+- A league's first tournaments, with no history: 46 players, 1 round-robin, then a second chained (8,280 files).
+- Finished experiments (lr-settings-2, selfplay-depth, leaf-sources-2; their own-calibration games are gone, so
+  their players play uncalibrated, the same for both binaries): the report step, and 2 more round-robins.
+- Snapshots: snap.py (reflink copies taken after a cycle's tournament, kept only if no input changed during the
+  copy, with copies of the own-calibration dirs players.txt names); rewind.py (cuts the history back by K
+  tournaments); variants.py; cmp.sh. The rewound report step reproduced the live files exactly with hybrid5 too.
+- Own-calibration arenas (arena.py: the logged command of 4 cluster-error versions, F-L, F-P, T-P-Tc, T-L-Nc+log,
+  600 games each, replayed on both binaries): game files and stdout identical.
+- Command-line help of tournament, arena, train and self-play: the same (binary name masked).
+- The big test copies were deleted afterwards; the logs are in hybrid7/logs and suite.log.
+
+UNIT TESTS
+- 157 pass (156 and 1): hybrid6's 155 and two new ones: the history is appended to only when it is as left (and the
+  slow path is taken after a changed csv or key, giving the original's file), and the fast games reader reads the
+  same games (and leaves odd files to the original reader).
+
+LIVE (cluster-error, totals.csv and tournament.log; as of cycle 347)
+- "tables in": 6-8 s in cycles 332-341 (hybrid5), 2-3 s in cycles 342-347 (hybrid7).
+- Per cycle, hybrid5 cycles 308-317 (before any test load) against hybrid7 cycles 342-347:
+  tournament wall 39.0 -> 36.0 s; tournament process CPU less the games' CPU 14.7 -> 12.1 s; cycle wall 75.7 -> 72.3 s.
+  The old step's cost was still growing (tables 6 s at cycle 317, 7-8 s by cycle 335); the new one grows only with
+  the games (the prefix fits).
+- Every cycle since the swap has finished cleanly; the own-calibration arenas run on hybrid7 too.
+
+DEPLOYMENT
+- First checked: no engine rule reads the tournament's timing; the driver parses "tournament N/M: G games in Xs"
+  lines, which are unchanged.
+- cluster-error:
+  1. leagues.py stop (09:15:16); its repeat.sh exited after cycle 341 (09:15:59, "STOP found");
+  2. swap7.py: only config.json's tournament.binary changed, hybrid5 -> hybrid7 (atomic write, the diff checked
+     to be exactly that line; the old config is in config-before/);
+  3. repeat.sh restarted detached at 09:16:06 (setsid nohup; pid 1577790, its own session). Cycle 342 was the
+     first on hybrid7 (tables in 2 s).
+- Not swapped: single-split and single-split-probit (hybrid5; they end ~10:30-10:40). For new experiments,
+  chessai-hybrid7 can be both the train and the tournament binary (training is hybrid6's).
+
+NOT DONE
+- Exact, possible, not built: parallel loading of the players' calibrations (~1.5-2 CPU-s per cycle in
+  cluster-error, fit one player after another; their printed lines would need to be buffered to keep the order);
+  a parallel games.csv parse (~0.7 s now, linear in games); exact parallel evaluation of the per-pair exp/log terms
+  inside a fit (sums kept in order).
+- Not exact, not done: pair-aggregated games or reordered sums in the fits.
+- single-split and single-split-probit were not swapped (they end ~10:30-10:40).

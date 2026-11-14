@@ -1,0 +1,102 @@
+HYBRID10: VALUES-ONLY SEARCH ORDER - CAPTURES FIRST ONE PLY ABOVE THE LEAVES, SUMS-ONLY ORDERING KEYS (2026-11-11
+~00:55 to ~01:35, the hybrid10 implementation agent, from the 11-11 ~00:50 performance review's item 1)
+
+RESULT
+- Binary: models/from-scratch/bin/chessai-hybrid10 (md5 990eec9369274b86fe4db3eb235e65e5), a new file. It is the
+  tournament and arena binary for new ply-2/3 work. It plays the same games as hybrid9, byte for byte, and its ply-3
+  moves cost 13-41% less.
+  - Source: models/from-scratch/fastbin/hybrid10-src, a copy of hybrid9-src. Only src/search.rs changed. Same
+    commands, flags and files. Built offline at nice 19.
+  - Changed (search.rs; the module doc says it too). These apply only to the values-only search (OUTCOME = false:
+    root_values, which tournaments, arenas, replay-games and the log-odds policies use):
+    1. A node one ply above the leaves (depth 1) puts captures and promotions first, in place, ordered among
+       themselves by MVV-LVA: victim (plus promotion gain) x 10 minus the attacker. It does so only when a cutoff is
+       possible (beta finite), so ply-2 searches, whose depth-1 nodes all have full windows, are unchanged. Both
+       negamax_fx (flat LR, probit, NB in fixed point) and the float negamax (trees and DAGs past ply 2, FM, others)
+       do it.
+    2. negamax_fx's ordering keys at depth >= 2 come from Acc::child_sums instead of Acc::child. eval_fx reads only
+       the sums, and both functions do the same integer additions, so the keys are the same i64 sums.
+  - The outcome search (root_outcomes, expected_outcome: self-play's wld-score policies and search labels) keeps
+    hybrid9's code path, as do the compound (trees and DAGs at ply 1-2) and fastprobit (F-P at ply 2) paths.
+  - CHESSAI_ORDER1=off gives hybrid9's order and keys everywhere, for checks.
+
+METHOD (why the values can't change)
+- root_values gives every root move a full window (-inf, inf). Alpha-beta (fail-soft here) returns the exact minimax
+  value of a node searched with a window containing that value, whatever the move order. Values are the leaves' values
+  negated, never summed, so there is no rounding to reorder. A node's value depends only on its path (repetitions
+  via the hash stack, which is restored after each child, and mate distance via the ply), not on its siblings'
+  order. There is no transposition table or other memory across siblings. So each root value is bit-identical, and
+  so are the softmax, the argmax ties and every game. Only the nodes visited change.
+- The outcome search takes its principal variation's leaf. With tied values a different order could pick another
+  leaf, so it keeps hybrid9's order.
+
+IDENTITY (chessai-hybrid9 against hybrid10, every output compared byte for byte; nice 19, 1-2 threads; suite10.log,
+mkfield10.log)
+- Unit tests: 163 pass (cargo test --release; unit-tests.log), 2 of them new.
+  - move_order_keeps_root_values: a random LR, 16 random-game positions, plies 1-4 (1-3 for most), float and fixed
+    point, log-odds and score values. Every root value is bit-equal with the order on and off, the outcome search's
+    outcomes and node counts are equal, and the order changed the node counts.
+  - captures_first_puts_captures_and_promotions_first_by_mvv_lva.
+- The field (mkfield10.py): one entry of each kind in use, the arenas' md5-checked copies:
+  - lr: lr-settings-new F-L 0.0125@136;
+  - probit: probit-settings-new F-P 1e-5@151;
+  - bdt with LR leaves: residual-leaves T-L-Nc limit 4 @399;
+  - bdt with probit leaves: probit-widen-p1b T-P-Nc-merge#1@199;
+  - cnbp: nb-settings-new F-N alpha 10 @38;
+  - fm: FM-c@669.
+  Their own calibration games (the `arena` command as arena.py makes them, depth 1) are SAME on both binaries for
+  all six.
+- Tournaments (tour10.py; the arenas' command plus --save-games; every tour file, every saved game, stdout):
+  - field A: the 4 random references and the 6 entries at plies 1, 2 and 3 (22 players). SAME at T 0.1 (462 games),
+    at T 0.02 (462) and over 2 round-robins at T 0.1 (924).
+  - field B: random, random-4 and the 6 entries at ply 4. SAME at T 0.02 (56 games).
+- Self-games' replay-games (replay10.py): the 18 entries of field A against their twins, 2 rounds, seed 1000004.
+  SAME at T 0.1 and at T 0.02 (36 games each).
+- Training (train10.py; the lines' train_args): one round on field A's 462 games, SAME for lr, probit, both bdt
+  kinds, cnbp and fm. Search-labelled training on 40 games, also SAME: lr and probit with --label-depth 3 from their
+  field models, lr labelled by the T-P tree at depth 2 and by FM at depth 2.
+- Self-play (the selfplay-depth lines' args, 2 rounds of 16 games): lr, probit and cnbp at plies 2 and 3, and lr at
+  ply 4, under both the default policy (wld-score-jitter10) and log-odds softmax. SAME: 14 runs, models, ladder.csv
+  and results.txt. A first pass differed only in stdout's measured "(N plies/s)", which the mask missed; rerun SAME.
+- 0 failures. No check named a path inside a live experiment or a running arena.
+
+SAVING (bench10.py: one entry against itself, T 0.02, 1 thread, nice 19, ABBA; game CPU a ply; games identical
+across all runs; bench10.log)
+
+| Ply | Entry | us a ply, hybrid9 -> hybrid10 | Ratio |
+|---|---|---|---|
+| 2 | L | 74 -> 73 (8 runs each) | x0.983 |
+| 2 | P | 107 -> 107 | x1.005 |
+| 2 | TP | 168 -> 162 | x0.965 |
+| 2 | FM | 939 -> 945 | x1.007 |
+| 3 | L | 695 -> 550 | x0.792 |
+| 3 | P | 1181 -> 736 | x0.623 |
+| 3 | N | 476 -> 416 | x0.873 |
+| 3 | TL | 2793 -> 2173 | x0.778 |
+| 3 | TP | 3299 -> 2247 | x0.681 |
+| 3 | FM | 7725 -> 4522 | x0.585 |
+
+- Ply 2 is unchanged, as built: the ratios are noise, x0.97-1.01.
+- Ply 3 costs 13-41% less. A float leaf (trees, FM) costs more, so leaves cut are worth more there.
+- Mixed fields:
+  - field A (plies 1-3), game CPU x0.72-0.77, process CPU x0.73-0.78;
+  - field B (ply 4), x0.976. At ply 4 the static-evaluation keys at depth-2 and depth-3 nodes dominate. The
+    review's LR measurement agreed (x0.95).
+- Tonight's ply-3 arenas (1,269 CPU s by 00:50) would have cost ~25-35% less.
+- A cost, not a correctness issue: a nearly untrained model doesn't value material, so captures aren't its
+  refutations. Self-play's first two rounds under log-odds softmax at ply 3 took 9-20% more process CPU (lr 1.7 ->
+  2.0 s, probit 3.2 -> 3.5, cnbp 2.0 -> 2.4). The random LR of the unit test visited 3% more nodes. Experiments
+  self-play on chessai-hybrid4gfx, so this touches only a league's first versions at ply 3.
+
+DEPLOYMENT
+- Installed as models/from-scratch/bin/chessai-hybrid10 (new file, ~01:28). Not swapped into anything running:
+  - probit-widen-p1c, lr-trees-p1 and probit-trees-p2 play at ply 1-2, where hybrid10 gains nothing;
+  - the arenas' specs keep their binary.
+- For new ply-3 arenas and tournaments, name chessai-hybrid10 as the binary (ARENA.md says so).
+
+FILES
+- hybrid10-src/ (source); unit-tests.log.
+- mkfield10.py, mkfield10.log: the field and the own-games identity.
+- tour10.py, replay10.py, train10.py, suite10.log: the identity suite.
+- bench10.py, bench10.log: CPU a ply.
+- st/field/: the field's models, own games and players files; the bulky work dirs are removed.

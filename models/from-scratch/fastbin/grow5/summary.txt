@@ -1,0 +1,112 @@
+chessai-grow5 (2026-11-12 ~04:15; analyst theory-2 6.62 (a); built by the coordinator's build fork)
+==================================================================================================
+
+WHAT
+  grow4 plus one training option, --grow-shadow-forget {split|none}. The default is split. It applies to BDT with
+  --split-rule grow only; anything else refuses it, as with grow4's leaf options.
+  - split (grow1-4's behaviour): a growth trial's shadow, the leaf without the split, starts as a copy of the leaf
+    forgotten by --forget-factor, just like the split's new leaves.
+  - none: the shadow starts as the leaf itself, unforgotten. The new leaves still forget.
+  Source: fastbin/grow5-src, a copy of grow4-src. Its diff is grow5.patch: 4 files, of which only delegation.rs and
+  main.rs change behaviour.
+  - delegation.rs: the GrowShadowForget enum and the GrowParams field. split_leaf's growth branch skips
+    shadow.forget() under none. GrowParams' Debug prints shadow_forget only when it is none, so state files written
+    by grow1-4, or by grow5 without the option, read byte for byte as before.
+  - main.rs: the option, plus grow4_given() and its refusal message.
+  - logreg.rs: a squares() accessor for the tests only (#[cfg(test)]).
+  - bdt.rs: 3 tests.
+  Untouched: the children's forget and split noise, the non-growth split trial's shadow, the revision shadow,
+  Graph::forget, BDD, routers and all play code. Model files are unchanged: the option is not saved in them, and
+  hybrid16 loads and scores grow5's models (below).
+  Binary: cand/chessai-grow5, md5 d75f0f7a8312ea34ac3245a7ea9a45c3. It was built like grow4 (cargo release) and is
+  installed with cp -n as models/from-scratch/bin/chessai-grow5. A build of unchanged grow4 source from this copy
+  also differs from grow4's md5, because of the embedded build paths, so identity is tested on behaviour.
+
+UNDO, REFUND AND SNAPSHOTS
+  On an undone trial, end_trial sets node.classifier = trial.shadow. The node then trains on the verdict step's
+  example like any leaf.
+  - split (today): the restored leaf is the forgotten shadow. It is the leaf as it was at the split with its AdaGrad
+    sums divided by 10 (a probit shadow's variances widened instead), trained on every example of the trial, then on
+    the verdict step's example. Every trial, kept or undone, therefore leaves the leaf boosted.
+  - none: the restored leaf is the leaf as it would have continued: its own unforgotten sums plus everything the
+    shadow accumulated during the trial, then the verdict step's example.
+  The refund (credit +1 up to the cap, back-off doubled) and the snapshots are the same in both modes. grow_restart
+  drops the leaf's snapshot at the trial's start and grow_undone at the undo, and the next window close freezes a
+  new one.
+
+TESTS
+  1. cargo test (unit-tests.log): 233 lib and 1 main test pass. The new tests are:
+     - grow5_the_shadow_keeps_the_leafs_sums_under_none: forget 10, split_leaf called on a trained LR leaf, both
+       modes. The new leaves' sums are leaf/10 and their state equals the forgotten clone, in both modes. The shadow
+       is leaf/10 under split and exactly the leaf (state bytes) under none.
+     - grow5_an_undone_trial_leaves_the_carried_shadow: forget 10, W 200, trial z inf so every trial is undone, two
+       undos per mode, followed example by example. A leaf splits at the start of its step, so the shadow is checked
+       first, as the pre-step leaf (forgotten under split) trained on that step's example. At the verdict the
+       pre-step shadow equals a replay of that start trained on every trial example, and the restored leaf equals
+       the replay trained on the verdict's example. The restored sums are >= the leaf's sums at the split everywhere
+       under none; under split some are below half of them, tracing back to the tenth.
+     - grow5_shadow_forget_is_recorded_only_when_set: the default's Debug lacks the field; none ends
+       "..., warn_nodes: 55, shadow_forget: None }".
+  2. CLI (cli_checks.txt):
+     - refused without --split-rule grow (exit 1);
+     - refused with a router split rule (exit 1, the new message);
+     - refused with a bad value (exit 2);
+     - accepted with none, with split, and with none plus the rule (exit 0).
+  3. Identity against chessai-grow4 (id_p1_g5.py -> id_p1_g5.txt): failures 0.
+     Setup: the offline pool P1 (offline-ply/pools/P1/train, 112 rounds, 22.4M positions), seed 7101, 1 thread.
+     Every model and state file (112-113 per run) is compared byte for byte, and so is the training log, with the
+     timings masked.
+     - tlneg-f1 (T-L-Ne-grow + grow-l-p1b's rule, forget 1): SAME; 4 trials started, 2 kept, 1 undone.
+     - tlneg-f10 (the same, forget 10): SAME; 5 started, 2 kept, 1 undone.
+     - tlneg-f1-fast (W 200k, credit per 1M): SAME; 21 started, 7 kept, 13 undone.
+     - tlneg-f10-fast: SAME; 22 started, 8 kept, 12 undone.
+     - tpneg-fast (T-P-Ne-grow, probit, split noise): SAME; 21 started, 16 kept, 3 undone.
+     - tlne-capped (limit 4, 1M, forget 1): SAME.
+     - fl (F-L): SAME.
+     - tlneg-f10-fast with --grow-shadow-forget split, against grow4's tlneg-f10-fast: SAME.
+     Play code is untouched, so no play identity check was needed.
+  4. With the flag (trials.txt; the same pool and seed, beside the flagless forget-10 runs):
+     - W 1M (grow-l-p1b's windows):
+       - as built: 3 verdicts, 2 kept, 1 undone (gain -0.0004); mean kept gain 0.0051.
+       - none: 3 verdicts, 3 kept, 0 undone; mean kept gain 0.0072.
+     - W 200k:
+       - as built: 20 verdicts, 8 kept, 12 undone (7 with a negative gain); mean kept 0.0022, all 0.0008;
+         17 leaves from kept splits (21 with the unfinished trials).
+       - none: 18 verdicts, 16 kept, 2 undone (both with gains around +0.0004); mean kept 0.0072, all 0.0064;
+         33 leaves from kept splits (35 with the unfinished trial).
+     PAIRED READING: the W 1M runs start their first three trials at the same leaf and step in both modes, and the
+     new leaves are identical, so the gains differ only by the shadow:
+       - leaf 0 at N 6.0M: 0.0060 as built against 0.0100 under none;
+       - leaf 2 at N 12.9M: 0.0043 against 0.0084;
+       - leaf 3 at N 18.8M: -0.0004 (undone) against 0.0032 (kept).
+     The W 200k runs pair the same way for their first three trials (leaf 0, 2 and 1 at N 1.2M, 2.6M and 3.9M):
+     0.0034 / 0.0120, 0.0041 / 0.0110 and -0.0002 (undone) / 0.0038 (kept). After the third trial the runs
+     diverge.
+     The boost alone (the shadow forgotten, no split) is worth about 0.004 nats per example over a 1M trial, and
+     0.004-0.009 over a 200k trial. Under none the trial credits that boost to the split. Each run's third trial
+     passes only because of it.
+  5. hybrid16 loads the grow5 models: eval-loss with a fitted calibration on one held-out part of P1
+     (offline-ply/merged/P1/part0, 250k positions; one part, no SE, indicative only):
+     - forget 1: 0.6469 (fast 0.6470)
+     - forget 10 as built: 0.6570 (fast 0.6547)
+     - forget 10 none: 0.6525 (fast 0.6571)
+     - F-L: 0.6576
+     On this fixed offline pool (no self-play feedback) forget 10 costs about 0.008-0.010 nats against forget 1.
+     The none mode recovers about half of that at W 1M and none of it at W 200k, where it has 33 leaves against
+     17. The self-play read, with drift, is the judge.
+  CPU: the user times match grow4's within about 10%, the noise of 3 jobs at a time on a shared machine
+  (id_p1_g5.txt; e.g. tlneg-f10-fast 141 against 142 s).
+
+FILES: grow5.patch, unit-tests.log, cli_checks.txt, id_p1_g5.py/.txt, trials.py/.txt, id/p1 (the runs, 1.5 GB).
+
+DEPLOYED (2026-11-12 ~04:15)
+  - models/from-scratch/bin/chessai-grow5 (cp -n), md5 d75f0f7a8312ea34ac3245a7ea9a45c3.
+  - leagues/make_recipes.py HAND, regenerated into leagues/recipes.txt. Backups are in
+    models/from-scratch/global11-drafts/{make_recipes.py,recipes.txt}.before-grow5. Two changes:
+    (1) the T-L-Ne-grow row's train binary, chessai-grow4 -> chessai-grow5; nothing else on the row changes.
+    (2) a new row, T-L-Ne-grow-f10: T-L-Ne-grow with --forget-factor 10, on chessai-grow5. With it, grow-l-p1c's
+        line names are 69 and 93 characters, where T-L-Ne-grow plus five overrides would give 106.
+  - leagues/experiments/grow-l-p1c, from leagues/specs/batch6/grow-l-p1c.json; created, not launched.
+    - Lines: F-L x2; T-L-Ne-grow-f10 + grow-l-p1b's rule x2; the same + --grow-shadow-forget none x2.
+    - Every line trains on chessai-grow5 (specs/ply1/train_binary.py).
+    - The as-built arm's training arguments equal grow-l-p1b's forget-10 arm's byte for byte.

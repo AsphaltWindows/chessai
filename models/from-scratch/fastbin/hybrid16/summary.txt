@@ -1,0 +1,92 @@
+chessai-hybrid16 (2026-11-11, implementation fork; candidate 1 of the ~18:50 performance review)
+=====================================================================================================
+
+What: hybrid15 plus a content-addressed, cross-process cache of calibration fits (`cal:`, `leafcal:`, `blend:`
+specs; Calibrated::fit). Source: fastbin/hybrid16-src (copy of hybrid15-src); patch: hybrid16.patch (new
+src/calcache.rs, lib.rs, main.rs). Cargo.toml and Cargo.lock unchanged (no new crates).
+
+Where the cache lives (no driver restart, no new arguments): inside the own-games directory the fit reads,
+<GAMES>/calfit-<128-bit key>.bin, used only when GAMES's parent directory is named `owncal` (a league's or an arena's
+own games; shared held-out sets are never written to). Why there:
+  - it works with the specs leagues.py already passes (cal:<league>/owncal/<line>@<v>:KIND:<model>), so the running
+    repeat.sh loops pick it up at their next cycle with only the tournament binary changed in config.json;
+  - the directory is write-once and belongs to one version; own_gc (leagues) and drop_own_games (arenas) delete it
+    when the version leaves the field, cache file included: no pruning of its own, size bounded by live entries;
+  - nothing else reads extra files there: read_labelled reads the three outcome files, own_done checks GAME_FILES,
+    arena.py's shared own-games cache copies GAME_FILES only.
+  A directory beside the binary or the league would be shared, grow by ~7-8 keys a cycle (~34,000 a day) and need
+  pruning in step with own_gc.
+
+Key: XXH64 x2 (128 bits) with lengths, of: /proc/self/exe's bytes (the code; once per process), the CHESSAI_*
+environment (sorted; CHESSAI_CALCACHE left out), the wrapper (cal/leafcal/blend, per-leaf, TAU bits), the inner kind,
+--use-probs, the model file's bytes, and white_wins/black_wins/draws.games' bytes in read order. Only inner kinds whose
+loader reads exactly that one file (cnbp, lr, probit, bdt, bdd); nested wrappers, MoEs, hashmix etc. fit as before.
+The file holds the whole key (compared in full), the value and a checksum. Value: positions, the whole calibration
+and each leaf's as f64 bits, and the leaf lines the fit printed; a hit prints and reports the same text.
+Exactness guards: the model file is hashed before and after the model loads (must agree); on a miss the games are
+read in full again, must hash to the key, and are parsed from those very bytes (read_labelled's own steps) before
+the stored fit is computed (hybrid15's code, unchanged). Anything unexpected = fit as before, silently: unreadable
+files, a corrupt/foreign/truncated cache file, an unwritable directory. CHESSAI_CALCACHE=off turns it off, and so
+does any CHESSAI_*_STATS / *_CHECK variable (their counters count work a hit skips). Writes: a unique temp file in
+the same directory (pid, counter, time; create_new), renamed into place; two writers of one key write the same bytes.
+
+Hash: XXH64 written from the spec in src/calcache.rs; checked against twox-hash 1.6.3 (offline crate, used only in
+hashbench/) on 18,000 random inputs of lengths 0-299 with 3 seeds each and on own-games files; the reference test
+vectors are in the unit test. 8.2 GB/s here (SipHash, std's DefaultHasher, was 0.63 GB/s: 17 ms a pass on 11 MB).
+
+Growth: ~270 bytes a file (a flat `cal:` fit; a per-leaf fit adds ~33 bytes and a line per leaf), one per fitted own-
+games directory: ~7 created and ~7 deleted with their directories each global cycle (~1,100 an hour), steady state
+~14 files (~4 KB) in the global league, ~12 in a ply-2 field.
+
+Identity
+- Unit tests: 200 passed (hybrid15's 196, plus calcache's XXH64 vectors and streaming, the cache file round trip and
+  rejection of every flipped byte and truncation, and main's cached_calibration_fits_equal_fresh_fits_bit_for_bit:
+  cold and warm fits equal fresh fits bit for bit with the same report for cal, leafcal and blend over flat LR,
+  probit, CNBP (with and without --use-probs), a BDT, a BDD and a path-context DAG (no blend there: unsupported);
+  a planted value is what a fit returns (the hit path is used); a damaged or empty cache file, a changed model and
+  changed games are refitted afresh; held-out dirs, nested wrappers and other kinds are never cached). The compound
+  tests also pass with CHESSAI_FX_CHECK=1. Logs: test-all.txt, test-compound-fxcheck.txt.
+- Global league (dry/global): snapshot in cycle 648's train phase (snap16.py: rsync --link-dest into a reflink
+  pre-copy, consistent: the 4-s train phase was unchanged after the 3.3-s copy), then leagues.py run --cycles 2
+  (rest of cycle 648 and all of 649: own calibration, tournament, decisions, self-games, training, records) four
+  times, pinned to the E-cores: h15 (hybrid15), h16 (hybrid16, cold), h16off (CHESSAI_CALCACHE=off), h16warm (h16's
+  cache files seeded into the snapshot's own-games dirs). Against h15 (cmp16.py): 22,085 files, 16,326 key files,
+  0 key files differ in all three; the only differences are the scan cache's JSONs, totals.csv (CPU columns) and
+  batch/games.csv's cpu_s column (measured CPU; every other column identical); second cycle's 6,403 game files
+  identical. h16 and h16warm end with 7 cache files, h16off with none, no temporary files left.
+- base-probit-p2 (dry/base-probit-p2): snapshot in cycle 390's train phase (rsync 8.4 s, phase unchanged after),
+  the same four runs: 7,507 files, 4,740 key files, 0 differ in all three; second cycle's 6,915 game files
+  identical; the same three timing files differ. h16 and h16warm end with 6 cache files, h16off with none.
+
+Saving (meas16.py on the global snapshot; pinned E-cores, nice 15, 2 threads; 3 fresh copies each, ABBA):
+- Tournament with no games (14 entries' fits, history, reports): hybrid15 2.44-2.53 CPU-s; hybrid16 cold 2.67;
+  warm 0.83. A hit saves ~0.121 s; a miss costs ~0.010 s more (hashing, second read, store).
+- Self-games, one round (14 fits, 14 games): hybrid15 1.85; hybrid16 cold 2.00; warm 0.15.
+- Steady state a global cycle: tournament 7 hits (champions) and 7 misses (new versions), self-games 14 hits:
+  ~0.78 + ~1.70 = ~2.5 CPU-s of ~30.8 (~8%). The dry runs' cycle 649 agrees: self-games 2.01 (h15) / 2.10 (off) ->
+  0.33 (h16) / 0.24 (warm); tournament 9.68 / 9.81 -> 10.26 (h16: all 14 fits cold in its first cycle) / 8.84 (warm:
+  champions cached).
+- base-probit-p2 (12 entries): tournament with no games 2.14 -> 0.49 warm; self-games one round 2.02, cold 2.14,
+  warm 0.35. A hit saves ~0.14 s. A cycle: ~0.8 (tournament: 6 champion hits, 6 new-version misses) + ~1.7
+  (self-games) = ~2.4-2.7 CPU-s of ~65 (~4%).
+- Global league now has 6 lines (12 entries): ~2.3-2.5 CPU-s of ~26-30 a cycle (~8-9%), ~2.6 CPU-h a day at ~4,000
+  cycles of 21 s.
+
+Install and swaps
+- bin/chessai-hybrid16, md5 0cb3d238b0c12ac58894fa03b9e0f2d0 (cp -n of chessai-hybrid16 here, the binary every
+  identity run used).
+- swap16.py (errdag4's procedure; DRY=1 checks first): config.json replaced atomically during a cycle's tournament
+  phase, backups in config-before/, one driver.log line each:
+  - leagues/global 20:05:39 during cycle 719 -> hybrid16 from cycle 720 (swap-global.out);
+  - base-probit-p2 20:05:52 during cycle 410 -> hybrid16 from cycle 411 (swap-base-probit-p2.out).
+  - Not base-lr-p2: cycle 548, last crowning 538, so the plateau rule may end it at 600 (~50 cycles; the bar was
+    ~100). Training binaries unchanged: hybrid16 trains with hybrid15's code and no league trains through cal: specs.
+- Live after the swap: global self-games 1.72-1.90 (cycles 717-719) -> 0.24-0.27 (720-722); tournament non-game CPU
+  4.0-4.4 -> 4.41 (720: champions cold) -> 3.38-3.46. base-probit-p2: self-games 4.95-5.07 -> 2.94-3.14 (411-412);
+  tournament non-game 4.04-4.06 -> 4.34 (411, cold) -> 3.28 (412). No temporary files left in owncal/. The global
+  league's cache file names for F-L@538, T-L@581 and D-L z120@638 equal the dry run's (content-only keys).
+
+Scratch here: dry/ (snapshots, runs, comparisons cmp-*.txt, measurements meas-*.out), hashbench/ (XXH64 against
+twox-hash), test-*.txt, config-before/, PERF-LEDGER.md.before-hybrid16. Left in place (nothing deleted): the failed
+first global snapshot (dry/global/snap-try0-incomplete: a plain cp raced the 4-s train phase) and four
+target/calcache-test-<pid> dirs from test runs that failed before their cleanup (~11 MB).

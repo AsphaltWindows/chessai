@@ -1,0 +1,125 @@
+unified: theory-2 6.25 (6), the cheapest test of the unified tree/DAG design (no training). 2026-11-11 ~10:00-10:15,
+the implementation fork. Measures, per router of today's probit cluster trees, (a) G: the loss lost to routing that a
+re-mapping of finer cells to the existing children could win back, out of sample; (b) the duplicate test between
+children, as they are and on slopes only (the analyst's addendum).
+
+VERDICT
+- G is nil. Pooled over each tree's routers, per decisive position, the cross-fitted G at cells is -0.0014 to 0.0004
+  (cal) and -0.0032 to 0.0007 (raw) across six trees. No router reaches 0.005, and none is positive by 2 SE.
+  - Largest reading: G4 #2 v318, delegator 4: 0.0040 ± 0.0022 (1.8 SE).
+  - Next: G4 #1 v338, delegator 3: 0.0021 ± 0.0019 cal, 0.0036 ± 0.0025 raw.
+  - 15 of 17 router readings are at or below 0.001; many are negative, where the mapping chosen on one half loses
+    on the other.
+- The in-sample regret (what `routing` prints) is selection bias. Example: G4 #2 v334 delegator 3, in-sample 0.0019 at
+  the B-way partition and 0.0031 at cells, but out of sample -0.0012 ± 0.0020 and 0.0007 ± 0.0014.
+- 6.25's rule: by the letter it is in between, since three readings fall between 0.002 and 0.005 (none significant,
+  max 1.8 SE). In substance it is the sharing-only branch: the cell move cannot pay on these leaves.
+- Duplicates: the sharing move has targets in every G4 tree. In all 10 second-level routers of the five G4 trees, at
+  least one pair of children is within 2 SE both ways (as they are or on slopes).
+  - Pairs within 2 SE: 16 of 30 as they are, 20 of 30 on slopes only.
+  - 6 pairs are duplicates on slopes only, i.e. per-route intercepts (a path cell on a shared leaf) would absorb their
+    difference: G4 #2 v334 8-9; #2 v318 5-6, 8-9, 10-12; #1 v340 4-6; #2 v340 5-6.
+  - Root children are never duplicates: every root pair has at least one significant direction (D 0.004-0.37; the
+    closest pair, 2-3, is 0.014-0.024 one way).
+  - G1's 5-leaf tree has no duplicate pair: each of its second-level pairs differs significantly one way (0.005-0.014,
+    2.3-3.8 SE).
+  - "Within 2 SE" means no detectable difference: the D standard errors are 0.001-0.007, so differences under about
+    0.005-0.01 nats per position cannot be ruled out.
+- An asymmetric pattern in delegator 1 of the three #2 trees (children 4, 5, 6):
+  - Leaf 4 is nearly as good as 5 and 6 on their own positions: D(4 on 5's) and D(4 on 6's) are -0.002 to 0.007.
+  - 5 and 6 are far worse on 4's positions: 0.23-0.36 as they are, 0.06-0.08 on slopes.
+  - So 4 is a generalist that covers its siblings. The sharing move would point 5's and 6's cells to 4, not merge 5
+    with 6 only.
+
+WHAT WAS BUILT
+- Source: models/from-scratch/fastbin/routecells-src = fastbin/hybrid13-src (src, Cargo.toml, Cargo.lock; not
+  target/) plus one subcommand, `routing-cells MODEL GAMES [--use-probs]`, in src/main.rs: read_round_with_games,
+  mix64, clustered_mean, fit_offset and routing_cells, plus the Command variant and its dispatch arm. Nothing else
+  changed; `routing` is untouched.
+- Binary: models/from-scratch/bin/chessai-routecells, md5 b01ed2dbd8cf8e4c054fed1c244f5ddc. Built with
+  `cargo build --release` at nice 15, -j 2 (87 s user for the first build).
+- Identity: `chessai-routecells routing --use-probs bdt:tree.model games` is byte-identical to chessai-hybrid13's on
+  the coordinator's sample (scratchpad g4route: tree.model = G4 #2 v334, 1000 games; 14 lines).
+- target/ left in place: 82M, at fastbin/routecells-src/target. The user's rule is to confirm deletions; it can go.
+
+THE MEASURE
+- Game ids: from human.games, in the order written. Each game's move count gives its consecutive positions in its
+  outcome file; the tool bails unless the counts account for every position exactly (they did for all seven
+  samples).
+- Halves: a splitmix64 hash of the game index (1999 and 2001 games of 4000), so both colours fall in both halves.
+- Loss "cal": winner log-loss on decisive positions with the tree's log-odds recalibrated by one scale and offset,
+  as `routing` (the scale and offset are fitted on all positions).
+- Loss "raw": the same uncalibrated. That is the fresh gate's measure: --trial-error defaults to winner, and
+  --revise-on fresh scores each round's positions with the model as it starts the round.
+- Each child's loss is its subtree's prediction (the leaf its subtree routes to), as `routing`.
+- Cells: (routed child, runner-up child, confidence bin); at most 12 for B = 3 (the root uses 8: some runner-up
+  combinations never occur).
+  - The confidence is the log-margin of the routed child's posterior over the runner-up's, split at its median over
+    the router's positions. This departs from "the median of the top posterior": the NB routers' posteriors
+    saturate at 1.0 in floating point (the root's median posterior printed 1.0000), so a posterior split is
+    degenerate; the log-margin orders the same positions without saturating. The split points are printed per
+    router: 12.3-13.3 at the roots, 1.05-4.63 below.
+- G: on each half, choose m(c) = argmin_k of the summed loss of child k on cell c (ties keep the current child). Score
+  the other half: G = mean over positions of loss(current child) - loss(m(c)), positive when the remapping helps.
+  Both directions are pooled (each position scored once), with an SE clustered by game. The same is done at the
+  B-way partition (each output group to its best child); in-sample regrets are printed beside.
+- Duplicate test (cal): D(j on k's) = mean over positions routed to k of loss(j's subtree) - loss(k's subtree),
+  clustered SE, both ways.
+  - "Slopes only" shifts each of the two children's log-odds by its own best intercept on k's positions (1-D
+    Newton), fitted on one half of the games and applied on the other.
+  - A pair is DUPLICATE when both D are within 2 SE of zero.
+
+DATA
+- Trees, all T-P-Nc-merge with the fresh gate, noise 0.03 and threshold 1M (md5s below):
+  - growth-300k-p1 (G4) #2 v334 (7 leaves), #2 v318 (11), #1 v338 (5), #1 v340 final (5), #2 v340 final (7);
+  - router-kind-p1 (G1) T-P-Nc-merge#1 v299 final (5 leaves), as the second field.
+- Games: 4000 per tree, against the field's F-P final (G4: F-P#1 v340; G1: F-P#1 v299). Settings: chessai-hybrid13
+  arena, log-odds softmax T 0.1 both sides, depth 1, --use-probs, seeds 101-106 (in the order above), and
+  RAYON_NUM_THREADS=2 at nice 15. 164k-212k decisive positions per tree.
+  - The games are in the scratchpad: /tmp/claude-1000/-home-iv-dev-chessai/1265e529-e944-48f6-8cee-07f303fc678a/scratchpad/routecells/games-*
+    (403M with the model copies).
+  - Head-to-heads at T 0.1 (A = tree) are in out/arenas.txt, for orientation only (not the cold protocol).
+- Model md5s: g4n2v334 d9d27af4f039a6c1b44b547dc300ad1a, g4n2v318 be2db02a9d64a3a693b39aa7964ea6c7, g4n1v338
+  881c5a134a2a25ba54b69eb2bc833ef8, g4n1v340 2dfafd4d16aeee3af33c3aaf770878f8, g4n2v340 d14e7bac069bc1952836d3f7e6a9cc6e,
+  g1nc a2fa17a7c440ee3a6425a53c9f93bcc5; F-P g4fp c46f1303ea4f3c14c069260c2abbbf14, g1fp 808e56d550118501da1778a94ad1a629.
+- Full outputs: out/rc-<tree>.txt.
+
+TABLE: per router, n positions, G at cells ± SE, G at the B-way partition ± SE, and in-sample regret (cells / B-way),
+cal (raw in brackets where it differs in sign or by more than 0.001).
+
+tree (leaves)   router   n        G cells            G B-way            in-sample cells / B-way
+G4 #2 v334 (7)  root     173,820   0.0000 ± 0.0000    0.0000 ± 0.0000   0.0000 / 0.0000
+                d1        67,760   0.0005 ± 0.0008    0.0000 ± 0.0000   0.0006 / 0.0000   (raw -0.0005, -0.0009 ± 0.0004)
+                d3        59,118   0.0007 ± 0.0014   -0.0012 ± 0.0020   0.0031 / 0.0019
+G4 #2 v318 (11) root     173,781  -0.0001 ± 0.0003    0.0000 ± 0.0000   0.0000 / 0.0000
+                d1        71,373   0.0010 ± 0.0024    0.0000 ± 0.0015   0.0021 / 0.0009   (raw 0.0021, 0.0006)
+                d2        46,304  -0.0042 ± 0.0021   -0.0022 ± 0.0014   0.0011 / 0.0005   (raw -0.0029, -0.0037)
+                d4        28,174   0.0040 ± 0.0022    0.0015 ± 0.0022   0.0062 / 0.0045
+                d5        20,725   0.0005 ± 0.0013   -0.0011 ± 0.0012   0.0032 / 0.0030
+G4 #1 v338 (5)  root     167,228  -0.0012 ± 0.0006    0.0000 ± 0.0000   0.0000 / 0.0000
+                d3        55,744   0.0021 ± 0.0019    0.0011 ± 0.0021   0.0048 / 0.0042   (raw 0.0036 ± 0.0025, 0.0027 ± 0.0024)
+G4 #1 v340 (5)  root     164,325  -0.0002 ± 0.0002    0.0000 ± 0.0000   0.0000 / 0.0000   (raw -0.0026, -0.0010)
+                d3        53,161  -0.0020 ± 0.0009    0.0001 ± 0.0005   0.0006 / 0.0003   (raw B-way -0.0009)
+G4 #2 v340 (7)  root     170,439   0.0000 ± 0.0000    0.0000 ± 0.0000   0.0000 / 0.0000   (raw cells -0.0010)
+                d1        65,660  -0.0011 ± 0.0007   -0.0006 ± 0.0003   0.0000 / 0.0000
+                d3        56,785  -0.0030 ± 0.0012   -0.0047 ± 0.0016   0.0007 / 0.0000   (raw B-way -0.0024)
+G1 #1 v299 (5)  root     211,577   0.0000 ± 0.0003    0.0000 ± 0.0000   0.0000 / 0.0000
+                d1        75,100  -0.0019 ± 0.0008   -0.0027 ± 0.0011   0.0004 / 0.0003
+Pooled per decisive position, G at cells (cal / raw): v334 0.0004 / 0.0001; v318 -0.0000 / 0.0007; #1 v338 -0.0005 /
+0.0007; #1 v340 -0.0009 / -0.0032; #2 v340 -0.0014 / -0.0025; G1 -0.0006 / -0.0008.
+
+DUPLICATE PAIRS (second-level routers; D as they are, both ways / slopes only, both ways; * = within 2 SE both ways)
+G4 #2 v334  d1 5-6  0.0059, 0.0394 *  / -0.0041, 0.0260 *       (4-5, 4-6: 4 covers them; 5, 6 on 4's 0.25-0.29)
+            d3 7-8  -0.0033, 0.0025 * /  0.0030, -0.0012 *;  7-9 0.0040, 0.0015 * / 0.0038, -0.0010 *;
+               8-9  0.0071, -0.0080   /  0.0044, -0.0013 *
+G4 #2 v318  d1 5-6  -0.0000, 0.0250   / -0.0028, 0.0066 *
+            d2 7-8  0.0038, 0.0141 *  /  0.0012, 0.0073;   7-9 * / *;   8-9 0.0097, 0.0056 / 0.0040, 0.0015 *
+            d4 10-11 * / *;  10-12 -0.0128, 0.0006 / -0.0108, 0.0008 *;  11-12 * / *
+            d5 13-14 * / *;  14-15 * / *;  13-15 neither (15 on 13's 0.0085 ± 0.0035)
+G4 #1 v338  d3 4-5 * / *;  4-6 * / *;  5-6 * / no (slopes -0.0095 ± 0.0034)
+G4 #1 v340  d3 4-5 * / *;  4-6 0.0090 ± 0.0030 / *;  5-6 * / *
+G4 #2 v340  d1 5-6  0.0173, 0.0143 / 0.0008, 0.0012 *     d3 7-8 * / *;  8-9 * / *;  7-9 neither (9 on 7's 0.0138 ± 0.0049)
+G1 #1 v299  d1 none (4 on 5's 0.0122 ± 0.0041; 6 on 4's 0.0047 ± 0.0020; 6 on 5's 0.0143 ± 0.0038)
+Exact figures with SEs: out/rc-<tree>.txt.
+
+CPU: games ~42 CPU-s, diagnostics ~6 CPU-s, builds ~105 CPU-s: about 0.05 CPU-h. No experiment folder was written.

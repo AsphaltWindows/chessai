@@ -1,0 +1,495 @@
+FAST BINARIES FOR THE NEW LEAGUE'S RECIPES (2026-11-09 ~16:25-17:15, the fast-binaries fork)
+
+Task (the user, ~16:35: "Yeah we should update the binaries with optimizations"): every recipe of the new league
+system (leagues/recipes.txt) self-plays and trains on a binary with chessai-hybrid4's three exact Q9 fast paths:
+- the fast leaf test;
+- lazy candidates;
+- encoding from the bitboards.
+Games, models and states must stay byte-identical to what each row's current binary produces.
+Mapping for the engine: leagues/binaries-fast.txt. recipes.txt and the engine files are untouched.
+
+RESULT
+- 15 binaries become 5, and all 65 rows are covered. recipes.txt had 63 rows when this started; the engine added F-N
+  and F-P at 17:09, and both were checked as well.
+  - 57 rows, on 10 old binaries, move to chessai-hybrid4g. It is the new league's tournament binary and already
+    built: hybrid4 plus the tournament's --game-cpu.
+  - 8 rows on side branches move to 4 new builds:
+    - chessai-dag-q9: D-L-Nc;
+    - chessai-presplit-q9: T-L-Ne-pre;
+    - chessai-bal-q9: T-L-Le-bal and T-L-Ne-bal;
+    - chessai-bddtrig2-q9: bddfix's D-L-Ne-lreg, -rf16 and -skip, and bddtrig2's D-L-Ne-skill.
+- Identity: every check of every row is byte-identical. Nothing needed an exception.
+- Speed-ups (new CPU / old) grow with depth, because two of the three fast paths act only in search:
+  - depth 0: 0.74-0.89 for flat models, Hoeffding trees, merge trees and the LR-probit MoE; 0.93-1.02 for the
+    other trees and the mixtures, where model evaluation dominates (instructions 0.95-0.98);
+  - depth 1: 0.53-0.62;
+  - depth 2: 0.45-0.59 for flat models, 0.54-0.76 for trees, 0.67 for the LR-probit MoE, 0.80 for FM;
+  - depth 4: 0.62-0.64;
+  - training per position: unchanged, except the depth-2 label search of F-L-mix (0.58).
+- CPU used: about 44 CPU min, all at nice 19 with 1-3 single-threaded jobs:
+  - 2,495 s of test and benchmark runs, old and new binaries together;
+  - 170 s for the 4 builds (cargo -j 2).
+
+THE NEW BINARIES (models/from-scratch/bin; none overwritten)
+- chessai-hybrid4g (md5 f934bbbc..., existing, source models/from-scratch/hybrid4g-src).
+  - It replaces chessai-cyc5 (self-play) and chessai-cyc5-labels (train) on 36 rows, and chessai-resid4, -probit,
+    -nbmix2, -tanroute2, -lrshare, -sparsefit, -hybrid and -hybrid3.
+  - Why one binary can do this: hybrid2-src, which is hybrid3's source and hybrid4's base, descends from all of them
+    through patches that each claimed identity with their options off. The checks confirm it.
+- The four side branches add options the main line lacks:
+  - --dag-leaves (dag);
+  - --pre-split (presplit);
+  - --error-target balanced (bal);
+  - --delegator-split-on leaf-regret/skill, --router-forget-factor and --subrouter-target (bddfix, bddtrig2).
+  Each q9 source is a copy of the branch's own source plus hybrid4-src's fast-path files. The copies are
+  fastbin/<name>-q9-src; the originals (dag-src, presplit-src, balsrc, bddtrig-src) are untouched. The steps:
+  - copy hybrid4-src's encoding.rs, search.rs, selfplay.rs and fastpath.rs over the branch's own;
+  - add `pub mod fastpath;` to lib.rs.
+  This is exactly the fast-path patch: those trees' encoding.rs, search.rs, selfplay.rs, player.rs, game.rs and
+  games.rs are byte-identical to hybrid2-src's, and their Cargo.toml and Cargo.lock to hybrid4-src's. The toolchain
+  is the same rustc 1.94.0. Each build was cargo build --release -j 2 at nice 19, about 40 s of CPU.
+  - chessai-dag-q9 (md5 ac89ed53...) <- dag-src
+  - chessai-presplit-q9 (md5 8f14315a...) <- presplit-src
+  - chessai-bal-q9 (md5 583d5bb1...) <- balsrc
+  - chessai-bddtrig2-q9 (md5 ae3300ad...) <- bddtrig-src. bddtrig2 is a superset of bddfix (it adds skill and
+    --router-split-z), so it also replaces chessai-bddfix: bddfix's three rows are identical on it.
+  Each q9 binary's train, self-play and arena --help is its parent's except for the name in the Usage line.
+
+CHECKS
+All checks ran on read-only reflink copies of cycles/runs/<lineage> (the row's first source lineage). Copies were
+compared with the source after copying. Each check ran old then new, at nice 19, single-threaded, and compared every
+file both wrote.
+
+For every row:
+- self-play: the row's own self-play arguments with --resume, from the row's latest live version, for 2 rounds:
+  - depth 0 and depth 1: 200 games a round;
+  - depth 2: 40 games;
+  - depth 4: 8 games.
+  Compared: the new models, the states, ladder.csv and results.txt. Versions 1 to N-2 were empty placeholders,
+  because resume only checks that they exist.
+
+For every recipe (55 recipes):
+- self-play from scratch: an empty directory, no --resume, 2 rounds of 100 games, as the engine starts a new line.
+- train: the engine's command line, with the latest version as --start (trees from their state):
+  --model KIND --rounds 1 --seed 91 --start ... plus train_args. The fixed set fastbin/trainset holds 1,910 game
+  directories, reflink copies of every 25th game of cycle 70's pool round 345, mixed plies: 161,462 positions.
+- train from scratch: the same command without --start.
+- version 0: leagues.py's make_version0, which trains on one empty game, with the label flags dropped.
+- arenas: the latest version against the one before, both at depth 1 (40 games) and both at depth 2 (20 games).
+  Policy log-odds-softmax T 0.1, --use-probs, seed 5, games saved with --out. Compared: the game files and the
+  printed results, timings stripped.
+
+For every tree recipe with a split threshold (39), splits: a fresh tree trained on the set with the row's
+--split-threshold lowered to 2000. A state records its run's options, so a live state can't take another threshold.
+The trees grew from 1 leaf to between 3 and 21 leaves, except T-N-Le-merge, which made no split in one round.
+
+Flags: each old binary's train and self-play flags, parsed as leagues.py's binary_flags does, are all accepted by its
+new binary with the same defaults. This matters for seeded_args, which reads the --moe-seed and --fm-seed defaults,
+and for the override checks.
+
+Thread count: one benchmark ran the new binary with --threads 2 (F-L-d1jit, 1000 games). It wrote the same files as
+the old binary with 1 thread.
+
+The benchmarks below re-checked identity too, at bigger sizes, every run against every other.
+
+Counts (identical / checks):
+- self-play: 65/65;
+- self-play from scratch: 55/55;
+- train: 55/55;
+- train from scratch: 55/55;
+- version 0: 56/56;
+- arenas (each depth separately): 112/112;
+- splits: 39/39;
+- benchmark runs: 26/26 (CPU), 24/24 (perf, self-play), 7/7 (perf, train), 3/3 (train ABBA).
+
+What the checks don't cover: option combinations that no row uses. The identity of the main-line move rests on the
+code paths these rows run. A new recipe row on an old binary should get its own self-play and train check
+(fastbin/sp.py and train.py, a few CPU seconds at depth 0).
+
+SPEED
+The machine is a Core Ultra 7 258V: 4 P-cores (0-3), 4 E-cores (4-7), no SMT, and the live league keeps it at load
+9-12. Unpinned CPU times mix the two core speeds, so a single run at depth 0 varies by up to ±15%.
+
+Two measures:
+- bench.py: one round from the latest version, run old, new, new, old, unpinned. Robust at depth 1 and deeper.
+- bench2.py: pinned to the E-cores, plus instructions retired in user space from perf stat. Instruction counts don't
+  depend on scheduling. Even pinned, CPU time varies by about ±5% between runs.
+
+Self-play CPU is per game and includes training the round and loading the models.
+
+row                   d kind    games       all cores ms/game ratio        E-cores ms/game ratio  instr
+D-L-Ne                0 bdd       300       8.34 ->     8.83  1.06      11.06 ->    10.93  0.99  0.964
+D-L-Ne-lreg           0 bdd       300      10.59 ->    11.70  1.10      12.81 ->    12.27  0.96  0.962
+D-L-Nc                0 bdt       300                                     6.32 ->     6.02  0.95  0.945
+T-L-Nc                0 bdt       300                                     8.07 ->     7.60  0.94  0.948
+T-L-Nc-merge          0 bdt       400       1.64 ->     1.34  0.82       2.09 ->     1.85  0.88  0.853
+T-L-Ne                0 bdt       400       7.27 ->     6.97  0.96       9.28 ->     9.42  1.02  0.956
+T-L-Ne-bal            0 bdt       300                                     8.20 ->     7.92  0.97  0.947
+T-L-Ne-fresh          0 bdt       300                                     9.34 ->     8.88  0.95  0.958
+T-L-Ne-pre            0 bdt       400       8.40 ->     8.12  0.97       8.99 ->     8.16  0.91  0.953
+T-L-Ne-share          0 bdt       300                                    13.36 ->    12.95  0.97  0.965
+T-L-Te                0 bdt       200                                    19.05 ->    18.80  0.99  0.971
+F-N                   0 cnbp     1000                                     2.11 ->     1.70  0.80  0.842
+T-L-H                 0 ht        600       1.89 ->     1.69  0.89       2.52 ->     2.20  0.87  0.848
+M-LP-L                0 hybrid    600       3.41 ->     2.64  0.77       3.66 ->     3.01  0.82  0.912
+F-L                   0 lr       1000       1.79 ->     1.56  0.87       2.11 ->     1.76  0.83  0.843
+F-L-d0soft            0 lr       1000       1.27 ->     1.10  0.87   
+M-L4-L                0 moe       300       8.54 ->     8.43  0.99       8.22 ->     8.71  1.06  0.956
+M-L8-L                0 moe       200                                    14.60 ->    14.59  1.00  0.978
+M-N4-L                0 moenb     300       8.44 ->     9.04  1.07      10.58 ->     9.89  0.93  0.961
+M-L4-N                0 nbgate    300       6.91 ->     6.23  0.90       8.83 ->     8.38  0.95  0.957
+F-P                   0 probit   1000                                     1.65 ->     1.27  0.77  0.754
+F-P-tau0              0 probit   1000       1.40 ->     1.17  0.83       1.36 ->     1.01  0.74  0.748
+F-L-d1jit             1 lr       1000       2.30 ->     1.42  0.62       2.24 ->     1.32  0.59  0.591
+F-L-d1play            1 lr       1000       1.92 ->     1.01  0.53   
+T-L-NLs-d2jit         2 bdt       100     128.14 ->    96.75  0.76     171.45 ->    91.85  0.54  0.730
+T-N-NNs-merge-d2jit   2 bdt       100      95.83 ->    70.81  0.74   
+F-N-d2jit             2 cnbp      100      64.97 ->    38.20  0.59   
+FM-d2jit              2 fm         50     254.63 ->   202.55  0.80   
+M-LP-L-d2jit          2 hybrid    100      94.25 ->    63.44  0.67   
+F-L-d2jit             2 lr        100      58.10 ->    31.90  0.55      73.90 ->    34.76  0.47  0.528
+F-L-d2mix             2 lr        100      84.53 ->    46.75  0.55   
+F-L-d2play            2 lr        100      63.09 ->    31.70  0.50   
+F-P-tau0-d2jit        2 probit    100      46.70 ->    20.89  0.45   
+F-L-d4jit             4 lr          8    3279.05 ->  2047.95  0.62   
+F-L-d4mix             4 lr          8    3388.41 ->  2174.08  0.64
+
+Training per position, from the train check (one run each, unpinned) and, where shown, bench2 (E-cores and
+instructions):
+
+recipe (row)          kind    old -> new                  positions  us/position old -> new (ratio)   E-core/instr
+D-L-Nc                bdt     dag -> dag-q9                  161462     6.34 ->    6.50 (1.03)        
+D-L-Ne                bdd     cyc5-labels -> hybrid4g        161462     7.89 ->    9.92 (1.26)        E 14.30 -> 14.60 (1.02), instr 1.011
+D-L-Ne-lreg           bdd     bddfix -> bddtrig2-q9          161462    13.31 ->   13.69 (1.03)        
+D-L-Ne-rf16           bdd     bddfix -> bddtrig2-q9          161462    12.78 ->   12.60 (0.99)        
+D-L-Ne-skill          bdd     bddtrig2 -> bddtrig2-q9        161462    11.34 ->   11.17 (0.99)        
+D-L-Ne-skip           bdd     bddfix -> bddtrig2-q9          161462     9.46 ->    9.51 (1.00)        
+F-L                   lr      cyc5-labels -> hybrid4g        161462     2.44 ->    2.12 (0.87)        
+F-L-d2mix             lr      cyc5-labels -> hybrid4g        161462   166.74 ->   99.00 (0.59)        E 171.74 -> 98.83 (0.58), instr 0.620
+F-P                   probit  probit -> hybrid4g             161462     1.13 ->    1.12 (0.99)        
+F-P-tau0              probit  probit -> hybrid4g             161462     0.94 ->    0.98 (1.05)        
+FM-d2jit              fm      cyc5-labels -> hybrid4g        161462    11.14 ->   10.55 (0.95)        
+M-L4-L                moe     cyc5-labels -> hybrid4g        161462     6.71 ->    7.18 (1.07)        
+M-L4-L-hard           moe     hybrid3 -> hybrid4g            161462     7.25 ->    6.68 (0.92)        
+M-L4-N                nbgate  nbmix2 -> hybrid4g             161462     6.57 ->    6.71 (1.02)        
+M-L8-L                moe     cyc5-labels -> hybrid4g        161462    12.92 ->   14.13 (1.09)        E 13.90 -> 13.80 (0.99), instr 1.001
+M-LP-L                hybrid  hybrid -> hybrid4g             161462     3.60 ->    3.46 (0.96)        
+M-LP-L-hard           hybrid  hybrid -> hybrid4g             161462     3.44 ->    3.39 (0.98)        
+M-LP-L-win            hybrid  hybrid3 -> hybrid4g            161462     3.40 ->    3.46 (1.02)        
+M-N4-L                moenb   nbmix2 -> hybrid4g             161462     3.89 ->    3.69 (0.95)        
+T-L-H                 ht      cyc5-labels -> hybrid4g        161462     2.22 ->    2.01 (0.91)        
+T-L-LLs               bdt     cyc5-labels -> hybrid4g        161462    16.48 ->   16.70 (1.01)        
+T-L-LLs-merge         bdt     cyc5-labels -> hybrid4g        161462     1.78 ->    1.71 (0.96)        
+T-L-Le                bdt     cyc5-labels -> hybrid4g        161462     8.75 ->   10.96 (1.25)        E 12.99 -> 13.62 (1.05), instr 1.010
+T-L-Le-bal            bdt     bal -> bal-q9                  161462    11.31 ->   11.25 (1.00)        
+T-L-Le-fresh          bdt     resid4 -> hybrid4g             161462     2.02 ->    2.06 (1.02)        
+T-L-NLs-d2jit         bdt     cyc5-labels -> hybrid4g        161462    11.31 ->   14.29 (1.26)        
+T-L-NLs-merge         bdt     cyc5-labels -> hybrid4g        161462     6.06 ->    5.81 (0.96)        
+T-L-NLs-merge-d2jit   bdt     cyc5-labels -> hybrid4g        161462     3.66 ->    3.76 (1.03)        
+T-L-NNs               bdt     cyc5-labels -> hybrid4g        161462    10.01 ->    8.74 (0.87)        
+T-L-NNs-merge         bdt     cyc5-labels -> hybrid4g        161462     1.62 ->    1.57 (0.97)        
+T-L-Nc                bdt     cyc5-labels -> hybrid4g        161462     5.95 ->    7.57 (1.27)        E 10.68 -> 10.63 (1.00), instr 1.010
+T-L-Nc-fresh          bdt     resid4 -> hybrid4g             161462     7.43 ->    6.70 (0.90)        
+T-L-Nc-merge          bdt     cyc5-labels -> hybrid4g        161462     1.57 ->    1.56 (1.00)        
+T-L-Nc-share          bdt     lrshare -> hybrid4g            161462    16.08 ->   21.29 (1.32)        E 25.08 -> 25.33 (1.01), instr 1.000
+T-L-Nc-share-l10      bdt     lrshare -> hybrid4g            161462    16.11 ->   15.03 (0.93)        
+T-L-Nc-share-merge    bdt     lrshare -> hybrid4g            161462     1.65 ->    1.59 (0.96)        
+T-L-Ne                bdt     cyc5-labels -> hybrid4g        161462     7.59 ->    8.42 (1.11)        
+T-L-Ne-bal            bdt     bal -> bal-q9                  161462    10.88 ->   11.30 (1.04)        
+T-L-Ne-fresh          bdt     resid4 -> hybrid4g             161462     9.28 ->    9.88 (1.06)        
+T-L-Ne-merge          bdt     cyc5-labels -> hybrid4g        161462     2.11 ->    2.11 (1.00)        
+T-L-Ne-pre            bdt     presplit -> presplit-q9        161462     9.85 ->    9.59 (0.97)        
+T-L-Ne-share          bdt     lrshare -> hybrid4g            161462    20.64 ->   18.95 (0.92)        
+T-L-Ne-share3         bdt     sparsefit -> hybrid4g          161462    19.48 ->   16.88 (0.87)        
+T-L-Te                bdt     tanroute2 -> hybrid4g          161462    28.92 ->   27.58 (0.95)        E 54.97 -> 52.19 (0.95), instr 1.000
+T-L-Te-merge          bdt     tanroute2 -> hybrid4g          161462    25.02 ->   20.87 (0.83)        
+T-N-H                 ht      cyc5-labels -> hybrid4g        161462     1.15 ->    1.15 (1.00)        
+T-N-LLs-merge         bdt     cyc5-labels -> hybrid4g        161462     5.21 ->    5.36 (1.03)        
+T-N-Le-merge          bdt     cyc5-labels -> hybrid4g        161462     7.20 ->    7.17 (1.00)        
+T-N-NNs-merge         bdt     cyc5-labels -> hybrid4g        161462     6.96 ->    7.08 (1.02)        
+T-N-NNs-merge-d2jit   bdt     cyc5-labels -> hybrid4g        161462     4.79 ->    5.17 (1.08)        
+T-N-Nc-fresh          bdt     resid4 -> hybrid4g             161462     7.54 ->    8.75 (1.16)        
+T-N-Nc-merge          bdt     cyc5-labels -> hybrid4g        161462     4.94 ->    4.11 (0.83)        
+T-N-Nc-merge-d2jit    bdt     cyc5-labels -> hybrid4g        161462     1.34 ->    1.37 (1.02)        
+T-N-Ne-merge          bdt     cyc5-labels -> hybrid4g        161462     5.67 ->    5.93 (1.05)
+
+Reading the tables:
+- Depth 0: only the encoding applies. It saves about the same CPU per game for every kind, so its share depends on
+  how cheap the model is: -15 to -26% for flat models, -3 to -5% of the instructions for trees and mixtures.
+- Depth 1 and deeper: the fast leaf test and lazy candidates apply. Per game: -36 to -55% for flat models, -24 to
+  -46% for trees.
+- Training is the same code in old and new except for the main line's own changes: instructions 1.000-1.011, CPU
+  time within the noise.
+- The arenas (the new league's tournaments use hybrid4g already), pooled by kind:
+  - depth 1: 0.61 probit, 0.65 LR, 0.66 NB, 0.71 Hoeffding tree, 0.74 merge trees and LR-probit MoE, 0.79 trees,
+    0.82-0.86 mixtures and bdd;
+  - depth 2: 0.48 probit, 0.50 LR, 0.53 NB, 0.57 Hoeffding tree, 0.66 merge trees and LR-probit MoE, 0.74 trees,
+    0.82-0.86 mixtures and bdd, 0.84 FM.
+
+NOT DONE, AND WHY
+- Nothing failed identity, so nothing needed a fallback.
+- No further merges:
+  - bal.patch into the bddtrig2 tree would save one binary. Both patches change delegation.rs and the tree state's
+    optional tail (bal adds state.rs at_end), so it is a port, not a copy.
+  - dag and presplit branch from resid4, before probit. Porting their 614- and 649-line patches into the main line
+    would risk identity for one row each.
+  5 binaries for 65 rows looked like the right stop.
+- No cyc5-labels-q9 build, which would keep cyc5's own model code for its 36 rows. hybrid4g's tree and mixture code
+  executes the same or fewer instructions per self-play game (0.95-0.98 overall). In training, hybrid4g executes 0-1%
+  more instructions (T-L-Le, T-L-Nc, D-L-Ne: 1.010-1.011), with CPU time within the noise (T-L-Le E-cores 1.05;
+  T-L-Nc 1.00; D-L-Ne 1.02). The source tarball is cycles/chessai-cyc5-labels-src.tar.gz, whose fast-path files equal
+  hybrid2-src's, so this build is trivial if training cost ever matters.
+- Optional exact paths 4-6 not built:
+  - 4: skip the SAN text under --no-games, about -5%;
+  - 5: one legal-move list per ply, about -1.5%;
+  - 6: child encodings by byte edits, ~60 lines and an assert harness.
+  All three help depth-0 self-play only, the cheapest work in the system: 1-15 ms a game. Each would need a sixth
+  main-line binary beside the tournament's hybrid4g, plus the whole check suite again for all 5 binaries. Worth doing
+  only if depth-0 self-play becomes a large share of the new league's CPU.
+
+CPU USED
+2,495 s of test runs, old and new binaries together:
+- self-play: 526 s;
+- self-play from scratch: 356 s (its depth-2 rows dominate);
+- train: 181 s;
+- train from scratch: 64 s;
+- arenas: 201 s;
+- splits: 148 s;
+- version 0: 0 s;
+- benchmarks: 553 s (CPU) + 251 s (perf, self-play) + 172 s (perf, train) + 22 s (train ABBA).
+Plus 170 s for the builds. Total about 2,665 s, or 44 CPU min. Everything ran at nice 19, with at most three
+single-threaded jobs at once (the builds used -j 2).
+
+FILES (models/from-scratch/fastbin/)
+- dag-q9-src, presplit-q9-src, bal-q9-src, bddtrig2-q9-src: the new binaries' sources (target/ inside).
+- build.sh, build-*.log, install.sh (copies a build to bin/ and refuses existing names).
+- common.py (helpers), sp.py (self-play, resume or fresh), train.py (train, --start or fresh), arena.py, v0.py
+  (version 0), split.py (splits), flags.py, bench.py and bench2.py (speed), trainbench.py.
+- Batch scripts phase1-sp.sh, phase1-ta.sh, phase2.sh, bench.sh, bench2.sh, split.sh, with their .out files.
+- results.jsonl: one record per check with both runs' CPU. make_docs.py turns it into the tables here.
+- table-rows.txt: every row's checks, below. table-speed.txt, table-train.txt, table-counts.txt.
+- *-logs/: every run's output. trainset/ (the fixed set) and nogames/ (version 0's empty game).
+- rows.txt: recipes.txt's rows when the work started.
+The test directories were deleted once identical; nothing was left in sp-work and the other work directories.
+
+PER ROW
+Columns: sp = self-play resumed; sf = self-play fresh; tr = train --start; tf = train fresh; v0 = version 0;
+a1, a2 = arenas at depth 1 and 2. "=" means byte-identical. The recipe-level checks ran with one row of each recipe.
+The self-play CPU is the check's own run: 2 rounds, model loading included, unpinned.
+
+model                 d train: old -> new           self-play: old -> new       sp sf tr tf v0 a1 a2  self-play CPU old -> new s (new/old)
+D-L-Nc                0 dag -> dag-q9               dag -> dag-q9               =  =  =  =  =  =  =     2.97 ->   2.98 (1.00)
+D-L-Ne                0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     4.11 ->   3.94 (0.96)
+D-L-Ne-lreg           0 bddfix -> bddtrig2-q9       bddfix -> bddtrig2-q9       =  =  =  =  =  =  =     5.15 ->   4.50 (0.87)
+D-L-Ne-rf16           0 bddfix -> bddtrig2-q9       bddfix -> bddtrig2-q9       =  =  =  =  =  =  =     5.11 ->   4.84 (0.95)
+D-L-Ne-skill          0 bddtrig2 -> bddtrig2-q9     bddtrig2 -> bddtrig2-q9     =  =  =  =  =  =  =     3.27 ->   2.91 (0.89)
+D-L-Ne-skip           0 bddfix -> bddtrig2-q9       bddfix -> bddtrig2-q9       =  =  =  =  =  =  =     2.73 ->   2.57 (0.94)
+F-L                   0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     0.86 ->   0.73 (0.85)
+F-L-d0soft            0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     0.64 ->   0.53 (0.83)
+F-L-d1jit             1 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     0.61 ->   0.38 (0.62)
+F-L-d1play            1 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     0.58 ->   0.35 (0.60)
+F-L-d2jit             2 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     3.76 ->   2.05 (0.54)
+F-L-d2play            2 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     3.25 ->   2.07 (0.64)
+F-L-d4jit             4 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =    38.48 ->  28.65 (0.74)
+F-L-d2mix             2 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     4.87 ->   2.59 (0.53)
+F-L-d4mix             4 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =    50.41 ->  27.39 (0.54)
+F-N                   0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     0.81 ->   0.68 (0.84)
+F-N-d2jit             2 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     4.60 ->   2.99 (0.65)
+F-P                   0 probit -> hybrid4g          probit -> hybrid4g          =  =  =  =  =  =  =     0.64 ->   0.50 (0.78)
+F-P-tau0              0 probit -> hybrid4g          probit -> hybrid4g          =  =  =  =  =  =  =     0.62 ->   0.48 (0.78)
+F-P-tau0-d2jit        2 probit -> hybrid4g          probit -> hybrid4g          =  =  =  =  =  =  =     3.21 ->   1.44 (0.45)
+FM-d2jit              2 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =    15.40 ->  13.39 (0.87)
+M-L4-L                0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     4.18 ->   3.92 (0.94)
+M-L4-L-hard           0 hybrid3 -> hybrid4g         hybrid3 -> hybrid4g         =  =  =  =  =  =  =     2.20 ->   2.00 (0.91)
+M-L4-N                0 nbmix2 -> hybrid4g          nbmix2 -> hybrid4g          =  =  =  =  =  =  =     3.74 ->   3.72 (0.99)
+M-L8-L                0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     7.56 ->   7.52 (0.99)
+M-LP-L                0 hybrid -> hybrid4g          hybrid -> hybrid4g          =  =  =  =  =  =  =     1.64 ->   1.50 (0.91)
+M-LP-L-d2jit          2 hybrid -> hybrid4g          hybrid -> hybrid4g          =  =  =  =  =  =  =     7.09 ->   4.74 (0.67)
+M-LP-L-hard           0 hybrid -> hybrid4g          hybrid -> hybrid4g          =  =  =  =  =  =  =     1.30 ->   1.15 (0.88)
+M-LP-L-win            0 hybrid3 -> hybrid4g         hybrid3 -> hybrid4g         =  =  =  =  =  =  =     1.46 ->   1.33 (0.92)
+M-N4-L                0 nbmix2 -> hybrid4g          nbmix2 -> hybrid4g          =  =  =  =  =  =  =     4.63 ->   4.55 (0.98)
+T-L-H                 0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     1.09 ->   0.97 (0.89)
+T-L-LLs               0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     3.65 ->   3.68 (1.01)
+T-L-LLs-merge         0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     0.90 ->   0.79 (0.88)
+T-L-Le                0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     3.12 ->   3.12 (1.00)
+T-L-Le-bal            0 bal -> bal-q9               bal -> bal-q9               =  =  =  =  =  =  =     1.95 ->   1.93 (0.99)
+T-L-Le-fresh          0 resid4 -> hybrid4g          resid4 -> hybrid4g          =  =  =  =  =  =  =     0.90 ->   0.79 (0.88)
+T-L-NLs-d2jit         2 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     8.24 ->   6.80 (0.83)
+T-L-NLs-merge         0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     1.63 ->   1.45 (0.89)
+T-L-NLs-merge-d2jit   2 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     4.49 ->   2.94 (0.65)
+T-L-NNs               0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     3.02 ->   2.91 (0.96)
+T-L-NNs-merge         0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     0.95 ->   0.82 (0.86)
+T-L-Nc                0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     3.15 ->   3.22 (1.02)
+T-L-Nc-fresh          0 resid4 -> hybrid4g          resid4 -> hybrid4g          =  =  =  =  =  =  =     3.08 ->   2.97 (0.96)
+T-L-Nc-merge          0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     0.87 ->   0.74 (0.86)
+T-L-Nc-share          0 lrshare -> hybrid4g         lrshare -> hybrid4g         =  =  =  =  =  =  =     4.56 ->   4.72 (1.04)
+T-L-Nc-share-l10      0 lrshare -> hybrid4g         lrshare -> hybrid4g         =  =  =  =  =  =  =     4.88 ->   4.37 (0.90)
+T-L-Nc-share-merge    0 lrshare -> hybrid4g         lrshare -> hybrid4g         =  =  =  =  =  =  =     0.92 ->   0.79 (0.86)
+T-L-Ne                0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     3.43 ->   3.18 (0.93)
+T-L-Ne-bal            0 bal -> bal-q9               bal -> bal-q9               =  =  =  =  =  =  =     2.26 ->   2.07 (0.92)
+T-L-Ne-fresh          0 resid4 -> hybrid4g          resid4 -> hybrid4g          =  =  =  =  =  =  =     3.87 ->   3.77 (0.97)
+T-L-Ne-merge          0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     0.88 ->   0.75 (0.85)
+T-L-Ne-pre            0 presplit -> presplit-q9     presplit -> presplit-q9     =  =  =  =  =  =  =     2.40 ->   2.52 (1.05)
+T-L-Ne-share          0 lrshare -> hybrid4g         lrshare -> hybrid4g         =  =  =  =  =  =  =     5.46 ->   5.07 (0.93)
+T-L-Ne-share3         0 sparsefit -> hybrid4g       sparsefit -> hybrid4g       =  =  =  =  =  =  =     5.39 ->   5.25 (0.97)
+T-L-Te                0 tanroute2 -> hybrid4g       tanroute2 -> hybrid4g       =  =  =  =  =  =  =     6.60 ->   7.36 (1.11)
+T-L-Te-merge          0 tanroute2 -> hybrid4g       tanroute2 -> hybrid4g       =  =  =  =  =  =  =     3.64 ->   3.35 (0.92)
+T-N-H                 0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     1.03 ->   0.91 (0.89)
+T-N-LLs-merge         0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     1.99 ->   1.87 (0.94)
+T-N-Le-merge          0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     4.43 ->   3.82 (0.86)
+T-N-NNs-merge         0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     2.69 ->   2.80 (1.04)
+T-N-NNs-merge-d2jit   2 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     5.21 ->   3.89 (0.75)
+T-N-Nc-fresh          0 resid4 -> hybrid4g          resid4 -> hybrid4g          =  =  =  =  =  =  =     3.04 ->   2.69 (0.88)
+T-N-Nc-merge          0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     1.71 ->   1.63 (0.95)
+T-N-Nc-merge-d2jit    2 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     3.41 ->   2.08 (0.61)
+T-N-Ne-merge          0 cyc5-labels -> hybrid4g     cyc5 -> hybrid4g            =  =  =  =  =  =  =     2.84 ->   2.28 (0.80)
+
+
+FX: CHESSAI-HYBRID4GFX, THE MAIN FAST BINARY PLUS THE FIXED-POINT CHANGES (2026-11-09 ~17:30-18:05)
+
+Task (the coordinator, ~17:30): build chessai-hybrid4gfx = hybrid4g-src plus the fx v2 changes of the base-model
+speed study (models/from-scratch/modelopt/summary.txt, section 3; its binary is chessai-fxlr2). Run the identity suite
+against chessai-hybrid4g on the 57 rows that use it, plus a short benchmark. Nothing is switched or deployed.
+The four side-branch q9 binaries stay as they are. Mapping for the engine: leagues/binaries-fx.txt.
+
+RESULT
+- Identity: 465 checks, all byte-identical; no exception. The checks are the suite above for the 57 rows, plus two
+  added for the calibrated path, which only cal: players reach: calibrated arenas for every recipe, and a small
+  tournament with the league's flags.
+- chessai-hybrid4gfx matches chessai-fxlr2: the same files in every run, and instruction counts equal to within
+  0.002%.
+- Speed (new CPU / old, pinned benchmarks):
+  - LR and NB gain at every depth but one:
+    - self-play: depth 0 0.74 and 0.67, depth 2 0.39 and 0.36;
+    - training with search labels: 0.29;
+    - calibrated arenas: depth 2 0.33 and 0.35, depth 1 0.69 and 0.69.
+  - Exception: LR at depth 1 with the jitter policy (F-L-d1jit) is 7% slower (see below).
+  - Probit gains only when calibrated:
+    - calibrated arenas: depth 2 0.70, depth 1 0.85;
+    - self-play: depth 0 0.97, depth 2 1.01.
+    The study's "probit d2 -32%" was a calibrated arena.
+  - Trees, mixtures and FM:
+    - calibrated play at depth 2 gains a little, from direct values: T-L-Ne 0.93, M-L4-L 0.97;
+    - self-play and training are unchanged (instructions 1.001).
+  - The small tournament (12 kinds at plies 1 and 2): 0.92.
+- CPU used: about 28 CPU min, all at nice 19 with 1-3 single-threaded jobs:
+  - the build: 47 s;
+  - the identity checks: 1,384 s, both binaries together;
+  - the benchmarks: 206 s;
+  - the match check against chessai-fxlr2: 55 s.
+
+THE REGRESSION: F-L-D1JIT
+- The jitter policy (WldScoreJitter10) searches for an outcome at the end of each root move's principal variation
+  (Search::root_outcomes). fx v2 then takes that outcome from the float model, once per search.
+- At depth 1, each root move's search is a single leaf. So every leaf gets both the fixed-point value and the float
+  model's outcome, which is more work than hybrid4g's single float prediction.
+- Measured: instructions 1.073, E-core CPU 1.067, 1,000 games, identical games.
+- At depth 2 the same scheme saves a lot (F-L-d2jit 0.39). With the softmax policy, which needs no outcomes,
+  depth 1 gains too (F-L-d1play 0.62).
+- F-L-d1jit is the only depth-1 jitter row. No other row uses an outcome search at depth 1 (search labels are at
+  depth 2). A fix would be a source change, for example the float path for depth-1 outcome searches. I made none.
+
+BUILD
+- Source: models/from-scratch/fastbin/hybrid4gfx-src.
+  - It starts from hybrid4g-src's Cargo.toml, Cargo.lock and src.
+  - Over it go fxlr-src's classifier.rs, cnbp.rs, encoding.rs, lib.rs, logreg.rs, player.rs, probit.rs,
+    search.rs, selfplay.rs, and the new fixed.rs. hybrid4g-src's copies of those nine files equal hybrid4-src's,
+    so this is exactly the fx diff.
+  - main.rs, the only file both sides changed, is a clean 3-way merge: git merge-file -p with hybrid4g's main.rs,
+    base hybrid4-src's and other fxlr-src's.
+  - Against fxlr-src, the result differs only by hybrid4g's --game-cpu: three hunks in main.rs, and tournament.rs.
+    Against hybrid4g-src, it differs only by the fx files.
+- Build: cargo build --release -j 2 at nice 19, with target/ reflinked from hybrid4-src. 46.6 s CPU, 0 warnings.
+  Log: fastbin/build-hybrid4gfx.log.
+- Binary: models/from-scratch/bin/chessai-hybrid4gfx, md5 a3e6d4e6cbaf400ef600ddeb5f3104b5, installed with cp -n
+  (nothing was overwritten). Its train, self-play, arena and tournament --help equal hybrid4g's except for the name
+  in the Usage line.
+- Default CHESSAI_FX=on, as the engine would run it. CHESSAI_FX=off or direct turn the changes off or partly off.
+
+CHECKS
+- Runs: the scripts above, with FB_SUB=fx (logs and results in fastbin/fx/) and OLD_BIN=chessai-hybrid4g.
+  Drivers: fx-a.sh, fx-b.sh, fx-c.sh, fx-bench.sh, fx-bench3.sh. Every number: fx/results.jsonl and
+  fx/vs-fxlr2/results.jsonl. Tables: fx/tables.txt, written by make_fx_docs.py.
+- New scripts:
+  - calarena.py: arena.py with the league's calibrated players, cal:CALSET:KIND:MODEL. CALSET is the first 8,000
+    positions of each outcome file of the row's held-out set (fastbin/calsets/lr or cnbp). A small set keeps the
+    fits cheap; the code path is the league's.
+  - tourn.py: one double round robin, as leagues.py's phase_tournament runs it: --use-probs --anchor random
+    --seed 1 --no-catch-up --prior-draws 0 --reports-last --sparse-fit --game-cpu --save-games, with
+    RAYON_NUM_THREADS=1. The players are calibrate.py's: cal: on the full held-out sets.
+    - F-L, F-P-tau0, F-N, FM-d2jit, T-L-Ne, T-L-Te, D-L-Ne, T-L-H, M-L4-L, M-N4-L, M-L4-N and M-LP-L, each at
+      ply 1 and ply 2;
+    - the references random, random-1 and random-2.
+    That makes 27 players and 702 games. Every output file is compared (2,816, the saved games included) except
+    game_cpu.csv, and the printed lines with their timings removed.
+  - bench3.py: the arena benchmark, a version against itself, log-odds softmax T0.1, perf instructions and E-core
+    CPU, runs old new new old.
+
+Identity (both binaries' CPU; single unpinned runs, so the CPU ratios are only rough):
+check               runs identical  old CPU s  new CPU s new/old
+selfplay              57        57      236.4      177.0   0.749
+selfplay-fresh        47        47      149.6      140.8   0.941
+train                 47        47       89.8       79.3   0.883
+train-fresh           47        47       29.9       25.6   0.855
+version0              47        47        0.1        0.1   0.973
+arena d1              47        47        5.8        5.8   0.991
+arena d2              47        47       64.4       64.2   0.998
+split                 31        31       54.1       53.6   0.991
+arena-cal d1          47        47       10.7       10.3   0.957
+arena-cal d2          47        47       72.8       67.4   0.927
+tournament             1         1       23.8       21.8   0.916
+all                  465       465      737.5      646.0   0.876
+- The selfplay rows are each row's own settings, from its latest live version: 200 games at depth 0 and 1,
+  40 at depth 2, 8 at depth 4, 2 rounds.
+- The per-recipe checks use the recipe's first row.
+- Forced splits: fresh trees, threshold 2000. They grew from 1 leaf to 3-21; T-N-Le-merge made no split in one
+  round, as in the first suite.
+- Version 0 trains on one empty game, as leagues.py's make_version0 does.
+
+The match with chessai-fxlr2 (OLD_BIN=chessai-fxlr2, results in fx/vs-fxlr2/):
+- bench2: F-L-d2jit, F-P-tau0-d2jit, F-N, T-L-Ne and the label training of F-L-d2mix. Each had four runs with
+  identical files; the instruction ratio was 1.00000 for the four self-play runs and 1.00002 for the training;
+- self-play resumed: F-N-d2jit and M-L4-L;
+- arenas: F-P-tau0 at depth 1 and 2.
+All identical.
+
+SPEED: the benchmarks, chessai-hybrid4g (old) against chessai-hybrid4gfx (new), pinned to the E-cores
+(taskset -c 4-7), runs old new new old, all four runs' files identical.
+Self-play (CPU per game includes training on the round) and training (per position):
+mode  row                 d   units  ins new/old CPU(E) old    new new/old  per unit old -> new
+sp    F-L                 0  236072      0.509       1.69   1.26   0.743  1.69 -> 1.26 ms/game
+sp    F-L-d1jit           1  152970      1.073       1.47   1.56   1.067  1.47 -> 1.56 ms/game
+sp    F-L-d1play          1  142027      0.511       1.37   0.84   0.615  1.37 -> 0.84 ms/game
+sp    F-L-d2jit           2   14148      0.357       3.42   1.33   0.388  34.22 -> 13.29 ms/game
+sp    F-P-tau0            0  219976      0.736       1.09   1.05   0.968  1.09 -> 1.05 ms/game
+sp    F-P-tau0-d2jit      2   14032      0.860       2.02   2.04   1.011  20.21 -> 20.44 ms/game
+sp    F-N                 0  298528      0.513       1.67   1.12   0.670  1.67 -> 1.12 ms/game
+sp    F-N-d2jit           2   24801      0.409       3.22   1.17   0.362  32.20 -> 11.67 ms/game
+sp    T-L-Ne              0   76258      1.001       2.98   2.70   0.908  9.92 -> 9.01 ms/game
+sp    M-L4-L              0   79592      1.001       2.79   2.86   1.023  9.31 -> 9.53 ms/game
+train F-L-d2mix              161462      0.256      15.75   4.58   0.291  97.53 -> 28.37 us/position
+- T-L-Ne's 0.91 and M-L4-L's 1.02 are noise: their instructions are unchanged.
+- Probit's instructions fall 26% at depth 0 and 14% at depth 2, but its cycles fall only 5% at depth 0 and rise
+  2% at depth 2.
+
+Arenas, a version against itself, log-odds softmax T0.1 (cal = the league's calibrated players):
+mode row         d games    ins cycles CPU(E) old    new new/old
+cal  F-L         2   150  0.328  0.329       3.59   1.20   0.333
+cal  F-N         2   150  0.313  0.335       3.29   1.16   0.353
+cal  F-P-tau0    2   150  0.631  0.689       3.60   2.52   0.702
+raw  F-P-tau0    2   150  0.805  1.026       2.25   2.28   1.014
+cal  F-L         1  1000  0.659  0.672       1.34   0.92   0.685
+cal  F-N         1  1000  0.628  0.660       1.73   1.19   0.687
+cal  F-P-tau0    1  1000  0.832  0.858       1.46   1.24   0.851
+cal  T-L-Ne      2    40  0.960  0.926       3.52   3.28   0.930
+cal  M-L4-L      2    40  0.977  0.951       5.37   5.20   0.967
+
+From the identity runs (single unpinned runs, pooled by kind; rough):
+- LR self-play at depth 4: 0.32 (F-L-d4jit and F-L-d4mix).
+- Calibrated arenas at depth 2:
+  - LR 0.41, NB 0.43, probit 0.72;
+  - HT 0.82, the LR-probit MoE 0.92, moenb 0.93, trees 0.93, bdd 0.95, nbgate 0.96, moe 0.97, FM 1.00.
+- Uncalibrated arenas at depth 2: LR and NB 0.33, the others 1.00-1.05.
+- Training (fixed set) is unchanged except the label search of F-L-d2mix: 0.28 with --start, 0.38 from scratch.
+- Small runs vary a lot under the live league's load: F-L-d1play's two rounds took 0.12 s and 0.35 s with the
+  same binary. Use the pinned numbers above.

@@ -1,0 +1,93 @@
+chessai-errdag4 (2026-11-11, implementation fork; candidates 1 and 2 of the 11-11 ~12:50 performance review)
+================================================================================================================
+
+Binary: models/from-scratch/bin/chessai-errdag4, md5 7d6ce9a7bbe53d58eed1652bbe6ce145 (a new file; nothing in bin/
+overwritten). Source: fastbin/errdag4-src, a copy of fastbin/errdag-src (chessai-errdag3, md5
+261fe1991fab361bc5d75eb428660457) plus errdag4.patch (diff -ru of src/, 492 lines). Built with
+nice -n 15 cargo build --release -j 2. errdag2 for reference: 2f963aa0215a9e85bb3d0b9ee07599a0.
+
+What changed (exact: the same operations on the same inputs in the same order)
+- Training (candidate 1). Graph::node_output_ctx computes each node's path-independent part once per training step
+  and keeps it in the node (Node.base, Node.base_step), then adds the path's cell terms per call:
+  CNBP: the three class products before the cells' factors (class_products), then scale_normalise (factors, total
+  in class order, divide); LR: predict_log, then the offsets, then softmax; probit: the latent mean and variance
+  (latent_base), then (m + mu, var + s2) through probs_of_latent (predict_from_base). Valid within one step: every
+  call is inside Bdd::train after begin_step_ctx with the same data, and the node's classifier changes only where the
+  existing per-(step, cells) cache is dropped: base_step = 0 is set next to every cache_step = 0 (14 sites:
+  delegation.rs 12, bdd.rs 1, pathctx.rs 1). New nodes start with base_step 0. Only for <= 4 classes (3 here).
+- Play and training (candidate 2). Cnbp::predict / predict_scaled / class_products run the three class chains in one
+  loop; each chain keeps its own order, the total is summed in class order (Rust doesn't contract to FMA).
+- Buffers sized to the classes: small_buffer (an 8-entry stack array, a Vec past 8) instead of zeroed [0.0; 256]
+  in node_predict_path, descend, predict_training_ctx, route_ctx, train_with_table, train_router_ctx, best_child and
+  routing_errors_ctx.
+- Not done: hybrid9's single held-out load in own calibration (review's optional extra).
+
+Identity evidence (scripts and outputs in this directory)
+- Tests: cargo test --release: 171 passed (plus 1 and 0 in the other targets).
+- train_id.txt: multi-round training with leaf and router splits on the errdag sweep data (30 rounds and 100k
+  windows; 6-round set), seeds 11 and 12; models, states and masked logs. All SAME: LR bdt, ctx z0/z30/inf, bdd z0,
+  flat against errdag2 AND errdag3; LR ctx z0 split-limit 8 against errdag2; probit bdt, ctx z0/z5/z30/inf, bdd z0,
+  flat against errdag3. Splits happened (path-stats: sibling sets 3-4, cells 36-66 at z0/z5; 13 nodes at z30/inf).
+  The cluster (ncm) configs fail on this data on both binaries ("positions are mixed"): data layout, not binary.
+- live_train_id.txt: one round from the live states of 11-11 ~12:50 (review-1111b snapshots), seed 139: D-L z0 x2
+  against errdag2 and errdag3, D-P z0 x2 against errdag3, T-L-Ne and T-P-Ne against errdag2/3 and hybrid6, T-P-Nc-merge
+  and T-L-Nc-merge from scratch against errdag3 and hybrid6: all SAME, failures 0.
+- play_id.txt: arenas of the review's play specs, seed 31, 100 games at depth 1 and 30 at depth 2, T 0.1 and 0.02:
+  D-P z0 vs T-P-Ne / F-P / D-L z0 / itself, D-L z0 vs T-L-Ne / F-L / itself, T-P-Ne vs F-P, T-L-Ne vs F-L,
+  T-P-Nc-merge vs T-L-Nc-merge; and the own-calibration command (cal: held-out fit) for D-P z0, D-L z0, T-P-Ne,
+  T-L-Ne, F-P, F-L. All SAME against errdag3, and against errdag2 for the LR-only ones; failures 0.
+- Dry runs (dry_cycle.py, compare_dry.py, list_nonsame.py; dry/EXP/{old,new}): each live experiment copied mid-cycle
+  (phase train) to dry/EXP/root with every absolute path rewritten, then `run --cycles 2` from the same snapshot
+  twice (old binaries; errdag4 as tournament and DAG training binary), threads 2, jobs 1, nice 15.
+  - error-dag-probit-p1 (cycles 228-229): 5,811 files; every game (pool and tour/games.csv), rating, Elo history,
+    head-to-head, model, state, entries and players file byte-identical (1,891 key files). Differences: config.json
+    and lines.csv (the binary name only), logs, cycle reports, owncal .arena logs and state.json (times and the
+    binary name), totals.csv, cycles.csv, rounds.csv, events.csv (start/end/date/CPU/wall columns only),
+    tour/game_cpu.csv (per-game CPU) and the scan cache's records of it and of games.csv (stat; sha256 of
+    game_cpu.csv). The new run used errdag4 for the tournament, own calibration and the DAG lines' training (logs).
+  - error-dag-p1 (cycles 125-126): 3,236 files, 1,067 key files: the same result.
+  - dry_games.py: the engine deletes a cycle's pool/ and selfpool/ at its end, so both runs were repeated from the
+    same snapshot with the second cycle's game files copied at its train phase: 12,291 game files (tournament and
+    self-games) per experiment, diff -rq identical (probit cycle 229, LR cycle 126). Each binary also repeated
+    itself (old vs old2, new vs new2: all key files identical) and old2 vs new2 matched again.
+- play_id_h13.txt: errdag4 against hybrid13 for the non-DAG kinds (T-P-Ne vs F-P, T-L-Ne vs F-L, T-P-Nc-merge vs
+  T-L-Nc-merge at depths 1-2, T 0.1 and 0.02; own calibration of T-P-Ne, T-L-Ne, F-P, F-L): all SAME. hybrid13
+  stays ~x0.54 of errdag4's CPU on these (errdag has none of hybrid5-13).
+
+Swap (swap_errdag4.py; config.json and lines.csv before it in config-before/; one line in each driver.log)
+- Without stopping the drivers: League.__init__ reads config.json once per cycle process (repeat.sh runs one cycle
+  per process) and `run` never writes it (only create/add do), so config.json was replaced atomically (temp file,
+  fsync, os.replace) right after state.json showed a cycle entering its tournament phase; the next cycle reads it.
+- error-dag-probit-p1: 13:58:30, during cycle 247's tournament; errdag3 -> errdag4 (tournament binary and the 4 D-P
+  lines' train_binary). From cycle 248 every tournament, own calibration (@247 versions on), self-games and D-P
+  training ran on errdag4 (tour/tournament.log, owncal/*.arena, self_games.log, runs/D-*.loc.log).
+- error-dag-p1: 14:01:27, during cycle 139's tournament; errdag2 -> errdag4 (tournament and the 4 D-L lines). From
+  cycle 140 on errdag4, the same logs.
+- Both drivers kept completing cycles; no errors in driver.log. The dag_read.sh waiters were left as they were
+  (they will read with errdag3/errdag2, their arguments; identical results, slower).
+
+Measured on the live runs (measure_live.py; totals.csv and the D lines' run logs; the 15 cycles before the swap
+against the cycles after it, to 14:11: probit 248-269, LR 140-156; the DAGs keep growing, so if anything this
+understates the saving):
+| per cycle, CPU s           | error-dag-probit-p1      | error-dag-p1             |
+| DAG lines' training (4)    | 43.2 -> 19.3 (x0.45)     | 54.5 -> 25.1 (x0.46)     |
+| tournament games           | 9.21 -> 6.41 (x0.70)     | 9.22 -> 6.94 (x0.75)     |
+| own calibration            | 24.1 -> 18.1 (x0.75)     | 24.1 -> 18.7 (x0.78)     |
+| self-games process         | 2.81 -> 2.35 (x0.83)     | 2.99 -> 2.65 (x0.89)     |
+| all four phases            | 90.3 -> 56.4 (x0.62)     | 102.3 -> 64.6 (x0.63)    |
+| wall                       | 49.7 -> 32.4 s (x0.65)   | 52.1 -> 32.7 s (x0.63)   |
+At ~34-38 CPU-s a cycle saved: ~1.8 CPU-h to both floors (300), ~7.8 to both caps (600).
+On the 11-11 ~12:50 snapshots (one round, live states): D-L z0 27.5 -> 11.1 s and 38.3 -> 12.9 s (errdag2), D-P z0
+21.3 -> 8.4 s and 14.7 -> 6.0 s (errdag3); T-L-Ne/T-P-Ne about the same. Arenas x0.72 overall, DAG ply-2 arenas
+x0.60-0.70; own calibration D-P z0 6.2 -> 4.1 s, D-L z0 6.7 -> 5.3 s.
+
+Not verified / left
+- The cluster (ncm) trees: trained only one round from scratch on live data (SAME); no experiment trains them with
+  errdag4.
+- Ply 3+ play and the outcome search (self-play) were not compared; no running experiment uses them on errdag.
+- hybrid9's single held-out load for own calibration (optional in the review) was not added.
+
+Scratch (nothing deleted): fastbin/errdag4-src (~89 MB with target/); fastbin/errdag4/ (scripts, *.txt, id/ ~1.1 GB,
+dry/ 11.7 GiB logical, 2.2 GiB exclusive on disk (btrfs reflinks): snapshots and the old/new/old2/new2 runs and games-old/new of both
+experiments; config-before/; swap-*.out). swap-lr-wrongcwd.out: a first LR swap attempt started from the wrong
+directory, which failed before touching anything (moved here from the repo root).

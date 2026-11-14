@@ -1,0 +1,83 @@
+grow2 (2026-11-11): phase 2 of the growth rule, the router-split triggers (theory-2 6.40, 6.41, growth-spec phase 2
+as 6.40 amends it) and the lifetime n (6.41 note (2)), for the router-p1 league test.
+
+BUILD. Source fastbin/grow2-src (copied from grow1-src; rs/ and grow1-src untouched), grow2.patch = diff against
+grow1-src (bdd.rs, bdt.rs, delegation.rs, main.rs, pathctx.rs). Binary md5 9bcd8d31576d59f8282fe156b3473336, in
+cand/chessai-grow2, installed as models/from-scratch/bin/chessai-grow2 (cp -n). Built and tested at nice 15.
+
+FLAGS (all absent = grow1 = hybrid15, byte for byte):
+  --router-split-rule {z|stall-h|stall-hg|subtree}  default z, today's drift trigger, unchanged
+  --grow-stall-z 2, --grow-stall-windows 2          shared with grow1 (the router's own stagnation, spec 0.2)
+  --grow-router-z 2                                 for H and G
+  --grow-mdl 1                                      0 turns the MDL bar off
+  --grow-router-shadow {auto|path|cluster}          auto: path where the router has 2+ parents, else cluster
+  --log-router-stats                                per router per window: error, stall, children, k, n, bars, H, G,
+                                                    gate, decision, shadows (and leaf closes under subtree)
+  --grow-mdl-n {trial|lifetime}                     default trial (grow1); lifetime = per-node counter of examples
+                                                    through the node, never reset by an undo, 0 for a new node; MDL n
+                                                    and the scheduler tie-break. num_trained_total unchanged.
+  A rule needs --model bdd, --path-context, --route error without --route-switch (cluster routers are refused:
+  "cluster routers are out of scope"), --subrouter-target routing, --error log, threshold >= 20, no
+  --router-split-z, no --split-rule grow (grow1's refusal of BDD leaf trials kept). --router-split-limit applies.
+
+TESTS (scripts and outputs in this folder):
+  unit            221 lib + 1 main pass (unit-tests.log); all 208 grow1 tests kept, 13 new: H exact on injected
+                  losses; copies' losses; G scored before the shadow trains; stall-hg fires on a path-dependent best
+                  child and stays within 1 SE for 10 windows without one; stall-h waits for stagnation and its
+                  children; MDL both sides; budget; train within budget + exact resume; partition follows the
+                  structure; cluster split uses the shadows; lifetime n judges a retry (bdt.rs).
+  identity        train_idg2.txt: 14 configs x 2 seeds, 64 SAME (vs grow1 28, hybrid15 28, hybrid6 8);
+                  live_train_idg2.txt: 8 live cases, 16 SAME (grow1, hybrid15); id_p1g2.txt: P1 25 rounds, T-P-Ne,
+                  T-L-Ne, D-P-Ne-ctx and D-L-Ne-ctx z 0, 8 SAME (grow1, hybrid15); play_idg2.txt: 161 jobs, 322 SAME
+                  (grow1, hybrid15); resume-grow.txt: --split-rule grow 30 rounds W 200k vs grow1, SAME (31 files and
+                  log). CPU vs grow1 x0.99-1.06 (machine at load 15).
+  CLI             cli_checks.txt: 17 refusals and 4 acceptances as intended.
+  lifetime n      resume-grow-life.txt: chain of 30 one-round processes = one process (30 models, state, 76 lines).
+                  The retry of leaf 3 is judged at n 1.6M (bar 0.0190, kept) where trial n gives 1.0M (bar 0.0294,
+                  undone); first verdicts identical in both modes.
+  exact resume    resume_g2.py, P1 30 rounds, chain = one process (all models, final state, rule log lines):
+                  stall-h, stall-hg (28 of 29 saves mid-shadow), subtree (28 of 29 mid-shadow), all at W 200k with
+                  --grow-mdl 0 --grow-router-z 0; stall-h-10k (W 10k): 4 router splits (3 cluster, 1 unsharing of
+                  router 2 over 5 parents, cells dropped), 3 sibling sets, 4 post-split checks (3 warnings, back-off).
+  play            play_rules_g2.txt: 9 rule models (smoke, resume, the 10k model with 3 sets and an unsharing) at
+                  depths 1 and 2: hybrid15 and hybrid16 load them and play byte-identical games to grow2 (18 SAME).
+
+SMOKE (smoke.txt, smoke-RULE.txt: every router window's decision). P1 108 rounds (21.6M), D-P-Ne-ctx, defaults:
+  stall-h   29 router windows, 0 splits; H passes every window (z 25-212, H 0.07-0.19 against MDL 0.005-0.07);
+            stagnant from the root's 3rd close; the gate never opens: no router ever has all its children ready.
+  stall-hg  the same, 0 G passes. G starts near 0 (root +0.0003, z 3.7, at its 2nd close) and falls steadily while
+            the cluster shadows run: root -0.0069 (z -35), router 2 -0.019 (z -27) at 21M.
+  subtree   1 open gate (router 2 at 16.4M, subtree stalled), G -0.0093 (z -16): no split. 0 splits.
+  6.41's predictions hold (subtree 0, HG 0). User CPU 80 s (stall-h), 117 s (stall-hg, subtree: the shadows).
+  The three rules' models are identical (no router split), with 4 leaf splits, 13 nodes.
+
+FINDINGS FOR THE ANALYST.
+  1. The children guard (a child has closed a window = num_trained_total >= W) holds every router in the smoke:
+     each has a starved child (end of the smoke: the root's leaf 3 has 556k, 3.2% of its traffic; router 2's leaf 5
+     63k, 0.7%; router 1's 626k-1.18M; router 6's leaf 12 92k). The root would open at ~31M (~v100 at 300k a
+     cycle) and router 1 soon after; router 2 practically never. Arm H may fire later and less than 6.41 expects.
+     A share reading (children holding 90% of the router's traffic have closed a window, as subtree's 0.9) would
+     open it; not built.
+  2. G declines monotonically while the cluster shadows run (both routers, from 0 to -0.007 and -0.019). Training
+     and scoring follow the router's own path (same target, same update, counts, scored before training); the
+     synthetic tests behave. Possibly NB shadows trained on a hard-EM cluster's subset; worth a look before
+     reading HG's refusals as "no routing gain".
+
+DEVIATIONS (conservative readings).
+  - k per spec 0.7 with d = router + path-table parameters: cluster (B+1) d = 10,224, path (m-1) d. 6.40's "k ~2,500"
+    is one copy; --grow-mdl 0.25 reproduces its bar (0.002 at 10M).
+  - Children ready = every direct child has num_trained_total >= W (see finding 1).
+  - stall-h's split: cluster = today's split_delegator; path = unsharing into forgotten clones. stall-hg/subtree
+    split with their shadows as the routers (cluster: q on top, S_j copies).
+  - No router credits: a router splits at its own close, bounded by --router-split-limit and router splits < leaf
+    splits; no ranking across routers.
+  - Path case: any non-member router with 2+ parents; members use cluster under auto and never split under path.
+    An unsharing drops the copies' cells of sets no longer upstream (pathctx::check needs it; their routing moves
+    slightly). After an unsharing, the parents' routers use subtree-error targets for it.
+  - H and G use the pre-training route and the realised child losses; the stagnation statistic is the recorded
+    router log-loss; leaves keep their own 20-block windows under subtree; shares by grow_n.
+  - Post-split check pooled over the made nodes (with v itself in an unsharing); back-off on fresh nodes is nearly a
+    no-op. A split router's grow statistics reset fully. Shadows are dropped and restart when their router's parents
+    change, else they get the new cells. Q_v is of the router kind (Cnbp), hash warm-up for its first W/5.
+  - life counts recorded (scored) examples; v keeps its life after an unsharing.
+  - Rule names in refusal messages print as StallH/StallHg (Debug), not the flag spelling.

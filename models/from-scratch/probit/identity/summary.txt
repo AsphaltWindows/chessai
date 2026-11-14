@@ -1,0 +1,11 @@
+Identity check, chessai-probit (md5 576db2c21f7997fe09bcd1ac790ffd77) vs chessai-resid4 (md5 a872a8123f568fe6794b6d86f3af2316),
+run.sh (2026-11-07). The unmodified source copy also builds byte-identical to chessai-resid4.
+Identical outputs:
+- eval-loss --use-probs --fit-calibration on heldout-lr-d2-s555: lr, cnbp, tan, moe, fm, bdt (T-L-Nc-c v715, T-N-NNs-merge-c v1000),
+  ht (T-L-H-c v1523), cal:cnbp (eval-loss.txt)
+- tournament, one double round-robin of 11 league specs (cal: wrapped, plies 1-2: lr, lr d2mix, cnbp, tan, moe, fm, bdt x2, ht,
+  random-1): games.csv (110 games) and ratings.csv
+- self-play from scratch, seed 21, vs-previous: lr 3 rounds + --resume to 4, lr at depth 2 (3 rounds of 20), cnbp 3, tan 2,
+  bdt T-L-Nc-merge recipe (split threshold 5000) 3 rounds incl. its .state files: every model file and ladder.csv
+- train on 97 league game dirs: lr --start, lr --start with --label-depth 1 --label-result 0.5, cnbp: model files
+(The first lr-d2 run failed in both binaries on a duplicated --games flag in run.sh; rerun by hand with --games 20.)

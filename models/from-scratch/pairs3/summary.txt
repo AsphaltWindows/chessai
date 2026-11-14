@@ -1,0 +1,68 @@
+chessai-pairs3 / pairs3f: summary (the PAIRS3 BUILD fork, 2026-11-13 02:14-04:xx; the coordinator's directive ~02:13,
+analyst 6.111). Source models/from-scratch/pairs3-src (pairs2-src + pairs.rs rewritten, compound.rs = hybrid21's).
+
+BINARIES (cp -n into models/from-scratch/bin/)
+  chessai-pairs3   0a208b81ef4d6b3272d1b82a63ef7bb1  the directive as written: selection windows (the statistics
+                   restart at every checkpoint), the contrast's SE clustered by game with the component terms (the
+                   pair cell centred at the null prediction, the values' and grand means at their own), cap 300, drop
+                   |mu| < 1.0 sd after 3M own examples. FAILS THE NULL (20 chosen a window). Do not use.
+  chessai-pairs3f  819821cfd76a7d24938abe522f585182  pairs3 + selection on |I| / sqrt(max(V_clustered, V_iid)) (the
+                   per-example SE of the same contrast as a floor; --pairs-se floored|clustered, default floored) and
+                   --pairs-contrast marginal|cells (default marginal). THE RECIPE'S BINARY. Tests 223 + 2 pass.
+  Why the floor: a side-to-move pair compares interleaved positions of the same game, whose label is one, so its
+  clustered SE is tiny and a tiny systematic effect in v (model nonlinearity, game-end parity) passes: pairs3 picked
+  20 stm x home-square pairs a window under the null (|z| 13-26) and on real data, and its held-out log-loss was
+  worse than plain (+0.0037 at round 25, SE 0.0005). The labels themselves show no interaction under the null
+  (scripts/labelcheck.py: |z| < 1.6).
+
+NULL (shuffled results, data/null25, 25 rounds from scratch, 5 windows of ~1M examples; bands = mean z^2 of the
+clustered z by the candidate's games in the window)
+  marginal, pairs3f (null/mf):  <100 0.94-0.96 | 100-999 0.99-1.02 | 1000+ 1.75 (window 1, the burn-in), 1.02, 1.21,
+                                1.00, 0.97.  CHOSEN 0 in every window (clustered z over 5: 138, 28, 83, 0, 0).
+  marginal, pairs3 (null/m):    same bands; chosen 20 a window (100).
+  cells, pairs3f (null/cf):     <100 0.94-0.96 | 100-999 1.11-1.17 | 1000+ 1.14-2.11; 65-94 pass the floor a window,
+                                |z| to 31: FAILS. Cause (null/cellcount-cf.txt): castling/ep-absent x king/rook-square
+                                pairs whose a~b cell holds 3-18 positions of 1-3 games (rules make it near-empty); a
+                                cell centred at its own mean and filled by one game adds ~0 to both variances.
+                                --pairs-contrast cells: do not use (a min-games-per-cell rule would be the fix).
+
+OFFLINE (pairs's 25 real ply-1 sets in order, held-out slice; B - A = pairs minus plain log-loss, SE)
+  pairs3f marginal (offline/mf): +0.0011 (0.0006) r5, -0.0001 r10, -0.0001 r15, 0.0000 r20, -0.0001 (0.0001) r25;
+                                 31 pairs (77, 4, 2, 1, 4 passed the floor per window); hubs 64:0 x9, 64:1 x9; inert 9/31.
+  pairs3f cells (offline/cf):    +0.0004, +0.0003, -0.0006, +0.0002, +0.0003; 100 pairs; hubs 67:0 x27, 68:0 x24, 66:0
+                                 x15, 69:0 x15, 65:0 x11; inert 53/100.
+  pairs3 (no floor): +0.0037 (m), +0.0030 (c) at r25.  pairs2 (for reference): -0.0007.
+  => pairs3f marginal = plain within 0.0001 offline.
+
+IDENTITY AND RESUME
+  training: pairs3f vs hybrid6, flag absent and --pairs off, probit and lr, 4 chained steps: 16/16 IDENTICAL.
+  exact resume (multi-round vs chained processes, --pairs-every 100000): -f, -fcells, -fcdrop, -cmdrop (clustered,
+    drop-after 20000: 20 -> 37 -> 55, drops at both later checkpoints): models and state IDENTICAL in all four.
+  play: pairs3f vs hybrid21's suite (31 cases, plies 1-5): 31/31 IDENTICAL (identity/compare3.txt).
+  kill -9 league smoke (smoke/): root B, one driver a cycle, SIGKILL to the process group in F-P-S7v3.loc's cycle-6
+    training, resumed, vs root A (one driver) after cycle 9: 49 files identical, 0 differ; decisions identical.
+
+DUPLICATES (found in the lists): a binary feature's two values (stm 64, castling 66-69) make the same interaction
+twice (x(i:0&X) + x(i:1&X) = x(X)): offline mf 18 of 31 pairs in 9 groups (22 distinct); the smoke observer at cycle
+9, 12 of 20 in 4 groups (64x66 and 64x67 four ways each). Merging them still leaves 64:* in 9 offline. Fix, not
+built: skip a candidate whose canonical key (a binary feature's value -> *) is already chosen.
+
+CLEAN-LIST SMOKE (smoke/rootA: from scratch, the drafts' settings, 29 cycles, 2.83M examples; the recipe line has
+1M windows, so 2 checkpoints; two observers with 200k windows; scripts/listcheck.py on the final models, probit28)
+  F-P-S7v3.loc (the recipe):        40 pairs (list far from full: cap 300); values in > 5 pairs: 46:5 (white queen
+                                    g6) x14, 64:1 x11, 64:0 x9; inert 9/40 (22%).  FAILS the criterion.
+     checkpoint 1 (1.08M): bands 1.02 | 1.34 | 26.5 (real data), 203 passed the floor, added 20 (64x66 and 64x67 four
+     ways each, ...); checkpoint 2 (2.0M): 63 passed, added 20 (the queen-on-g6 sortie x the black king's and queen's
+     home squares and castling, near-duplicates in pairs too: 59:11 / 59:0 is in practice a two-state square).
+  observer marginal, 200k windows:  52 pairs; hubs 46:5 x13, 59:11 x7, 69:0 x6; inert 17/52 (33%).  FAILS.
+  observer cells, 200k windows:     280 pairs; 31 hubs (69:0 x40, 68:0 x33, ...); inert 112/280 (40%).  FAILS.
+  Duplicates in the recipe's list: 22 of 40 pairs in duplicate groups (27 distinct interactions); merged, the hubs
+  remain (46:5 x12, 64:* x9) and 6 of the 18 others are inert. Hubs here look like genuine piece interactions of
+  from-scratch play (an early queen sortie and its targets; side to move x castling), not artefacts the null shows.
+
+LEAGUES
+  recipes: row F-P-S7v3 (chessai-pairs3f, --use-probs --pairs on) in make_recipes.py's HAND list (+ comment) and
+  appended to recipes.txt; diff vs recipes.txt.before-s7v3 = that line; the regenerated file equals recipes.txt.
+  drafts: leagues/specs/batch7/s7v3-p1-s1.DRAFT.json and -s2 (seeds 77, 78): s7-p1-s1/-s2's settings, lines F-P
+  (train_binary chessai-pairs3f, no flag) and F-P-S7v3, tournament binary chessai-pairs3f, ply 1, floor 300, cap 401,
+  the 6.111 band in the description. Copies created OK in pairs3/draftcheck/ (scratch root). NOT LAUNCHED.

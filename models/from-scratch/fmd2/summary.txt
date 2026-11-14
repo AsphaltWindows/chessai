@@ -1,0 +1,26 @@
+FM-d2jit-c (batch 2, job 2; the coordinator's fork, 2026-11-08 day): FM-c's line plus --depth 2, its one factor
+(self-play by depth-2 search), from scratch, named like F-L-d2jit-c. A league line, deployed at the cycle 28->29
+boundary (cycles/champ/staged-c28; see deploy.log).
+
+Why: spdrop found FM's ply-2 drop after depth-0 self-play the biggest of any kind (current version against its
+champion at ply 2, cycles 2-4: FM -147, MoE -91, T-L-Le -105), and the depth-2 lineages show none.
+
+MoE's twin was not added: MoE-d2jit-c (MoE-c's line plus --depth 2) is already in the league, since the first run's
+cycle 16. At cycle 27 its champion v2431 is at 1761, against MoE-c's v373 at 1715.
+
+Smoke (smoke.sh -> smoke.out), on the lineage's binaries:
+- chessai-cyc5 self-play from scratch, 2 rounds of 40 games at depth 2: exit 0 (28 CPU-s); a resume, 1 more round:
+  exit 0. Games from scratch run about 330 plies (13,100 plies per 40 games).
+- The own step's train on chessai-cyc5-labels (own_games.binary, as FM-c's), from the newest model (FM keeps no
+  state): exit 0, 8,540 positions.
+- A league-policy arena at ply 2 on chessai-sparsefit (the tournament binary), self-play version against the own-step
+  version: plays (20 games).
+
+Cost: the driver's measure recipe (F-FM-s21 v999 and v1000, 300 games x 2 rounds at depth 2, 4 threads): 0.222 CPU-s a
+game at load 11.8 (costs.csv row "fm d2 jitter10"). For comparison, MoE-d2jit-c measures 194-228 ms a game in the
+league. With 56 CPU-s a lineage, the driver plans about 6 x 40 games a cycle. Its own step adds the cycle's ~3,700
+league games, so most of its data will be league positions.
+
+Unverified anecdote: in the measure run, one depth-2 round of 300 games after F-FM-s21's 1000 depth-0 rounds gave v3
+against v2 at depth 2 (self-play policy) +286 -4 =10, 97%. One round, one pair; it fits FM's ply-2 weakness after
+depth-0 training, but it is not a strength test.

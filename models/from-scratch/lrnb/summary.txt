@@ -1,0 +1,130 @@
+lrnb: is LR strictly better than NB, or better in most circumstances but worse in some? (2026-11-08)
+User: "whether LR are strictly better than NB models or LR are better in more circumstances than NB models are but
+are worse in some also".
+
+VERDICT: LR is better everywhere we looked. No group of positions has NB ahead, and no data size from 10k
+positions up has NB ahead. NB only ties LR in a few places: at 10k training positions (on log-loss), and on the
+1.8% of positions where NB is at least 97% confident. A gate that mixes the two per position gains nothing on
+held-out data. So NB is not a specialist for some kind of position. It is a weaker model of the same thing.
+
+Setup
+- Benchmark: offline-c15. Training is cycle 15's round-robins 80-83 (2,308,895 positions). Test is round 84
+  (575,099 positions in 10 parts).
+- Models: LR uses F-L-c's recipe (--model lr --use-probs) and NB uses F-N-c's (--model cnbp --use-probs).
+- Binary: bin/chessai-lrnb, md5 ff4aee20. It is chessai-sparsefit plus `eval-loss --dump FILE`, which writes the
+  class, the 3 log-probabilities and the 70 features of each position (patch in lrnb-src/lrnb.patch). Its
+  eval-loss output and its trained models are byte-identical to sparsefit's: lr-all = offline-c15 lr and
+  nb-all = offline-c15 fn.
+- Every loss is held out twice. The models never saw round 84. Each model's own 4-parameter calibration is
+  fitted on one fold of the test parts (A = the even parts, B = the odd ones) and scored on the other fold.
+  - A first try split the parts as p0-p4 against p5-p9. Its offsets differed by about 0.3 between the folds,
+    because the parts are consecutive chunks of the outcome files, so they hold different pairings.
+  - With the interleaved folds, lr-all scores 0.6234 against 0.6220 calibrated in-sample.
+- 95% intervals come from the 10 parts (t, 9 df). Group means are pooled, and the variance is the ratio
+  estimator's with the parts as clusters, so positions of one game stay in one cluster.
+
+1. Learning curve (curve_summary.out)
+   The subsets are nested random subsets of pair-dirs: each round is shuffled with its own seed and then
+   truncated. LR and NB are trained on the same stream.
+
+     positions   LR      NB      NB-LR [95% CI]              winner: LR   NB      NB-LR [95% CI]
+         9,885   0.9121  0.9277  0.0156 [-0.0033, 0.0345]            0.5792 0.6041  0.0249 [0.0072, 0.0426]
+        29,634   0.8120  0.8548  0.0428 [ 0.0195, 0.0661]            0.4836 0.5241  0.0404 [0.0184, 0.0624]
+        99,921   0.7314  0.7711  0.0398 [ 0.0137, 0.0658]            0.4120 0.4395  0.0276 [0.0001, 0.0551]
+       294,184   0.6741  0.7411  0.0670 [ 0.0338, 0.1003]            0.3634 0.4115  0.0481 [0.0174, 0.0787]
+       972,833   0.6354  0.7400  0.1046 [ 0.0726, 0.1367]            0.3384 0.4100  0.0716 [0.0387, 0.1045]
+     2,308,895   0.6234  0.7338  0.1104 [ 0.0785, 0.1423]            0.3299 0.4055  0.0756 [0.0429, 0.1084]
+
+   There is no crossover. At about 10k positions the two tie on log-loss, and NB is still worse on the winner
+   loss. From 30k positions on, NB is significantly worse. NB flattens at about 0.74 from 300k positions while LR
+   keeps improving, so the gap grows with data. If NB wins at all, it is below about 10k positions (a few dozen
+   games). That is far below any league lineage.
+
+2. Groups at full data (groups.out; NB-LR per group, with the league's current F-N-c - F-L-c in the last column)
+   The offline pair is nb-all - lr-all. The league pair is F-N-c v2620 - F-L-c v4167, copied to m/league/ and
+   calibrated the same way.
+
+   There are 58 label-free bins. In 55 of them NB is worse with the interval above zero. The other three are
+   ties:
+   - NB confidence 0.97 and up: 10,189 positions (1.8%), 0.0072 [-0.0083, 0.0227].
+   - F-N-c's confidence 0.97 and up: 4,482 positions, -0.0134 [-0.0885, 0.0618].
+   - Ply unknown (the starts of part chunks): 1,326 positions, -0.0225 [-0.19, 0.15].
+
+   The league pair never has F-N-c significantly ahead either: it is worse in 53 bins and ties in 5. The ties
+   are F-N-c's confidence 0.97 and up, ply unknown, NB or F-N-c confidence under 0.40, and rarest entry
+   100-999.
+
+   - Overall: 0.1104 [0.079, 0.142]; league pair 0.1145 [0.067, 0.162].
+   - Smallest gaps:
+     - Where NB is confident: 0.90-0.97 gives 0.033 [0.016, 0.051], and 0.97 and up ties.
+     - The opening: ply 1-10 gives 0.070 [0.045, 0.094], and all four castling rights give 0.076 [0.056, 0.097].
+     - Positions made only of common entries: rarest (square, piece) count of 100k or more gives 0.065
+       [0.051, 0.079].
+   - Largest gaps:
+     - Where the two models' most likely class differs (20% of positions): 0.198 [0.129, 0.268].
+     - Long games: ply 251 and up gives 0.234 [0.118, 0.349].
+     - Bare endgames: 2-6 pieces gives 0.147 [0.111, 0.184], and 0.227 for the league pair.
+     - Drawn games: 0.143 [0.091, 0.194].
+   - Rarity does not favour NB. Positions with an entry seen only 598-999 times in training (2,376) give 0.162
+     [0.032, 0.293]. Training saw every possible (square, piece) entry at least 598 times; the rarest is a white
+     king on a8. So nothing in the test set is truly rare.
+   - Side to move makes no difference: 0.111 against 0.110.
+   - Result: black win 0.100, white win 0.102, draw 0.143, all above zero. These bins use the label, so a gate
+     cannot use them.
+
+3. Gate (gate.out)
+   Each part is scored by a gate fitted on the other fold. Both calibrations and the gate are fitted on that
+   fold too. The mix is p = g LR + (1-g) NB, and the settings were fixed before any held-out loss was seen.
+
+     method      held-out log-loss  minus LR alone [95% CI]   winner  minus LR [95% CI]
+     LR alone    0.6234                                         0.3299
+     NB alone    0.7338   0.1104 [ 0.0785,  0.1423]             0.4056   0.0757 [ 0.0429,  0.1084]
+     constant    0.6237   0.0003 [-0.0009,  0.0014]             0.3301   0.0002 [-0.0012,  0.0015]
+     outputs     0.6228  -0.0006 [-0.0036,  0.0024]             0.3302   0.0003 [-0.0024,  0.0030]
+     full gate   0.6232  -0.0002 [-0.0046,  0.0041]             0.3307   0.0008 [-0.0030,  0.0045]
+     oracle      0.5142  -0.1092 [-0.1240, -0.0944]             0.2606  -0.0692 [-0.0834, -0.0551]
+
+   - constant: one weight for every position. The fitted weight on LR is 0.992 on fold A and 0.925 on fold B.
+   - outputs: a sigmoid over both models' calibrated log-probabilities and confidences.
+   - full gate: outputs plus the 70 features one-hot, 870 weights. It is an LR over the position and both
+     outputs.
+   - The full gate cut the training loss of its own fold by about 0.003, but none of that holds out. Where NB
+     beats LR on a position is not predictable from the position or from either model's output.
+   - The oracle is only a loose bound. It picks the better model after seeing the result. Wherever two models
+     disagree, one of them always looks better on the outcome that happened, even when their expected losses are
+     equal.
+   - To check this, the same oracle over two LRs (lr-all and the league's F-L-c, 0.6234 and 0.6354) scores
+     0.5528, a "gain" of 0.071 (oracle_check.out). The NB oracle's larger gain (0.109) mostly reflects that NB
+     disagrees with LR more, not that it is right more often.
+
+Caveats
+- This measures prediction loss on league games (round 84), not playing strength.
+- NB gets one global 4-parameter calibration. Its raw draw slope is about 0.1, so it is wildly overconfident.
+  A calibration per group might narrow some gaps. That was not tried, but the gate could already lean on NB
+  per group and found nothing.
+- The league pair (F-N-c, F-L-c) was trained on other self-play data, which may include round-84-like
+  positions. Both are low-capacity models and the picture matches the offline pair.
+
+CPU: about 3.5 CPU-min, at nice 19 with at most 2 jobs.
+- Build 23 s.
+- Training of 12 models: 10 s.
+- Two held-out calibration passes: 38 s.
+- Dumps: 10 s.
+- groups.py, two runs: 42 s.
+- gate.py: 51 s.
+- oracle_check.py: 8 s.
+- Checks: about 10 s.
+
+The dumps (458 MB) were deleted after use. dump.sh regenerates them in about 20 s.
+
+Files
+- Scripts:
+  - make_subsets.py, train.sh and jobs.txt for the training.
+  - eval_curve.sh, which writes curve.csv.
+  - curve_summary.py.
+  - dump.sh, plus common.py with the calibration formula, the training counts and the dump reader. Its
+    calibration reproduces the binary's per-part losses exactly.
+  - groups.py, gate.py and oracle_check.py.
+- Outputs: *.out.
+- Models: m/ (lr-*, nb-*, and league/ with SOURCE). data/ holds the subset symlinks. folds/A and folds/B hold
+  the even and odd test parts.

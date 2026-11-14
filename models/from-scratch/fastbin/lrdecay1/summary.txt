@@ -1,0 +1,184 @@
+chessai-lrdecay1 (2026-11-12 ~05:15; analyst 6.64 (b) and its note; built by the coordinator's build fork)
+=====================================================================================================
+
+WHAT
+  grow5 plus one training option, --lr-sum-memory N: decaying AdaGrad sums for logistic regression. Each example of
+  the model's own multiplies every AdaGrad sum by (1 - 1/N), then adds its squared gradients:
+      S <- S (1 - 1/N) + g^2      (the sum-memory form, not an RMSProp mean, as the analyst asked)
+  A gradient's weight in the sums falls by e after about N examples, so the steps stop shrinking for good.
+  - Without the option, or with N = 0: AdaGrad as before, byte for byte.
+  - For `train` of --model lr (F-L) and of --model bdt with --leaf lr and no --leaf-residual (T-L-*).
+  - Refused elsewhere (exit 1): N = 1, other models (cnbp, probit, bdd, ...), --leaf probit, --leaf-residual, and
+    self-play.
+  Source: fastbin/lrdecay-src, a copy of grow5-src (rs/ untouched). Its diff is lrdecay1.patch, 7 files:
+  - logreg.rs: the memory, the age and the lazy step (see DESIGN), settle, the state I/O, and 5 tests.
+  - delegation.rs: DelegationParams.lr_sum_memory, which the root leaf gets. Debug prints it only when set, so state
+    files without it read as before and a resumed run must pass the same N. Classifier 4 in state files is "LR with
+    a memory": the LR state, then the memory and the age.
+  - classifier.rs: the flat Logreg's refresh() settles the sums.
+  - main.rs: the option, its checks, and the flat model gets the memory after --start.
+  - bdt.rs: 1 test plus 4 memory variants in the state round-trip test.
+  - bdd.rs, compound.rs: the new field in their test parameter literals.
+  Untouched: probit, CNBP, routers (only the root LEAF gets the memory, LR routers never do), play code, model-file
+  formats.
+  Binary: cand/chessai-lrdecay1, md5 cab29ea7292160ce1fdd4c2fd32a8d64, built like grow5 (nice 19 cargo build
+  --release -j 2). Installed with cp -n as models/from-scratch/bin/chessai-lrdecay1.
+
+DESIGN (Delta = the node's own examples, as the analyst's note asks)
+  Every Logreg (the flat model, each leaf, each shadow) keeps its own `age`: the examples it has stepped on since its
+  sums were last settled. Each step is one example, including a --leaf-share step of a sibling.
+  - Held sums: the stored sum is U = S (1 - 1/N)^(-age). The decayed step adds g^2 to S and moves the weight by
+    rate g / sqrt(S); in held terms that is U += c g^2 and rate sqrt(c) g / sqrt(U), with c = (1 - 1/N)^(-age).
+  - So it is AdaGrad's own step (the AVX2 kernel, unchanged) on the gradient times sqrt(c): the example's weight and
+    its L2 term are both scaled by exp(age kappa / 2), with kappa = -ln(1 - 1/N), computed with ln_1p.
+  - One exp per example. Only the example's own weights are touched. The decay of every other sum is the growth of
+    c, so no per-weight stamps are needed.
+  - It is the per-weight stamp scheme exactly (S_i <- S_i (1 - 1/N)^Delta_i + g^2, with Delta_i in the model's own
+    examples), up to rounding.
+  - settle(): multiplies U by (1 - 1/N)^age and sets age 0, keeping the values up to rounding. It runs:
+    - before an example would take age kappa above 32 (U stays within e^32 of S);
+    - in the flat model's refresh(), before each save;
+    - when the memory changes.
+  - Copies carry the memory and the age. A split's new leaves, the growth trial's shadow, the revision shadow and
+    the grow4 snapshot are clones of the leaf: same N, same age, held sums divided by the forget factor. Each then
+    counts its own examples.
+  - blank() (reset leaves) keeps the memory at age 0. forget() divides U, i.e. divides S.
+  - Model files keep their format: the settled sums, without N or age, so hybrid16 loads them (checked, same scores).
+    - Flat F-L resumes from its model file. The file is written settled at age 0, and --lr-sum-memory is passed
+      again, so the resume is exact.
+    - Trees resume from state files, where classifier 4 keeps the held sums and the age exactly.
+
+TESTS
+  1. cargo test (unit-tests.log): 239 lib and 1 main test pass. New tests:
+     - lrdecay1_lazy_decay_is_the_dense_decay: N 30, 5000 examples of a drifting 3-class stream with skewed feature
+       frequencies.
+       - It is compared against a dense reference that multiplies every sum by (1 - 1/N) per example.
+       - The stream mixes plain train steps, weighted steps with an L2 term, a forget(4) at example 2500, a settle
+         by hand at 4000, and settles at the age limit (every 944 examples).
+       - Weights and settled sums agree within 1e-9 relative at every 500th example.
+     - lrdecay1_a_long_memory_is_adagrad: N 1e12 on 20k examples.
+       - Weights are within 1.3e-10 (largest 0.35) and sums within 1.0e-8 relative (the decay left: 2e-8).
+       - N 0 gives AdaGrad's text byte for byte.
+     - lrdecay1_a_shorter_memory_tracks_drift_faster (toy flips every 700 examples): 500 < 5000 < AdaGrad in loss.
+     - lrdecay1_resumes_exactly:
+       - An unsettled text equals the settled one.
+       - A state with memory and age reads back identically, and so do the next 1300 steps.
+       - A settled model's text plus the flag continues identically.
+     - lrdecay1_copies_carry_the_memory: blank, zeroed and forget.
+     - bdt lrdecay1_a_split_carries_the_memory_and_each_leaf_counts_its_own_examples (grow rule, forget 10):
+       - At the split, the 3 new leaves and the shadow have N, age 3000, and the leaf's sums divided by 10 (states
+         byte-equal to the forgotten leaf).
+       - After k trial examples, the shadow's age has grown by k, and the new leaves' ages add up to k.
+     - state_round_trip_trains_on_identically gains 4 memory variants, all at N 30 so the age limit settles mid-run:
+       error routers, cluster routing with a revision shadow, and growth trials kept and undone.
+       - A state saved every round resumes byte-identically.
+       - A state read with N 0 or N 31 is refused.
+  2. CLI (cli_checks.txt):
+     - Refused, exit 1: N 1, cnbp, probit, bdt --leaf probit, --leaf-residual, bdd, self-play. N abc exits 2.
+     - Accepted:
+       - lr with N 0: model byte-equal to no flag.
+       - lr with N 1000: the model differs.
+       - bdt --leaf lr with N 1000.
+     - Resuming a flagged bdt state: refused without the flag or with N 2000, accepted with N 1000. Resuming an
+       unflagged state with N 1000 is refused.
+     - hybrid16 loads and scores the flagged lr and bdt model files like lrdecay1 does.
+  3. Identity against chessai-grow5 (id_p1_lrd.py -> id_p1_lrd.txt): failures 0.
+     - Setup: pool P1 (112 rounds), seed 7101, 1 thread. Every model and state file is compared byte for byte, and
+       so is the log (timings masked).
+     - The grow5 side is grow5's own identity runs (grow5/id/p1, same pool, seed and flags). F-P was run here with
+       both binaries.
+     - SAME: fl, fp, tlne-capped, tlneg-f1, tlneg-f10, tlneg-f10-fast (kept and undone trials), tpneg-fast (probit
+       growing tree).
+     - Also SAME: fl and tlneg-f10-fast with --lr-sum-memory 0.
+     - CPU matches grow5 within noise (e.g. tlneg-f10-fast 141.1 -> 141.3 s; fl 25.9 -> 20.8 s).
+  4. Through train: N 1e12 vs no flag on 10 P1 rounds (sanity/): weights within 1.9e-7 (largest 2.27); sums within
+     1.7e-6 relative (the decay: 2e-6).
+  CPU of the flag: none measurable. Sweep train user s: AdaGrad 36.4, 1M 36.2, 4M 34.7 on the self-play stream.
+
+OFFLINE SWEEP (sweep.py -> sweep.txt, sweep/results.json)
+  Setup:
+  - F-L, one pass, seed 7101: AdaGrad, and N = 1M, 2M, 4M, 8M.
+  - Prequential by round: round r is scored by the model trained on rounds 0..r-1, as a league line plays the next
+    cycle. Raw, and with a calibration fitted on each round (in sample, the same for every arm), to separate ranking
+    from calibration.
+  - Gain = AdaGrad's loss minus N's loss, in nats per position, paired by round. SE is over rounds, which is
+    optimistic under autocorrelation.
+  Streams:
+  - sp, the drifting stream (make_stream.sh): F-L self-play, each version against the previous, at ply 1 (log-odds
+    softmax T 0.1). 1728 games a round (about one league cycle of an F-L line, ~210k positions), 150 rounds, 31.5M
+    positions, made by hybrid16 (AdaGrad F-L).
+  - p1: the stationary pool P1 (112 rounds), with its 10 held-out parts.
+  - p2drift: offline-ply/drift, P2x's 54 rounds then P2's 54 (an abrupt change of field).
+  - The pools' rounds are merged per round for eval-loss, as calib.py did (scratchpad, RAM).
+
+                 sp (drifting)          p2drift (abrupt)        p1 (stationary)       p1 held-out (final model)
+     N       raw      calibrated     raw      calibrated     raw      calibrated     raw (SE)          cal. part0
+    1M     -0.0062    -0.0041      -0.0111    -0.0084      -0.0072    -0.0058      0.0259 (0.0006)   0.6639 (+0.0063)
+    2M     -0.0037    -0.0025      -0.0066    -0.0053      -0.0046    -0.0038      0.0181 (0.0005)   0.6619 (+0.0043)
+    4M     -0.0020    -0.0014      -0.0036    -0.0030      -0.0026    -0.0022      0.0120 (0.0003)   0.6603 (+0.0027)
+    8M     -0.0010    -0.0007      -0.0018    -0.0016      -0.0014    -0.0012      0.0074 (0.0002)   0.6591 (+0.0015)
+  Prequential gains are negative everywhere: the decayed sums LOSE. Held-out columns are cost (N's loss minus
+  AdaGrad's). AdaGrad's numbers:
+  - sp: prequential 0.6225 raw, 0.6170 calibrated.
+  - p2drift: 0.7560 raw, 0.7527 calibrated.
+  - p1: 0.6752 raw, 0.6731 calibrated; held-out raw 0.6891; cal. part0 0.6576 (grow5's F-L number, equal).
+  Per-round SEs: 0.0001-0.0004.
+
+  READING
+  - Every N loses to AdaGrad on every stream, raw and calibrated, by more the shorter the memory: roughly in
+    proportion to 1/N, halving with each doubling.
+  - The losses grow along the stream: sp thirds at 1M are -0.0038, -0.0070, -0.0076; at 8M -0.0004, -0.0010,
+    -0.0015.
+  - The drifting stream behaves like the stationary pool. Only rounds 1-3 of sp gain at all, by 0.0001-0.0004 (rounds
+    4-9 already lose 0.0003-0.0028).
+  - After the abrupt change (p2drift rounds 54-63) the losses shrink at every N, 4M and 8M by about half (8M: -0.0017
+    before, -0.0009 and -0.0008 right after), but never turn into gains. Then they grow again.
+  - The calibrated losses are 2/3 to 4/5 of the raw ones (at 1M: sp 0.66, p2drift 0.76, p1 0.81). So most of the cost
+    is ranking (noisier weights), not only overconfidence.
+  - Mechanism, as far as the numbers go: at the memories tested, the larger steps add more weight noise than the
+    faster tracking removes. Each coordinate's memory is N of the MODEL's examples, as specified, so a feature value
+    seen in a fraction f of positions averages over only about f N of its own updates against f t under AdaGrad. The
+    rare piece-square values are the noisiest.
+  - Against 6.64:
+    - Predicted prequential gain on drift: 0.003-0.008 at 1-2M and 0.001-0.003 at 8M. Measured on sp: -0.0062 and
+      -0.0037 at 1-2M, -0.0010 at 8M.
+    - Predicted stationary held-out cost: 0.000-0.003 at 8M and 0.003-0.008 at 1M. Measured with the fitted
+      calibration: 0.0015 at 8M (inside) and 0.0063 at 1M (inside). Measured raw: 0.0074 and 0.0259 (outside).
+  RULE (the analyst's note): the largest N whose drifting-stream prequential gain is within 10% of the best N's. No N
+  gains (the best is 8M at -0.0010), so the rule picks nothing.
+  Caveat: offline, the stream does not respond to the learner. A league line's own play would drift with its
+  learning (on-policy feedback), which no offline stream has, and the league's field (trees, frozen references) may
+  drift faster than AdaGrad F-L self-play does.
+
+EXPERIMENT (not created)
+  The rule picked no N, so lr-decay-p1 was NOT created. Creating it would leave an experiment directory to delete if
+  N changes, and deletions need the user's OK.
+  - leagues/specs/batch6/lr-decay-p1.DRAFT.json:
+    - Lines: F-L x2; F-L-decay with --lr-sum-memory 8000000 x2 (8M is a placeholder, the least harmful value
+      tested).
+    - Seed 53, entry_ply 1, games_per_cycle 1584, plateau scaled with a floor of 300, cap 400, hybrid16, P2, no
+      references.
+    - Its description holds the 6.64 predictions, the sweep and the plan.
+    - Checked with the engine's make_config (read only): lines F-L#1/#2.loc and
+      F-L-decay+lr-sum-memory=8000000#1/#2.loc (37 characters); train args "--use-probs --lr-sum-memory 8000000" on
+      chessai-lrdecay1.
+  - Recipe row F-L-decay (leagues/make_recipes.py HAND, regenerated into leagues/recipes.txt, which differs only by
+    the new row):
+    - It is F-L with train binary chessai-lrdecay1 and F-L's train and self-play arguments.
+    - It exists so the flag can be an override: F-L's own chessai-hybrid4gfx refuses it at create.
+    - Backups: models/from-scratch/global11-drafts/{make_recipes.py,recipes.txt}.before-lrdecay.
+  - To run it:
+    1. Rename the file to lr-decay-p1.json, setting N.
+    2. python3 leagues/leagues.py create leagues/specs/batch6/lr-decay-p1.json
+    3. python3 leagues/specs/ply1/train_binary.py leagues/experiments/lr-decay-p1 chessai-lrdecay1 (puts the F-L
+       controls on the same binary).
+
+FILES
+  - lrdecay1.patch, build.log, unit-tests.log, cli_checks.sh/.txt, id_p1_lrd.py/.txt, make_stream.sh, sweep.py
+    (.v1/.v2 are its earlier versions), sweep.txt, chain.sh/.log.
+  - Disk, all deletable once read (the user's OK first):
+    - stream/ 4.5 GB (the self-play stream);
+    - sweep/ 189 MB (15 runs and evals.json);
+    - id/ 599 MB;
+    - stream-test/ 62 MB, cli/ 1 MB, sanity/ 2 MB;
+    - scratchpad lrdecay1-merge/ 172 MB (RAM, 3 merge directories).

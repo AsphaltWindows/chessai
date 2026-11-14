@@ -1,0 +1,147 @@
+HYBRID11: VALUES-ONLY FIXED-POINT SEARCH - CHILDREN'S SUMS FROM THE MOVE, LAZY ORDERING, CHEAPER LEAVES AND HASHES
+(2026-11-11 ~02:45 to ~04:00, the hybrid11 implementation agent: an exact speedup of ply-3/4 play for flat LR and
+probit)
+
+RESULT
+- Binary: models/from-scratch/bin/chessai-hybrid11 (md5 8b8f1a39c27befcddb7f87950b3cc6ba), a new file, installed
+  ~03:46. It plays the same games as hybrid10 (and so hybrid9), byte for byte.
+  - Flat LR moves cost 25% less at ply 4, 12-15% less at ply 3 and 12-20% less at ply 2.
+  - NB (cnbp) moves cost 24-28% less at ply 4 and 12-17% less at plies 2-3.
+  - Flat probit moves cost 13% less at ply 4 (7-15% across runs) and 8-11% less at ply 3. Ply 2 is unchanged
+    (hybrid8's fastprobit path).
+  - Trees and FM are unchanged (their code is untouched).
+  - Source: models/from-scratch/fastbin/hybrid11-src, a copy of hybrid10-src. Only src/fixed.rs and src/search.rs
+    changed. Same commands, flags and files. Built offline at nice 19.
+  - Changed (the module doc says it too). These apply only to the values-only fixed-point search (OUTCOME = false in
+    negamax_fx and child_fx: flat LR, probit and NB under root_values, which tournaments, arenas, replay-games and the
+    log-odds policies use):
+    1. Acc::move_sums (fixed.rs) gives a child's integer sums from the move itself. It looks at the squares the move
+       changes, the side to move, the en passant file, and the castling rights, which it clones and recomputes only
+       when a king or rook moves or a rook is captured. Acc::child_sums played the move and compared the two
+       encodings instead.
+    2. The ordering keys at depth >= 2 come from move_sums: no position copy and play per key, and one key buffer per
+       depth, reused. The first move searched is the first of the largest keys, which is what hybrid10's stable sort
+       put first. The rest are sorted only if that move doesn't cut off.
+    3. Leaves (depth 0, log-odds values) take their sums from the move. A leaf reached by an irreversible move gets no
+       hash, because it can't repeat a position. A reversible leaf's repetition is checked against the stack without
+       pushing.
+    4. A reversible move's hash comes from the move: side to move and the piece's two squares. Before, shakmaty's
+       update_zobrist_hash declined after any double pawn push and for every king move, and the search re-hashed the
+       whole position.
+  - Unchanged: the outcome search (root_outcomes, expected_outcome: self-play's wld-score policies and search labels),
+    and the compound (trees and DAGs at plies 1-2), fastprobit (F-P at ply 2) and float negamax (trees past ply 2,
+    FM) paths. CHESSAI_MOVESUMS=off gives hybrid10's code everywhere, for checks.
+
+METHOD (why nothing can change)
+- The sums are i64. move_sums adds the same feature changes as child_sums, in another order, and integer addition
+  doesn't depend on order, so the sums are identical. A unit test checks this on every legal move of 300 random games
+  (over 1M moves, including castles, en passant, promotions and rook captures). CHESSAI_FX_CHECK=1 asserts it on every
+  call at run time.
+- The same sums give the same f64 keys. Taking the first index of the maximum under total_cmp, then stably sorting
+  the rest, is exactly the stable sort's order. So the order is the same, the nodes are the same and the values are
+  the same.
+- An irreversible move resets the repetition window, so its child can't be a repetition. A reversible child's hash
+  from the move equals the full hash; a unit test checks over 500k moves, and shakmaty's update agrees wherever it
+  answers.
+- So every root value is bit-identical, and the search visits the same nodes (the unit test asserts equal node
+  counts). The games can't differ.
+
+IDENTITY (hybrid10 against the hybrid11 candidate, every output compared byte for byte; nice 19, 1-2 threads;
+suite11.log, check11.log)
+- Unit tests: 166 pass (cargo test --release; unit-tests.log), 3 of them new:
+  - move_sums_equal_child_sums_on_random_games;
+  - move_sums_keep_root_values_and_nodes: a random LR and a trained, calibrated probit; 40 games, some shuffling
+    pieces to reach repetitions; depths 1-4; log-odds and score values. With move sums on and off, root values are
+    bit-equal, node counts are equal, and root_outcomes and its nodes are equal;
+  - reversible_hash_equals_full_hash.
+- The field: hybrid10's identity field (fastbin/hybrid10/st/field), one entry of each kind in use. Their own
+  calibration games (the `arena` command, depth 1, 600 games) are SAME on both binaries, and the same as the field's,
+  for all six kinds (owngames11.py).
+- Tournaments (tour11.py: the arenas' command plus --save-games; every tour file, every saved game, stdout):
+  - field A, the 4 random references and the 6 entries at plies 1-3 (22 players): SAME at T 0.1 (462 games), at
+    T 0.02 (462), and over 2 round-robins at T 0.1 (924);
+  - field B, random, random-4 and the 6 entries at ply 4: SAME at T 0.1 (56 games) and at T 0.02 (56).
+- replay-games (replay11.py: field A's 18 entries against their twins, 2 rounds, seed 1000004): SAME at T 0.1 and at
+  T 0.02 (36 games each).
+- Training (train11.py): one round on field A's 462 games, SAME for lr, probit, both bdt kinds, cnbp and fm.
+  Search-labelled training is SAME too: lr and probit with --label-depth 3, lr labelled by the T-P tree and by FM.
+- Self-play: 14 runs, SAME. lr, probit and cnbp at plies 2 and 3, and lr at ply 4, under the default policy and
+  log-odds softmax.
+- CHESSAI_MOVESUMS=off: field A at T 0.02 is SAME against hybrid10.
+- Check mode (CHESSAI_FX_CHECK=1, every move_sums asserted against child_sums): L at plies 3 and 4, P at ply 4, N at
+  ply 3. No assertion fired, and the games are the same as without the check.
+- 0 failures. No check named a path inside a live experiment or a running arena.
+
+SAVING (bench11.py, bench11.log: one entry against itself, T 0.02, 1 thread, nice 19, ABBA; game CPU a ply; games
+identical in every run)
+- This CPU is a hybrid: P-cores 0-3 at 4.7 GHz, E-cores 4-7 at 3.7 GHz. Unpinned runs land on either type, and pairs
+  swung up to ±10%. The table's runs are pinned to the E-cores (taskset -c 4-7), where pairs agree within a few
+  percent. Unpinned ABBA runs gave the same picture.
+
+| Kind | Ply | us a ply, hybrid10 -> hybrid11 (E-cores) | Ratio (E-cores) | Ratio (unpinned runs) |
+|---|---|---|---|---|
+| L | 2 | 83 -> 70 | x0.845 | x0.80, x0.88 |
+| L | 3 | 547 -> 483 | x0.883 | x0.86, x0.85 |
+| L | 4 | 3021 -> 2276 | x0.753 | x0.755, x0.741, x0.74 |
+| N | 2 | 38 -> 33 | x0.879 | x0.83 |
+| N | 3 | 467 -> 407 | x0.870 | x0.85 |
+| N | 4 | 2276 -> 1637 | x0.719 | x0.76 |
+| P | 2 | 117 -> 118 (fastprobit, unchanged) | x1.004 | x0.98 |
+| P | 3 | 739 -> 680 | x0.920 | x0.92, x0.89 |
+| P | 4 | 10000 -> 8674 | x0.867 | x0.93, x0.87, x0.845 |
+| TL | 2-4 | unchanged code | x0.92-1.07 | x0.93-1.03 |
+| TP | 2-4 | unchanged code | x0.93-1.04 | x0.91-1.09 |
+| FM | 2-3 | unchanged code | x0.96-0.99 | x1.00-1.02 |
+
+- The trees' and FM's spread is noise around 1.
+  - Unpinned, TP at ply 3 read x1.00-1.09 in 5 sets. Pinned it read x0.997 and x1.011.
+  - The hot tree functions (delegation::best_child, Graph::predict_log, Calibrated::logits) have the same size in
+    both binaries. Only their addresses moved.
+- Probit gains less because its keys and leaves still evaluate the probit link. Measured on hybrid10 by doing them
+  twice, the keys were ~40% of a probit ply-4 move. LR and NB values are linear in the sums.
+- Mixed fields (the suite's process CPU, unpinned): field A (plies 1-3) x0.94-1.05; field B (ply 4) x0.94-0.96. Trees
+  and FM dominate both fields.
+- Self-play: lr at ply 4 under log-odds softmax took 23.3 -> 17.5 s (x0.75). The default policy uses the outcome
+  search, which is unchanged: 26.9 -> 26.1 s.
+
+PROFILE NOTES (ply 4, F-L against itself; from the instrumented hybrid10 copy, hybrid11-prof, and eu-stack sampling)
+- The search tree is near-minimal:
+  - 87% of depth-1 cut nodes cut on their first move, 78% at depth 2;
+  - 9.2M leaves in 489 plies.
+  So the lever is the cost a node, not fewer nodes.
+- Ruled out by measurement:
+  - A transposition table: ~10.5% of leaves repeat, ~4% net after its own cost.
+  - Killer moves first: the killer is the cut move in only 45% of cut nodes, so it's a net loss.
+- What each part costs, measured by doing it twice (hybrid10, L, ply 4):
+  - keys +1.0 s of ~4.3;
+  - move generation +0.4;
+  - leaf sums +0.36;
+  - terminal checks +0.3;
+  - playing moves +0.2.
+  The sort, captures-first, Acc::child and the interior checks were within noise.
+- Left after hybrid11 (inclusive shares, sampled on an interim build):
+  - move_sums ~20% (keys and leaves);
+  - legal_moves ~10%;
+  - play_unchecked ~12%;
+  - has_legal_move ~6%;
+  - sorting ~6%;
+  - evaluation ~7%;
+  - captures_first ~4%.
+
+DEPLOYMENT
+- Installed as models/from-scratch/bin/chessai-hybrid11 (new file, ~03:46). Not swapped into anything running.
+- For new tournaments and arenas at plies 3-4, and at ply 2 with flat LR or NB entries, name chessai-hybrid11 as the
+  binary (leagues/ARENA.md says so). For fields of trees and FM alone, it costs the same as hybrid10.
+- leagues/specs/arenas/make_cold_read.py still defaults to chessai-hybrid10. It could name hybrid11; that's the
+  coordinator's to change.
+
+FILES
+- hybrid11-src/ (source); unit-tests.log.
+- run_suite11.sh, tour11.py, replay11.py, train11.py, owngames11.py, suite11.log: the identity suite. These scripts
+  now point at the installed binary. The suite ran on the candidate, the same file (md5 above).
+- check11.log: the check-mode games.
+- bench11.py, prof11.py, bench11.log: CPU a ply.
+- sample11.py: the eu-stack sampler. perf is blocked here (SELinux, perf_event_paranoid 2); ptrace works.
+- ../hybrid11-prof/: the instrumented profiling copy of hybrid10-src, source only. It has counters, CHESSAI_STATS=1,
+  and CHESSAI_DUP=<part> to do a part twice. Its build dir is removed.
+- The suite's work dirs and the sampling build are removed.

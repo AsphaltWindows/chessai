@@ -1,0 +1,131 @@
+bddtrig: non-merging error-style router splits on T-L-Ne-c's recipe, one factor at a time (2026-11-08)
+Arms: C alone (router-split copies forget 16x), a skill trigger and a 2-SE margin, each against the plain BDD and the
+BDT with the same leaves; plus a routing-headroom check and stats on the live D-L-Ne-c's router split.
+Setup as bddstudy/bddfix: LR leaves, CNBP error routers, --route error --error log, branch 3, forget 1, no --revise;
+offline-c15 RRs 80-83, 60 rounds, seeds 1 and 2, split threshold 100k, limit 10; held out on RR 84 with cross-fold
+calibration, paired t over 10 parts.
+
+VERDICT
+No trigger beats a BDT with the same leaves. C alone and the skill trigger end level with it, and both end better
+than the plain BDD; the 2-SE margin changes nothing. Across five studies and seven variants, router splits have never
+beaten a same-leaves BDT offline. Nothing new to stage: D-L-Ne-skill-c (chessai-bddtrig2) and D-L-Ne-rf16-c (C alone)
+are in the cycle 43->44 batch, so the league will judge both.
+- Held out on RR 84, arm minus the BDT with the same leaves, mean of two seeds, log-loss / winner log-loss:
+  C alone (9 and 7 leaves: against BDT-4 for s1, BDT-3 for s2)
+    round 20   0.0017 [0.0005, 0.0028] / 0.0011 [-0.0001, 0.0024]     worse
+    round 40  -0.0004 [-0.0016, 0.0008] / -0.0003 [-0.0014, 0.0008]   level
+    round 60  -0.0005 [-0.0021, 0.0010] / -0.0010 [-0.0022, 0.0001]   level
+  skill trigger (7 leaves in both seeds: against BDT-3)
+    round 20   0.0001 [-0.0012, 0.0013] / -0.0005 [-0.0011, 0.0000]   level
+    round 40   0.0000 [-0.0016, 0.0017] / 0.0002 [-0.0011, 0.0015]    level
+    round 60  -0.0011 [-0.0029, 0.0007] / -0.0009 [-0.0024, 0.0006]   level
+  Round 60 per seed: C alone s1 0.0001 [-0.0021, 0.0023] / -0.0001 [-0.0016, 0.0014], s2 -0.0012 [-0.0039, 0.0016] /
+  -0.0020 [-0.0037, -0.0002]; skill s1 -0.0007 [-0.0019, 0.0005] / -0.0002 [-0.0018, 0.0013], s2 -0.0015
+  [-0.0045, 0.0014] / -0.0016 [-0.0037, 0.0006].
+- Both beat the plain BDD at round 60: C alone -0.0016 [-0.0028, -0.0005] / -0.0021 [-0.0034, -0.0009], skill
+  -0.0026 [-0.0041, -0.0011] / -0.0021 [-0.0036, -0.0007]. Part of that is leaf count: the BDD has 9 leaves, and here
+  BDT-3 beats BDT-4 by 0.0005 [0.0001, 0.0009]. But each arm's gap to its same-leaves BDT is also smaller than the
+  BDD's gap to BDT-4 (0.0010 [-0.0002, 0.0021]): by 0.0015 [0.0002, 0.0028] for C alone and 0.0021 [0.0005, 0.0037]
+  for skill. So these router splits cost a little less than the BDD's, and still gain nothing.
+- The 2-SE margin is a no-op: both seeds are byte-identical to the plain BDD through round 60. Every router split
+  already came on a rise of more than 2 SE; the climb after a leaf split is systematic. Withdrawn from the batch.
+- Headroom: none visible. A ridge router fitted to each leaf's loss never beat the trees' own routing: 0.0013 to
+  0.0078 worse fitted on the training rounds, 0.015 to 0.021 worse fitted on half of RR 84.
+- Live D-L-Ne-c: R' is a pass-through, as offline. At v140, 47 rounds after the split, its copies agree on 97% of
+  positions and R' minus its busiest copy is 0.0000 [-0.0002, 0.0002] on RR 84.
+
+STEP 0, HEADROOM: could any router do better with these leaves?
+Per leaf, a ridge regression of the leaf's raw log-loss on the one-hot features (852 inputs, intercept unpenalized);
+each position goes to the leaf with the lowest predicted loss. Trees: BDT-3 and BDT-4 at round 60, both seeds. Raw
+log-loss per position on RR 84, ridge minus own routing:
+- Fitted on the training rounds (RRs 80-83, 2.3M positions), lambda 100: BDT-3 0.0015 [-0.0031, 0.0062] and 0.0078
+  [0.0046, 0.0110]; BDT-4 0.0013 [-0.0031, 0.0058] and 0.0075 [0.0047, 0.0104]. Lambda 10000 gives 0.0016 and 0.0063
+  for BDT-3. This fit favours own routing: each leaf trained on the positions routed to it.
+- Fitted on one half of RR 84 and scored on the other: 0.015 to 0.021 worse (lambda 10 to 1000). In sample it beats
+  own by 0.027 to 0.031: a half holds about 3.5k games, and a game's positions share an outcome, so it overfits.
+- Fresh routers refitted on one half (CNBP or LR, Best target, 4 passes), calibrated: 0.009 to 0.050 worse.
+- For scale: own routing is 0.019 to 0.025 better than the best single leaf. The per-position oracle is 0.25 to 0.29
+  better than own routing, but it uses the outcome.
+Read: no linear routing gain is visible on these leaves. That is weak evidence, not a bound: one fit favours own
+routing and the other overfits.
+
+STEP 1, C ALONE: --router-forget-factor 16 on chessai-bddfix
+The copies a router split makes divide their counts by 16, so they part at once; leaf-split copies keep
+--forget-factor 1. Nothing else changes.
+- Structure: s1 6 router / 4 leaf splits, root split in rounds 4, 7, 9 and 11, 9 leaves; s2 7 / 3, root in 4, 6, 8
+  and 11, 7 leaves. The plain BDD: 6 / 4 in both seeds, root 3 or 4 times, 9 leaves.
+- C caused bddfix's early damage. At the end of the split's round the siblings agree on 78% and 71% of test positions
+  (the BDD's copies: 96% and 94%). Against the no-split BDT at round 4, root regret is 0.0157 [0.0127, 0.0187] and
+  0.0327 [0.0276, 0.0378] higher, and tree loss 0.0021 [0.0000, 0.0042] and 0.0080 [0.0047, 0.0114] higher. By round
+  8 the tree-loss gap is 0.0022 [-0.0016, 0.0059] and 0.0003 [-0.0020, 0.0026].
+- The damage passes: worse than the same-leaves BDT at round 20, level at 40 and 60.
+
+STEP 2A, SKILL TRIGGER: --delegator-split-on skill on chessai-bddtrig2
+A router's window statistic is the loss of the child it routes to minus that of the child with the smallest summed
+loss since the node got its children (the best single child so far); below zero, it beats the best single child.
+It splits by --split-rule, here Worse with margin 0: when a window's mean rises above the previous window's.
+- Bug, fixed: the first build (chessai-bddtrig) read any negative window as "no previous window" (the sentinel is -1
+  and the test was previous >= 0). Skill windows are mostly negative, so it almost never split a router: skill-s1
+  matched BDT-10. chessai-bddtrig2 tests previous != -1 (unit test added). The runs were redone, and D-L-Ne-skill-c
+  was restaged on the fixed binary before deploy.
+- Structure: 7 router / 3 leaf splits in both seeds, 7 leaves; root split in rounds 5, 7 and 8 (s1), 5, 7 and 13 (s2).
+- The first split comes one window later than the BDD's (round 5) and costs nothing. The copies agree on 96% and 95%,
+  and the tree-loss gap to the no-split BDT is -0.0003 [-0.0008, 0.0001] and -0.0008 [-0.0018, 0.0002]. At round 8
+  it is -0.0005 [-0.0022, 0.0011] and -0.0051 [-0.0077, -0.0025].
+- Defect: after a split, an R' node's children are copies that route alike, so its skill windows sit at zero (-0.000
+  then 0.000 nats before s1's second root split, -0.000 then -0.001 before its third). Margin 0 then splits on noise,
+  bddregret's A defect again. Skill with a margin would stop that (--router-split-z applies to it too). Not run: the
+  plan stayed lean.
+
+STEP 2B, MARGIN: --router-split-z 2 on chessai-bddtrig
+A router split needs its window to rise by more than 2 SE (per position, from the windows' squared errors); leaf
+splits are unchanged. Both seeds are byte-identical to bddstudy's plain BDD through round 60 (all 60 model files),
+though the state records the option. Positions in a game are correlated, so a per-position SE is small; a game-level
+SE might bite, but the climb the trigger fires on is systematic either way. Withdrawn from the league batch.
+
+R' NODES AT ROUND 60 (R' minus its most-used sub-router, summed over R' nodes, per test position; negative: R' helps)
+  plain BDD  -0.0028 [-0.0052, -0.0005]    0.0056 [0.0023, 0.0089]
+  C alone     0.0005 [-0.0022, 0.0032]    -0.0027 [-0.0048, -0.0007]
+  skill      -0.0005 [-0.0023, 0.0014]    -0.0004 [-0.0039, 0.0030]
+No variant's R' adds routing skill consistently. R' nodes sending at least 96% to one sub-router: C alone 2 and 2,
+skill 3 and 3, the BDD 1 and 2.
+
+STEP 3, LIVE D-L-Ne-c: bdd-stats on v92, v93 (the root's router split) and v140
+Scored on RR 84 (575k positions) and on own-step calibration games of v131 and v140 (73k positions).
+- R' is a pass-through. At v93 the copies agree on 100% and R' equals its busiest copy (0.0000). At v140 they agree on
+  96.9% (RR 84) and 97.0% (own games); R' minus its busiest copy is 0.0000 [-0.0002, 0.0002] and -0.0003. With
+  forget 1 the copies keep their counts and drift apart slowly, as in bddstudy.
+- Root base regret climbs, as offline: 0.4844, 0.5004 and 0.6304 on RR 84, 0.1938, 0.2008 and 0.2361 on own games
+  (v92, v93, v140). Tree raw loss on own games: 0.9787, 1.0059, 0.9771. Routing is identical at v92 and v93, so the
+  v93 rise is that round's leaf training, not the split.
+- By v140 leaf 1 has split too (node 1 over leaves 7, 8, 9): 3 of the 5 splits are used.
+
+BINARIES AND CHECKS
+Source models/from-scratch/bddtrig-src (bddfix-src plus the new options; rs/ untouched). Both binaries are new files
+in models/from-scratch/bin; nothing was overwritten.
+- chessai-bddtrig (md5 e7775f22): --delegator-split-on skill (with the sentinel bug), --router-split-z and a
+  headroom subcommand. Valid for the margin, headroom and identity runs.
+- chessai-bddtrig2 (md5 c7dd57ca): the sentinel fix. 145 tests pass, including new ones for skill windows, the
+  margin (z 0 changes nothing; z 1e6 stops router splits but not leaf splits) and state round trips.
+- Identity without the new options. chessai-bddtrig: 8 rounds of the plain BDD, of bddfix's A', B' and C together,
+  and of C alone match chessai-cyc5's and chessai-bddfix's models byte for byte; --router-split-z 0 matches the plain
+  BDD; round-8 state and train.log (timings removed) match chessai-bddfix's. chessai-bddtrig2: the plain BDD's 8
+  models and round-8 state match. Both: 4 rounds of self-play match chessai-cyc5's models, states, ladder and results.
+- Smokes (self-play, resume, own step) pass for skill on chessai-bddtrig2 (router splits at cp 3 and 4) and margin.
+
+LEAGUE
+- D-L-Ne-skill-c: D-L-Ne-c's line plus --delegator-split-on skill; self-play and own step on chessai-bddtrig2, from
+  scratch. Sent to main; staged for the cycle 43->44 boundary with D-L-Ne-lreg-c, D-L-Ne-skip-c, D-L-Ne-rf16-c (C
+  alone, chessai-bddfix) and T-L-Ne-new-c (a same-age BDT control).
+- D-L-Ne-margin-c: sent, then withdrawn (byte-identical to the plain BDD offline).
+
+CPU
+About 37 CPU-minutes of the 60 budgeted. Measured by /usr/bin/time: 25.2 (60-round trainings 15.1, the invalid skill
+runs 2.4, headroom 4.9, refits 1.0, bdd-stats 1.8). Estimated: about 12 (two builds and tests, identity runs, smokes,
+calibration fits, step 3). Single-threaded, nice 19, at most two jobs at once.
+
+FILES (models/from-scratch/bddtrig/)
+run1.sh (C alone), run2.sh (margin; its skill runs were invalid and deleted), run3.sh (skill on chessai-bddtrig2);
+headroom.sh, headroom2.sh, headroom.py -> headroom.txt; identity.sh -> identity.out, identity-selfplay.out,
+margin-identity.out; smoke.sh -> smoke-*.out; evalcal.sh, stats.sh, analyze.py, after.sh -> cal.csv, stats/,
+analysis.txt; step3.sh, step3.py -> step3.txt. Models in m/{rf16,margin,skill}-s{1,2}.

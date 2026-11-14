@@ -1,0 +1,162 @@
+The Play page: a game against a library model at a chosen ply (2026-11-12 ~17:05-17:50, a worker fork)
+==========================================================================================================
+
+The user: "I'd like another option in the menu that leads to a chess board where I can play against a game against a
+chosen model in the library at a chosen ply. Maybe you can grab lichess open source library for the UI if you think it
+makes things easier and it's possible to integrate with it."
+
+HOW TO USE
+----------
+http://127.0.0.1:8766/play/  (top bar: Play; Home: the Play tile)
+1. Choose the opponent. The list shows the fully plateaued models and the holdouts by default (Show: all models for
+   the rest). Narrow it by Type (F, T, D), Kind, Trained at (ply 1-4, other) or Find. Sort it by ladder Elo (the
+   default), type, training ply or experiment. The chosen model's run, regime, end and ladder Elo show below.
+2. Choose the ply, 1 to 4; it starts at the model's training ply. Choose your colour: White, Black or Random. Choose
+   how it plays: "its best move" (the log-odds argmax, the default) or "as in the arenas" (log-odds softmax T 0.02,
+   seeded).
+3. Press New game. Move by dragging, by clicking the two squares, or by typing SAN (Nf3) or UCI (g1f3). A promotion
+   asks for the piece; Cancel or Escape takes the move back. The buttons: Take back (to before your last move;
+   counted), Flip board, Resign.
+4. The page shows:
+   - the move list, with the engine's time for each of the model's moves;
+   - the calibration (the experiment's own parameters);
+   - the model's White/draw/Black probabilities before and after its move;
+   - its search's value of its move and its four best moves.
+5. A finished game (mate, draw, resignation) is saved as leagues/play-games/<date>-<time>-<id>v<V>-p<ply>-<colour>.pgn
+   and listed on the page. Its tags: LibraryId, Experiment, Line, Version, Model, Archetype, Kind, TrainPly, Ply,
+   Policy, Seed, Takebacks, Engine, ModelFile, ModelMd5, Calibration, Started, Termination, PlyCount. A game left by
+   New game is not saved.
+
+WHAT WAS BUILT
+--------------
+- Engine: models/from-scratch/bin/chessai-play1 (md5 26f4a93578e818af92c2d10a1392bf6c; cp -n; hybrid19 untouched,
+  f88040dd27273a4f689c8bb368e06270). Source: models/from-scratch/fastbin/play1-src, a copy of hybrid19-src (rs/
+  untouched).
+  - New: the `play-serve` subcommand (src/main.rs) and selfplay::choose_in and root_values_in (src/selfplay.rs).
+    They call the tournament's own choose_move and Search::root_values at the player's depth.
+  - Requests: one per line, tab-separated KEY=VALUE, op = legal | load | eval | move. Answers: one per line,
+    "@@play <json>".
+  - Built at nice 10, 2 jobs.
+- How the model plays: exactly as an arena player, `NAME PLY cal:<own games>:<kind>:<model>` with --use-probs.
+  - Model file: the library snapshot's (leagues/library/models/...), else the experiment's.
+  - Own calibration games: from the arenas' cache (leagues/arenas/.owncal-cache, keyed by arena.own_cache_key).
+    When the cache lacks them, they are made once as arena.py makes them (the experiment's binary, 600 games at
+    ply 1, T 0.1, seed 5; nice 19, 1 thread) into leagues/play-games/owncal/.
+  - The fitted calibrations equal the experiments' logged ones exactly:
+    - F-P 0.920805,0.064190,-2.656305,-2.384191 (77116 positions);
+    - tree 0.590962,0.745286,-3.230544,-2.672320;
+    - DAG 0.587788,0.796621,-3.431688,-3.266402;
+    - grow6 DAG 0.788814,0.815851,0.061374,0.229832.
+- Back end: leagues/play.py, imported by dashboard.py (no bytecode).
+  - It runs one engine process: started on the first request, nice 19, RAYON_NUM_THREADS=1, one request at a time,
+    up to 4 models kept loaded. It restarts if the engine dies and stops when the dashboard stops (stdin EOF).
+  - It writes only under leagues/play-games/.
+  - Command-line checks: python3 leagues/play.py resolve|move|legal.
+- Page: leagues/play-static/ (play.js, play.css).
+  - Vendored, unchanged, from the npm registry: chessground 9.2.1 (lichess.org's board, GPL-3.0-or-later) and
+    chess.js 1.4.0 (BSD-2-Clause, an ES module).
+  - README.md there has the tarball URLs, the sha256s and the licences. Nothing loads from a CDN.
+  - The plain-board fallback was not needed: the fetch worked.
+- dashboard.py:
+  - the Play link in the top bar and the Play tile on Home;
+  - GET /play/, /play/static/<whitelisted file>, /play/games/<file>.pgn;
+  - POST /play/api/prepare|move|eval|save (JSON, 4 MB limit);
+  - the play page doesn't auto-refresh.
+- Docs:
+  - DASHBOARD.md: the Play section, plus the "read-only except the Play page" note at the top and in "What it
+    reads";
+  - BUILD.md: the chessai-play1 section.
+
+VERIFICATION
+------------
+- Tournament: an argmax tournament on play1 is byte-identical to hybrid19's: games.csv, ratings, head-to-head,
+  players and saved games. It had 12 players, seed 11: F-P, a capped tree, a DAG and a grow6 DAG (grow-dag-p1 v395),
+  each at plies 1-3.
+- Positions: play-serve's move against the tournament's, at every position (verify/positions-games19.txt,
+  positions-games4.txt; rerun 17:40 with the installed binary):
+  | Plies | Games | Positions | Same move | Tie | Mismatch |
+  |---|---|---|---|---|---|
+  | 1-3 | 132 | 11,005 | 10,880 | 125 | 0 |
+  | 4 | 12 | 1,250 | 1,174 | 76 | 0 |
+  - A tie: play-serve's move and the game's both have the best value; the tournament broke the tie with its own
+    random numbers.
+  - In those games the engine's legal moves equal chess.js's at every position, and every game end agrees.
+  - Think time per move:
+    - plies 1-3: mean 0.01-2.9 ms, max 50 ms (the grow6 DAG at ply 3);
+    - ply 4: mean 1.4-15 ms, max 73 ms (the grow6 DAG).
+- Rules (verify/rules.txt): random games by chess.js biased to the special moves, at every position. The engine's
+  legal moves and game ends must equal chess.js's, and the engine must accept every move.
+  - The first run (17:15): 150 games, 46,288 positions, 0 problems.
+    - Ends: checkmate 22, fifty-move 35, insufficient material 69, stalemate 8, threefold 16.
+    - Longest game: 599 plies.
+    - Promotions: q 81, r 88, b 100, n 108.
+    - Castling: e1g1 42, e1c1 31, e8g8 44, e8c8 29.
+    - En passant: 43 captures in 37 games.
+  - The rerun (17:45, seed 1, the installed binary): 150 games, 46,875 positions, 0 problems.
+    - Ends: checkmate 21, fifty-move 21, insufficient material 87, stalemate 6, threefold 15.
+    - Longest game: 630 plies.
+    - Promotions: q 70, r 85, b 118, n 100.
+    - Castling: e1g1 44, e1c1 26, e8g8 49, e8c8 29.
+    - En passant: 37 captures in 34 games (verify/rules-ep.txt).
+- Engine draws: the engine has no maximum game length. Its draws (fifty-move, threefold, insufficient material,
+  stalemate) are automatic, as in chess.js, so nothing had to be restricted in the UI.
+- Live smoke test (browser-test/smoke-live.cjs, on 8766 after the restart). It went from Home's Play tile to the
+  board: 32 pieces, 284 models listed. New game against the top model (flatp3w4w3f1_a@96, ply 3); e4 got the
+  reply d5. No page errors, nothing saved.
+- Browser test (browser-test/ui-test.cjs, headless Chromium on the test port 8797, the same code): 29 passed,
+  0 failed. It covers:
+  - the board (32 pieces), the list and its filters, the ply default;
+  - prepare (the experiment's calibration shown);
+  - a drag move, a click-click move, typed SAN and UCI, the eval panel;
+  - take back, an illegal typed move refused, flip;
+  - resign, with the PGN's tags checked;
+  - a game as Black to the model's checkmate, saved;
+  - a promotion by drag: Cancel, then Escape (nothing played, the pawn back), then a knight (h8=N), saved in the PGN;
+  - no page errors.
+  Screenshots: browser-test/shots/.
+- HTTP on 8766 after the restart: /, /x/, /a/, /m/, /global/, /play/, an experiment, a ladder arena and the static
+  files all return 200; /play redirects (301); unknown files return 404. prepare and move answer as expected.
+
+LIMITATIONS
+-----------
+- A possible repetition edge: chess.js sets an en-passant square whenever an enemy pawn is beside the pushed pawn,
+  even when that pawn is pinned; the engine counts only legal en-passant squares. So a threefold count could differ
+  by one. chess.js decides on the page: if the engine thinks the game is over and chess.js doesn't, the page says
+  so and play goes on. Never seen in the checks.
+- In argmax play, ties between equally valued moves are broken by the game's seed, as in the tournaments, so two
+  games from the same moves can differ.
+- A model whose own calibration games aren't in the arenas' cache makes them on its first New game: seconds (3 s
+  for the grow6 DAG).
+- The list is leagues/library/index.csv as built (17:34:04, 481 rows, 284 shown by default). Newer runs appear
+  only after leagues/library/build_index.py.
+- No clocks, premoves, draw offers, or starting from a position or a PGN.
+- One engine request at a time. Two tabs playing at once queue each other; each request takes milliseconds.
+- The engine process stays up, idle, after the first game until the dashboard stops: nice 19, 1 thread, ~8 MB
+  plus its models.
+- chessground is GPL-3.0. That is fine for this local page; if the page is ever distributed, the GPL's terms apply.
+
+FILES (md5)
+-----------
+leagues/dashboard.py                72f769526c881c7297c1d5fa991bf3cd  (was c5a45604, kept as dashboard.py.before-play)
+leagues/play.py                     df744e91769d7b19b860c6507c67a39e  (new)
+leagues/play-static/play.js         e2e7606cb3f738457c8a9d1b4d8a7e27  (new)
+leagues/play-static/play.css        e8df8845cc9896b544869e468a53570d  (new)
+leagues/play-static/README.md       a10edbfc85f7b3b0f38faa0a78f0d93d  (new)
+leagues/DASHBOARD.md                6177feac6f1547a002a9f27cec244cec  (was 6f5f3668, kept as DASHBOARD.md.before-play)
+leagues/BUILD.md                    a7ed680352332bc1f1e23a22eff94a99  (was bdc2a75f, kept as BUILD.md.before-play)
+models/from-scratch/bin/chessai-play1  26f4a93578e818af92c2d10a1392bf6c  (new)
+Server: pid 3610216 on 127.0.0.1:8766 (nice 19), restarted 17:38:48. Its engine: pid 3610460 (nice 19, 1 thread).
+Port 8765 (pid 893240) untouched.
+
+LEFTOVERS (nothing deleted)
+---------------------------
+- leagues/.dashboard-playwip.py: the same as dashboard.py now. Also leagues/__pycache__/.dashboard-playwip.cpython-314.pyc
+  (from a py_compile check) and play.cpython-314.pyc (17:12, from a check script).
+- leagues/play-games/ui-test/: the 8 PGNs of the browser tests, moved out of the page's list.
+- leagues/play-games/owncal/: 6 own-game sets, 64 MB. Five were copied from the arenas' cache; one was made here
+  (grow-dag-p1's DAG v395, 3 s).
+- models/from-scratch/play1/:
+  - vendor-fetch/: 1.6 MB, the tarballs;
+  - verify/: 4.9 MB;
+  - browser-test/: 49 MB, of which puppeteer-core's node_modules is 48 MB.
+- models/from-scratch/fastbin/play1-src/target: 84 MB, the build.

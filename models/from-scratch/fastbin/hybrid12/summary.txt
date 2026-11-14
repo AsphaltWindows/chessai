@@ -1,0 +1,134 @@
+HYBRID12: VALUES-ONLY FIXED-POINT SEARCH - A STAGED FIRST MOVE AT DEPTH-1 CUT NODES
+(2026-11-11 ~07:10 to ~07:40, the hybrid12 implementation fork: candidate 1 of the 06:50 performance review, an
+exact speedup of ply-3 and ply-5 play for flat LR, probit and NB)
+
+RESULT
+- Binary: models/from-scratch/bin/chessai-hybrid12 (md5 9cb4d4d1b3ccc2c154f46724840aad39), a new file, installed
+  07:34. It plays the same games as hybrid11 (and so hybrid10 and hybrid9), byte for byte.
+- Game CPU a ply, hybrid12 / hybrid11 (pinned to the E-cores, ABBA, T 0.02, 1 thread):
+  - W4 (flat-p3-w4 F-L#1 v99, the model of the queued ply-4/5 work): ply 3 x0.650, ply 4 x0.952, ply 5 x0.711.
+  - The identity field's flat LR: ply 3 x0.686, ply 4 x0.966, ply 5 x0.752 (ply 2 x1.006: unchanged by construction).
+  - Flat probit: ply 3 x0.839, ply 4 x0.988, ply 5 x0.850. NB (cnbp): ply 3 x0.889, ply 4 x0.994, ply 5 x0.821.
+  - Trees, DAGs, MoEs and FM: unchanged code (TL at ply 3 x0.998).
+- Source: models/from-scratch/fastbin/hybrid12-src, a copy of hybrid11-src. Only src/search.rs changed (the module
+  doc says it too). Same commands, flags and files. Built at nice 19 (cargo build --release).
+- Changed, only in the values-only fixed-point search (OUTCOME = false in negamax_fx: flat LR, probit and NB under
+  root_values, which tournaments, arenas, replay-games (self-games) and the log-odds policies, softmax and argmax,
+  use), at a node one ply above the leaves with a cut window (beta < inf):
+  1. Not in check and without a pawn of the side to move on its seventh rank: best_capture finds, from the bitboards,
+     a legal normal capture with the smallest MVV-LVA key (captures_first's key). A pinned piece may capture only
+     along its pin's line; the king only onto a square the enemy doesn't attack once the king has left its own. That
+     capture is searched first. The legal moves are generated, and searched in captures_first's order without it,
+     only if it doesn't cut off. A legal move exists, so the node is neither mate nor stalemate; the draw checks
+     (insufficient material, 50 moves, repetition) run as before.
+  2. Otherwise (in check, no normal capture, a pawn about to promote, only en passant): after the usual end-of-game
+     and draw checks, one scan of the generated moves finds the move captures_first would put first (the first of
+     the smallest keys); the partition and sort happen only if it doesn't cut off. Without captures and promotions
+     that is the first generated move, and the rest follow in their order: hybrid11's order exactly.
+- Unchanged: the outcome search (root_outcomes, expected_outcome: self-play's default wld-score policies and search
+  labels), the compound path (trees and DAGs at plies 1-2), fastprobit (F-P at ply 2) and the float negamax (trees and
+  DAGs past ply 2, MoE, FM). Plies 1 and 2 never reach the new code (no cut window one ply above the leaves).
+  CHESSAI_STAGED=off gives hybrid11's code everywhere, for checks. CHESSAI_FX_CHECK=1 also asserts each staged move
+  legal and of the smallest key among the legal normal captures.
+
+METHOD (why nothing can change)
+- root_values gives every root move a full window, so each root value is the exact minimax value of its subtree
+  (draws by repetition depend on the path, which a node's own move order doesn't change), in any move order. The
+  values are the same f64s: negations and maxima of the same leaf values and terminal constants.
+- Only the order inside a depth-1 cut node changes, and only by moving one move to the front. When keys tie,
+  best_capture or the scan may pick another first move than captures_first's unstable sort, so node counts can change
+  (as hybrid10's did): in the unit test, 8,459,731 nodes with staging off and 8,452,746 on. The values can't.
+- The staged move is legal: not in check, a capture by a piece other than the king is illegal only if the piece is
+  pinned and leaves its line; the king's capture is checked against the enemy's attacks without the king. En passant
+  (the capture with a horizontal-pin subtlety) and promotions are left to the full generator.
+
+IDENTITY (hybrid11 against the hybrid12 candidate, md5-identical to the installed binary, every output compared byte
+for byte; nice 19, 1-2 threads; suite12.log, check12.log)
+- Unit tests: 169 pass (cargo test --release; unit-tests.log), 3 of them new:
+  - best_capture_finds_a_legal_capture_of_the_smallest_key: 102,957 positions not in check, from 400 random games,
+    against shakmaty's legal moves: None exactly when there is no legal normal capture or a pawn is on the seventh,
+    otherwise a legal capture with the smallest key. The edge cases occurred: 2,298 pseudo-legal captures by pinned
+    pieces and 6,237 by the king correctly excluded, 7,801 king captures chosen, 210 positions with en passant, 5,527
+    with a pawn on the seventh, 6,179 in check (the search doesn't stage those).
+  - best_capture_in_set_positions: a pinned bishop takes its pinner and not the knight off its line; a pinned knight
+    and the king's captures of defended pieces are excluded (no legal capture, None); the king's only legal capture;
+    en passant only (None); a pawn on the seventh (None); MVV-LVA (bxc5 before Rxc5).
+  - staged_first_move_keeps_root_values: 680 cases (positions of 48 random games, some shuffling pieces so repetitions
+    are reachable; a random LR and a probit trained mostly on material, so captures refute; log-odds and score values;
+    depths 1-5): root values bit-equal with staging on and off, 1,131,503 staged nodes; no staged node and equal
+    nodes at depths 1-2; root_outcomes and their nodes equal (the outcome search is untouched).
+- Tournaments (tour12.py: the arenas' command plus --save-games; every tour file, every saved game, stdout):
+  - field A (hybrid10's identity field: the 4 random references and L, P, TL, TP, N, FM at plies 1-3; 22 players):
+    SAME at T 0.1 (462 games), at T 0.02 (462), under the argmax policy log-odds (462), and over 2 round-robins at
+    T 0.1 (924);
+  - field B (random, random-4 and the six kinds at ply 4): SAME at T 0.1 (56 games) and at T 0.02 (56);
+  - field C (new: random and L, P, N at ply 5): SAME at T 0.1 (12 games, 637 plies) and at T 0.02 (12, 588);
+  - field D (new: a DAG, D-L-Ne-c bdd372, and a MoE, M-L4-L-hard-c moe323, from the stopped cycle runs, uncalibrated,
+    at plies 1-3, with random): SAME at T 0.1 (42 games) and at T 0.02 (42).
+- replay-games (self-games: field A's 18 entries against their twins, 2 rounds): SAME at T 0.1 and at T 0.02.
+- Own calibration games (the arena command, depth 1, 600 games): SAME for all six kinds, and the same as the field's.
+- Training: one round on field A's games, SAME for lr, probit, both bdt kinds, cnbp and fm; search-labelled training
+  SAME (lr and probit at --label-depth 3, lr labelled by the T-P tree and by FM).
+- Self-play: 14 runs SAME (lr, probit and cnbp at plies 2 and 3, lr at ply 4; the default policy and log-odds
+  softmax).
+- CHESSAI_STAGED=off: field A at T 0.02 SAME against hybrid11.
+- Check mode (check12.sh: CHESSAI_FX_CHECK=1, one entry against itself at T 0.02): L at plies 3, 4 and 5 (40, 8 and 4
+  games), P at plies 3 and 4 (20, 4), N at plies 3 and 5 (12, 2). No assertion fired, and each case's games.csv md5
+  is the same on hybrid11, on hybrid12 and on hybrid12 in check mode.
+- 0 failures. Nothing read or wrote inside a running experiment or arena: W4's model was copied to field/w4 and its
+  own calibration games remade there (hybrid11's arena command, as leagues.py runs it).
+
+SAVING (bench12.py, bench12.log: one entry against itself, T 0.02, 1 thread, nice 19, ABBA (h11, h12, h12, h11),
+pinned to the E-cores 4-7 as the ledger's benchmark method says; the pairs agreed within 1%; games identical in
+every run)
+
+| Entry | Ply | us a ply, hybrid11 -> hybrid12 | Ratio |
+|---|---|---|---|
+| W4 (flat LR) | 3 | 426 -> 277 | x0.650 |
+| W4 | 4 | 1920 -> 1828 | x0.952 |
+| W4 | 5 | 16643 -> 11832 | x0.711 |
+| L | 2 | 47 -> 48 (unchanged by construction) | x1.006 |
+| L | 3 | 325 -> 223 | x0.686 |
+| L | 4 | 1538 -> 1487 | x0.966 |
+| L | 5 | 15974 -> 12019 | x0.752 |
+| P | 3 | 471 -> 395 | x0.839 |
+| P | 4 | 5892 -> 5822 | x0.988 |
+| P | 5 | 43459 -> 36919 | x0.850 |
+| N | 3 | 274 -> 244 | x0.889 |
+| N | 4 | 1145 -> 1138 | x0.994 |
+| N | 5 | 21051 -> 17283 | x0.821 |
+| TL | 3 | 1964 -> 1960 (unchanged code) | x0.998 |
+
+- Odd plies gain most: there every root move gets a full window, so the depth-1 nodes are cut nodes (25% of all nodes
+  at plies 3 and 5 in the review's counts, 6% at ply 4), and most cut on their first capture without generating moves.
+- Probit gains less: its leaves still evaluate the probit link, a larger share of its move.
+- The suite's unpinned mixed fields read x0.83-0.87 at ply 5 (field C) and x0.93-1.02 at ply 4 (field B, trees and FM
+  dominate); fields A and D (plies 1-3, trees and FM) x0.98-1.03, and x1.12-1.14 in two unpinned runs that shared the
+  cores with the check runs: noise.
+
+ESTIMATED SAVINGS (from the 06:50 review's cost split: game CPU is ~86-92% of a ply-3 run and ~98-99% at plies 4-5)
+- Any ply-3 run or read, flat LR: about 30% of its CPU (flat-p3-size run 3.2 -> ~2.2 CPU-h; a W3-size warm rung
+  0.6 -> ~0.42).
+- A ply-5 rung of W4's size: ~29 -> ~21 CPU-h. Ply-5 arena games: x0.71.
+- The warm ply-4 rung: ~4.0 -> ~3.85 CPU-h (x0.95).
+- Plies 1-2: nothing.
+
+DEPLOYMENT
+- Installed as models/from-scratch/bin/chessai-hybrid12 (new file, 07:34). Not swapped into anything: nothing runs.
+- Use: name chessai-hybrid12 instead of hybrid11 for new tournaments, arenas and self-games at plies 2-5, any kind (it
+  plays the same games). It gains at plies 3 and 5 with flat LR, probit or NB entries, a little at ply 4, nothing at
+  plies 1-2 or for trees, DAGs, MoEs and FM (same cost there). leagues/ARENA.md says so.
+- leagues/specs/arenas/make_cold_read.py and the make_*_reads.py generators still name chessai-hybrid11; switching
+  them is the coordinator's to do (results unchanged).
+
+FILES
+- hybrid12-src/ (source); unit-tests.log.
+- run_suite12.sh, tour12.py, replay12.py, train12.py, owngames12.py, suite12.log: the identity suite (hybrid11's
+  scripts with hybrid11 against hybrid12). They now point at the installed binary; the suite ran on the candidate,
+  the same file (md5 above).
+- field/: players-C.txt (ply 5), players-D.txt (DAG and MoE), models/ (copies of the DAG and MoE), w4/ (a copy of W4's
+  model and its own calibration games, remade), specs-w4.json.
+- check12.sh, check12.log: the check-mode games.
+- bench12.py, prof12.py (SPECS=FILE picks another specs file), bench12.log: CPU a ply.
+- st/ (the hybrid11 side's tour dirs and pools, 53 MB) and cand/ (the tested candidate, md5-identical to the
+  installed binary) can be removed.

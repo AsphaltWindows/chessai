@@ -1,0 +1,62 @@
+Field-panel test of error routing, 2026-11-09 11:00-11:10 (the user's hypothesis, ~10:55: head-to-head against its
+own best leaf understates an error router; against a field that plays less expected moves the router may help).
+Files: run.py (matches), analyze.py -> results.txt, partA.py -> partA/results.txt, panel.tsv, panel/ (copies of the 12
+panel entries' models and own-cal sets), cand/ (candidate models), cal/, match/, partA/ (saved games).
+
+METHOD
+  Panel: 12 ply-2 entries of the cycle-60 field, ratings fixed at the cycle-60 league fit: T-L-Te-merge-c v999 1872,
+    T-L-Nc-share-c v545 1862, D-L-Nc-c v2043 1853, F-P-tau0-d2jit-c v5741 1849, M-L4-N-c v338 1843, F-L-d4mix-c v426
+    1835, F-L-c v4827 1831, F-L-d1jit-c v3484 1804, T-L-H-c v3029 1767, F-P-tau0-c v4359 1686, F-N-d2jit-c v3820 1521,
+    TAN-c v1665 1439 (trees, DAG, MoE, flat LR / probit / NB / TAN; d0, d1, d2, d4 self-play).
+  Candidates (one window of 3 versions each): T-L-Ne-c v1874 / v1878 / v1882 (the error tree with the most distinct
+    leaves; same 11 leaves at all three): the tree and L7, its busiest leaf (0.310-0.311 of heldout-d2play at each).
+    T-L-Ne-share-c v424 / v426 / v428: the tree, L9 (its busiest on heldout-d2play, 0.228-0.231) and the flat twin
+    r0.05 at the same version.
+  Each candidate played each panel entry at d2, 200 games, chessai-hybrid4 arena (the tournament binary), log-odds-
+    softmax T0.1, each side's own calibration (panel: the league's own-cal sets; candidates: 600 d1 games seed 5 from
+    cal:heldout-lr-d2-s555, all remade with hybrid4 and byte-identical to the earlier sets where those exist), the
+    same seed per panel entry for every candidate (1000 + index). 15 x 12 x 200 = 36,000 games.
+  Analysis: each candidate's Elo with the panel's ratings fixed (maximum likelihood, draws as half points, ranges from
+    the observed per-game score variance). Sanity: the fit puts the T-L-Ne-c v1878 tree at 1825 and the
+    T-L-Ne-share-c v428 tree at 1811; the league has them at 1828 and 1813. Contrasts pooled over the 3 versions as
+    twin/league/recheck.py did (chi-square for version noise; none significant at 0.05, so summed games).
+
+RESULTS (Elo A - B against the panel [95%]; head-to-head beside them)
+                                   v1st  v2nd  v3rd   pooled (summed)      head-to-head
+  T-L-Ne-c tree - L7                  4    -2   -12   -3 [-15, 8]          v1878: -12 [-26, 2] (whytrees, 2000 g);
+                                                                           -27 [-59, 4] (today, 400 g)
+  T-L-Ne-share-c tree - L9          -32   -26   -38  -32 [-44, -20]        v428: -41 [-56, -27] (whytrees); -36 [-69, -3]
+  T-L-Ne-share-c tree - twin        -38   -21   -10  -23 [-35, -12]        v428: 0 [-15, 14]; v444-v452: -26 [-42, -10]
+  T-L-Ne-share-c L9 - twin           -6     5    28    9 [-3, 20]          v424-v428: 18 [-6, 43]
+                                                     (chi2 5.8 on 2, p 0.05: borderline version noise; mean of
+                                                      versions 9 [-35, 52])
+  By panel half (8 entries 1804-1872 / 4 entries 1439-1767):
+    T-L-Ne-c tree - L7           strong 5 [-8, 18]      weak -28 [-52, -5]
+    T-L-Ne-share-c tree - L9     strong -32 [-46, -19]  weak -31 [-54, -8]
+    T-L-Ne-share-c tree - twin   strong -26 [-39, -12]  weak -16 [-39, 7]
+  Per panel entry (600 games an arm): no entry where either tree is clearly above its leaf; the best is T-L-Ne-c
+    against M-L4-N-c, 33 [-5, 71]; the worst against T-L-H-c, -66 [-105, -27] (results.txt).
+
+PART A (share of the games' positions the tree routes to its busiest leaf; every position, both sides' moves)
+  T-L-Ne-c v1878, L7:        vs L7 alone 0.632 (41k positions); vs the panel 0.634 (256k; per entry 0.576-0.712);
+                             heldout-d2play 0.311.
+  T-L-Ne-share-c v428, L9:   vs L9 alone 0.253 (44k); vs the panel 0.281 (250k; per entry 0.239-0.323);
+                             heldout-d2play 0.228. In game positions leaf15 gets more than L9 (0.31).
+
+READING
+  - The hypothesis isn't supported for these two error trees. Against the field, T-L-Ne-c's tree is level with its
+    busiest leaf (-3 [-15, 8]), as it was head-to-head, and T-L-Ne-share-c's tree is 32 below its busiest leaf, about
+    as head-to-head. Against the weaker, odder half of the panel the trees do no better relative to their leaves
+    (-28 and -31), not better.
+  - The mechanism doesn't show either: the tree sends the same share of positions to its busiest leaf against the field
+    as against that leaf alone (0.63 and 0.63; 0.28 and 0.25).
+  - Finding 1 holds against the field and is clearer: over v424-v428 the flat twin beats T-L-Ne-share-c's tree by
+    23 [12, 35] against the panel, where head-to-head at v428 was level. Finding 4: L9 is 9 [-3, 20] above the twin
+    (head-to-head 18 [-6, 43]): no evidence for the router's region. Finding 5: no error-routing gain at d2 against
+    the field either.
+  - Caveats: one window of 3 versions per tree; d2 only; the panel's ratings fixed at one fit; contrasts of 10-20
+    Elo are within the summed ranges (about +-12). The two cluster-routed models with a head-to-head gain (T-L-Nc-share-c
+    40, M-L4-N-c 46, single versions) were not in this test.
+
+COST: 1,790 CPU s for the matches and calibrations (29.8 CPU min; 197 jobs, at most 2 at once, nice 19), 28 CPU s for
+  Part A's routing counts, about 30 CPU s for the busiest-leaf checks: about 31 CPU min. The league ran throughout.

@@ -1,0 +1,207 @@
+Q9: where the league's CPU goes, how much of it is movegen, and whether a position/move cache pays at our depths
+2026-11-09 01:30-03:00, models/from-scratch/movegen/. All runs nice 19, 1 thread; about 20 CPU min in all.
+
+IN SHORT
+- The tournament is 70% of the league's CPU (cycle 49: 11,566 of 16,552 CPU s), self-play 22% (a fixed budget),
+  gates, own-cal and own steps 8%. About 17% of the league's CPU is movegen.
+- Movegen is 19% of the live tournament's CPU, 33% of a d2 flat-LR game, 15% of a d2 tree/MoE game, 24% at d1 and 8% in
+  d0 self-play. At d2, 96% of the movegen calls are at leaves, and they build the whole legal-move list only to see
+  whether the side to move is mated or stalemated.
+- A position or eval cache doesn't pay at depths 0-2. A 2-ply search hardly transposes (0.02% of evals repeat within
+  a search; in 2 plies only a promotion captured at once, promoted to different pieces, can). Consecutive searches
+  share 0-0.4% of evals, a game 0.6-2.4%, and a whole run 1.9-9% (openings). A probe costs 3-19 ns against evals
+  of 0.2-1.2 us, so the net is between -1% and 2%. From d3 on it changes: 14% of evals repeat within a d3 search
+  and 31% within a d4 one. Engines cache because they search deep.
+- What pays, all exact (byte-identical games, checked): (1) a cheap "any legal move?" test at leaves instead of the
+  full list, (2) not building every move's candidate encoding when the mover searches, (3) encoding from the piece
+  bitboards. Together: 44% less CPU at d1, 46% at d2 with flat LR/probit, 21% at d2 with a tree and a MoE, and
+  17% in d0 self-play (encode alone). Estimated for the tournament: about 25% (20-30%) less CPU, i.e. ~2,900 CPU s
+  and ~9 minutes of wall time less per cycle.
+- The next lever is NNUE-style incremental sums for the additive parts (LR, probit, NB, MoE experts and gates, and
+  per-node caches for trees). It could take off roughly another third of the tournament, but it changes rounding, so
+  games won't be byte-identical (unless the sums go fixed-point, which is a one-time arithmetic change).
+
+1. LEAGUE CPU SPLIT (cycle 49: the cycle process's reaped-children CPU every 5 s, tools/cyclecpu.py, cycle49-cpu.csv;
+   the tournament process's CPU, tournament49-cpu.csv; totals.csv and cycle-049.md for own steps, gates and own-cal)
+   phase (cycle 49, 01:48:50-02:50:53)        CPU s    share   note
+   tournament (5 round-robins, d1 + d2)      11,566     70%    263,350 games, 35.5 min wall, ~5.4 cores
+   self-play (76 lineages, fixed budget)      3,568     22%    58 lineages at d0, 2 at d1, 14 at d2, 2 at d4
+   gates (100 games at d2 each)                 606      4%
+   own-cal games (field 223, gates 184)         407      2%    d1 arenas, 600 games per new version
+   own steps (training on league games)         322      2%
+   cycle driver (decide, fits, logs)             84      1%
+   total                                     16,552
+   Cross-checks: the tournament's own CPU from /proc (11,557 at its last read, 10 s before it exited) matches the
+   reaped jump; self-play, own steps and gates match totals.csv; own-cal matches cycle-049.md.
+   So about 17% of the league's CPU is movegen: 19% of the tournament, ~5-10% of self-play (8% for d0 F-L-c, less
+   for d0 trees, whose evals cost more; 15-33% for the d2 lineages), ~20% of gates and own-cal.
+
+2. WHERE A GAME'S CPU GOES (perf record -e task-clock:u, frame pointers, user space, a copy of chessai-hybrid3's source
+   built with line tables (src-perf/; plays identical games); tools/attribute.py walks each callchain from the leaf to
+   the first frame matching a component). Live tournament: a flat 30 s sample of cycle 49's tournament process
+   (199 Hz, no callchains, leaf symbols grouped the same way).
+
+   share of CPU, %            d0 self-play  d1 LR-probit  d2 LR-probit  d2 tree-MoE  live tournament
+                              F-L-c         arena         arena         arena        (d1+d2 field)
+   movegen                       7.7          24.3          33.4          15.2          19.3
+   make-move, position copies    9.1           6.9           1.9           0.9           3.3
+   features (encode)            18.9          22.8          18.9           7.7          11.1
+   model predict/route          55.7          24.2          26.4          65.7          50.0
+   calibration + value (exp/ln)    -          12.0          14.4           7.5          11.2
+   search bookkeeping              -           2.5           4.0           1.7           3.7
+   policy (select/softmax)       4.2           1.9           0.1             -             0
+   SAN move text                 0.9           0.5             -             -             -
+   allocation                    1.5           3.2           0.2           0.1           0.7
+   setup (load, own-cal fit)       -           1.5           0.7           1.1             -
+   (d0 self-play: model 55.7 = 41.7 choosing moves + 14 the training pass; training otherwise 0.8.)
+
+   Where the movegen is:
+   - d2: 96% of calls at leaves (7.38M of 7.69M in 120 games), the rest depth-1 nodes, roots and Game::result().
+     A d2 search has ~25 root moves x ~26 replies = 662 leaves, all evaluated: root_values gives every root move a
+     full window, so nothing is pruned.
+   - d1: leaves 87% of calls; the rest candidates() (every ply, wasted when the mover searches) and result().
+   - d0 self-play: 4.5% is movegen inside the SAN move text (plus 0.9% writing it), which --no-games throws away;
+     and result() and candidates() generate the same position's list twice each ply (3.2% for both).
+   - Per leaf (CPU): d2 LR-probit 0.66 us (eval part: predict + calibration + log-odds 0.27 us); d2 tree-MoE 1.67 us
+     (1.22 us); d1 0.81 us (0.29 us). The full legal-move list at a leaf costs about 0.2 us.
+   - Cross-check: the perf runs' sampled CPU matches the league binary's timed CPU (d2 LR-probit 40 vs 41 ms/game,
+     d1 1.63 vs 1.69, d0 self-play 2.1 vs 2.0 s/round; tree-MoE 158 vs 167 ms/game on a busier machine). The
+     instrumented build with every switch off is 2-11% slower than the league binary (frame pointers, flag checks),
+     so section 5 compares each option with both.
+
+3. CACHE HIT RATES, measured on real games (Q9_COUNT=1 in src-instr/: every lookup goes into 5 hash sets: this search,
+   the last 2 searches of the game (the opponent's and one's own previous), this game, the whole run). Eval key: the
+   model and the 70-byte encoding; legal-move-list key: the Zobrist hash. % of lookups that hit.
+
+   evals                       d0 self-play  d1 LR-probit  d2 LR-probit  d2 tree-MoE   d3 LR-probit  d4 LR-probit
+                               1000 games    1500 games    120 games     24 games      8 games       2 games
+   within one search                0             0           0.02          0.02         14.2          30.7
+   with the last 2 searches         0             0           0.37          0.27         14.5          31.9
+   within the game                2.4           2.3           1.2           0.6          14.7          32.9
+   whole run                      5.2           9.0           2.7           1.9          15.3          33.0
+
+   legal-move lists
+   within one search                0           4.6*          0.17          0.12         16.4          27.4
+   with the last 2 searches      49.9**         9.3           4.4           3.6          22.9          32.0
+   within the game               50.4          11.7           5.1           4.0          23.1          33.0
+   whole run                     51.4          18.4           6.9           5.3          23.7          33.1
+   * the next ply's result() is the chosen leaf's list (one per ply). ** result() and candidates() at the same
+   position each ply. The whole-run rows come from openings, and grow with games per model (a tournament entry plays
+   ~2,000 games a cycle against many opponents, so a little more than these single-opponent runs).
+
+   Probe cost (bench/probe.rs, thread CPU time): a direct-mapped table keyed by the Zobrist hash the search already
+   carries costs 1-4 ns a probe at 128 KB-2 MB and 13-19 ns at 32-128 MB in a tight loop (a probe that can't overlap
+   its DRAM miss costs more, up to ~80-100 ns). Hashing the 70-byte encoding instead: ~30 ns.
+   Net per eval at d<=2, with a whole-run table: d2 LR saves 2.7% x 0.27 us = 7 ns against ~15 ns (loss); d2 tree-MoE
+   saves 1.9% x 1.22 us = 23 ns (gain about 0.5% of a leaf); d1 saves 9% x 0.29 us = 26 ns (gain about 1.5%); d0
+   self-play saves 5% x 0.2 us = 10 ns (loss). A legal-move-list cache has nothing left to save once leaves stop
+   building lists (the remaining full lists are 4% of d2 calls).
+   At d3 and d4 an eval cache would save 14-31% of evals, and a transposition table more (it stores search results,
+   so it skips whole subtrees). Our only d4 users are F-L-d4mix-c and F-L-d4jit-c, about 50 CPU s each per cycle. A
+   transposition table there wouldn't be exact either: draws by repetition and the 50-move rule depend on the path.
+
+4. WHAT MATURE ENGINES CACHE (sources at the end)
+   - Stockfish's transposition table stores search results: a 10-byte entry (16-bit key, depth, generation/bound,
+     best move, search value, static eval), 3 to a 32-byte cluster, replaced by depth and age. It pays through
+     transpositions and iterative-deepening re-searches at depth 10-40, and through move ordering (the stored best
+     move is tried first, so alpha-beta cuts more). The static-eval field makes it an eval cache on the side.
+   - Separate eval caches ("evaluation hash tables") were used for expensive hand-written evals. Forum reports put the
+     gain at ~20% for a big eval and ~6% once lazy eval was in; the rule is that a probe must cost less than the eval.
+     Pawn and material hash tables cached the parts of the classical eval that depend on a few pieces only (pawn
+     structure, material balance), with very high hit rates. That eval was removed from Stockfish in July 2023 (SF 16).
+   - NNUE: the first layer is linear in sparse piece-square features, so make/unmake adds or subtracts a few weight
+     columns instead of recomputing it (the "efficiently updatable" part). A king move refreshes its half (features
+     are king-relative); "Finny tables" (Luecx, Koivisto; now Stockfish's accumulator caches) keep a per-king-bucket
+     copy of the accumulator and its board, so a refresh is a diff against the cached board.
+   - Lc0 caches network outputs (NNCache, default 200,000 positions) separately from its search tree, which it reuses
+     between moves. A GPU eval costs far more than a probe, and MCTS revisits positions.
+   - Perft programs hash heavily (50-80% faster), because perft walks every transposition.
+   - Nobody caches move lists. Engines make moves pseudo-legally and lazily (staged generation: hash move, captures,
+     quiets; legality checked when a move is tried), and they don't build a leaf's move list to test for mate.
+   What applies here: no transposition table at d<=2 (nothing transposes, nothing is re-searched, and full windows
+   give alpha-beta nothing to cut). The engines' lesson that does apply is laziness: don't build lists or encodings
+   nobody uses, and update the evaluation incrementally.
+
+   Incremental evaluation for our models. All of the following are sums over the 70 categorical features:
+   - LR and probit (linear predictor), NB/CNBP (log-likelihood sums): one accumulator per output. A move changes 3-4
+     bytes (from, to, side to move, en passant; castling and en passant captures occasionally), so a child costs ~4
+     lookups per output instead of 70.
+   - MoE (e.g. M-L4-N: 4 LR experts and an NB gate): one accumulator set per expert and gate, each updated the same
+     way.
+   - Trees and DAGs: the route can change between parent and child, so keep a Finny-style cache per node (the encoding
+     it last saw and its sums). A node's eval is then a 70-byte diff against that, plus a few deltas. Siblings in a
+     search differ by one move, so the diffs are small. TAN routers also need the changed squares' children terms. FM
+     needs its per-factor sums.
+   - The nonlinear tail stays per position: softmax/link, own calibration, log-odds (11% of the tournament).
+   - Exactness: float sums in a different order round differently, so games are not byte-identical to today's. Sums
+     in fixed point (as NNUE's int16/int32) are order-independent and exact, but that's a one-time arithmetic change
+     for every player.
+
+5. OPTIONS (measured CPU change: the median of 3 interleaved reps against the league binary; ab.csv, tools/ab.sh)
+
+   Measured (src-instr switches; % CPU against the same build with the switch off / against the league binary,
+   which also counts the instrumented build's own 2-11% overhead from frame pointers and flag checks):
+
+   option                                     d1 LR-probit  d2 LR-probit  d2 tree-MoE  d0 self-play  exact  size
+   1 fast leaf test ("any legal move?")         -20 / -14     -32 / -27     -14 / -11        n/a        yes    ~70 lines
+   2 lazy candidates when the mover searches    -15 / -5       -4 / 1        -2 / 2          n/a        yes    ~15 lines
+   3 encode from the piece bitboards            -22 / -14     -15 / -10      -7 / -5      -17 / -16     yes    ~25 lines
+   1+2+3                                        -44 / -38     -46 / -44     -21 / -20         -         yes
+   Tournament, estimated from its live profile (movegen 19%, of which 1 removes ~90%; encode 11%, of which 3 removes
+   ~60-80%; 2 matters only at d1): about 25% less CPU (20-30%), with byte-identical games.
+
+   Not built (estimates from the profiles):
+   4 skip the SAN move text in self-play with --no-games (it is thrown away): d0 self-play about -5%. Exact; the
+     duplicate-games warning would key on the move list. ~10 lines.
+   5 one legal-move list per ply at d0 (result() and candidates() share it): about -1.5%. Exact. ~10 lines.
+   6 child encodings by byte edits from the parent's (d0 candidates; search children): d0 self-play spends 9% on
+     position copies and moves and 19% on encodes, so maybe -20% there, and the rest of encode in search. Exact
+     (bytes; needs an assert harness like Q9_CHECK). ~60 lines.
+   7 eval cache with an exact key, at d<=2: between -1% and 2% (section 3). Exact (64-bit key). Not worth it.
+   8 legal-move-list cache: nothing left to save after 1.
+   9 transposition table or eval cache at d3-d4: 14% (d3) and 31% (d4) of evals repeat within a search. Only
+     F-L-d4mix-c and F-L-d4jit-c search that deep (~100 CPU s a cycle in all). An eval cache is exact there; a
+     transposition table is not (draws by repetition and the 50-move rule depend on the path).
+   10 incremental sums (NNUE-style) for the additive parts: the linear sums are ~40% of the tournament (Logreg 23%,
+     Cnbp 15%, ...), so maybe -30% on top of 1-3. Not exact (rounding) unless the sums go fixed point. Medium for LR,
+     probit, NB and MoE; high for trees (per-node caches), TAN and FM.
+
+RECOMMENDATION
+- Build 1-3, always on, into a copy of chessai-hybrid3's source as the tournament binary. Check byte-identical games
+  against chessai-hybrid3 on a sample of the real field (one round-robin of ~20 entries of every kind), then switch at
+  a cycle boundary. That's about a quarter off the tournament, the biggest consumer, with identical results.
+- Gates, own-cal and self-play run on each lineage's own binary (14 binaries from different source trees). They gain
+  when those are rebuilt with the same patch (search.rs, selfplay.rs, encoding.rs, player.rs), and rs/ should get it
+  too. Caveat for self-play: its budget is fixed, so faster self-play means more games per cycle, and unevenly (d2
+  lineages gain 20-45%, d0 trees less). That's a one-time change in the experiment's conditions, unlike the
+  tournament speedup, which only saves time.
+- Don't build an eval, position or move-list cache for depths 0-2. Revisit only if d3+ play becomes common.
+- Incremental sums are the largest remaining lever, but they change rounding. That's the user's call; fixed-point
+  sums would make them exact from then on.
+
+METHOD AND FILES
+- src-perf/: copy of chessai-hybrid3's source (hybrid2-src) with frame pointers and line tables; plays identical games.
+  perf/: profiles (w1 d0 self-play F-L-c 6 rounds; w2 d1 LR v probit 6000 games; w3 d2 LR v probit 500; w4 d2 tree v MoE
+  100; tournament-flat, 30 s of cycle 49's tournament), tools/attribute.py and tools/leafsyms.py.
+- src-instr/: src-perf plus src/instr.rs, every switch off by default (plays as chessai-hybrid3): Q9_COUNT (counters
+  and cache bookkeeping), Q9_FASTLEAF, Q9_LAZYCAND, Q9_ENCODE2, Q9_CHECK (asserts each fast path against the original
+  on every call). The fast leaf test: if not in check, any unpinned knight, pawn (push or capture) or slider move, or
+  a king step to a square no enemy piece attacks, proves a legal move; in check, a safe king step does. Otherwise it
+  falls back to the full list (0.17-0.34% of leaves).
+- Validation (tools/validate.sh): with all fast paths and asserts on, d1 (1500 games), d2 LR-probit (120) and d2
+  tree-MoE (24) arenas wrote byte-identical games to chessai-hybrid3's (12.7M leaves asserted), and a d0 self-play
+  round trained a byte-identical model.
+- The league entries used: F-L-c v4753/v4778, F-P-tau0-c v4134, T-L-Ne-c v1878, M-L4-N-c v338, with their own-cal
+  games (snapshots in snap/: the league pruned v4753's own-cal games mid-run).
+- Nothing in rs/, the league, the staged dirs, or models/from-scratch/bin was touched.
+
+SOURCES
+- Stockfish tt.h (SF 14 entry layout): https://grok.dragonflybsd.org/xref/dports/games/stockfish/Stockfish-sf_14/src/tt.h
+- Evaluation hash table: https://www.chessprogramming.org/Evaluation_Hash_Table ; gains: https://talkchess.com/viewtopic.php?p=120101
+- Stockfish removes classical evaluation: https://m.nextchessmove.com/dev-builds/af110e02ec96cdb46cf84c68252a1da15a902395 ,
+  https://talkchess.com/viewtopic.php?p=950905
+- NNUE: https://en.wikipedia.org/wiki/Efficiently_updatable_neural_network ; Finny tables: https://www.github.com/official-stockfish/Stockfish/discussions/5180
+- Lc0 NNCache default: https://github.com/LeelaChessZero/lc0/wiki/Lc0-options ; tree vs cache: https://groups.google.com/g/lczero/c/5syk_9Lv1Fs
+- Perft hashing: https://talkchess.com/viewtopic.php?p=881690
+- Staged, pseudo-legal move picking: https://isip.piconepress.com/projects/ai_chess/resources/pro_player_models/data_processing/stockfish/src/movepick.cpp ,
+  https://talkchess.com/viewtopic.php?p=886678

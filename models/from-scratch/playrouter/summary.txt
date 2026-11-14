@@ -1,0 +1,106 @@
+Topic 4a (2026-11-07/08 night): eloss play routers (--play-router). Each delegator also learns a second router, used
+only for play.
+
+Verdict: negative as built. No line.
+- Offline, the play routers make every tree worse: T-L-Ne 0.0071, T-L-Le 0.0056, T-L-Nc 0.0059, T-L-Ne with share 0.1
+  0.0034.
+- In play, the same trees lose 30 (T-L-Ne) and 32 (T-L-Le) at ply 1, and 67 and 26 at ply 2.
+- In T-L-Ne nearly all the damage is the root's play router, which sends positions down subtrees trained on what the
+  training router sent there.
+- At the bottom delegators alone, where nothing below changes, play routers still don't beat the training routers:
+  T-L-Ne and its share-0.1 twin are level, and T-L-Le and T-L-Nc lose.
+- errwhy B's gain came from refitting on frozen children, delegator by delegator; online regression against
+  children that are still changing doesn't reproduce it.
+- In self-play from scratch (the smoke, five version pairs), play routers lose 37 (-48 to -26) at ply 1 and 80 (-102
+  to -58) at ply 2.
+
+Idea (from errwhy and topic 2):
+- errwhy B: LR routers refitted with an expected-loss target on frozen T-L-Ne-c children gained 0.013, 51% of the
+  reachable gain.
+- Topic 2: the same target is harmful as a training router, because the router's pick also decides who trains, and
+  specialization feeds itself.
+- So: keep the training router as it is, assigning training examples, and add a play router that only predicts.
+
+Code: ../playrouter-src = ../blendplay-src + playrouter.patch (308 lines).
+- New option --play-router, BDT only (DelegationParams::play_router, in the options string only when set).
+- Each delegator gets an LR play router when it is made (Node::play_router). On every example that reaches it, the
+  play router takes one regress step (Logreg::train_regress, as eloss) towards its children's expected-loss target:
+  each child's 3-class log-loss below the children's mean.
+  - Error-routed delegators reuse the children's log-losses they already computed. Cluster delegators compute them.
+- Training is unchanged: the training routers still route the examples. In-process self-play plays with the
+  training routers in both players (the previous version is an in-memory clone), so self-play is unchanged too.
+- Saved model files hold the play routers in the routers' place. Since the text format is self-describing per node,
+  a play-router model file is an ordinary BDT with LR routers, and any binary that reads LR-router trees plays it.
+- State files keep both routers (a conditional section, so older states still load). forget() covers play routers.
+- Refused with --revise, --split-trial and --leaf-residual (they replace or test nodes, which would need play-router
+  handling).
+- Three new unit tests:
+  - play routers leave training unchanged (every leaf predicts the same as without) and are saved as the routers;
+  - a play router prefers the calibrated child over the overconfident one (as eloss);
+  - play routers refuse revisions.
+- 142 tests pass. The first build failed to compile the tests (a stray field in a test literal of the old options;
+  chain1.out, test1.log); fixed, test code only, before anything was installed.
+
+Binary: ../bin/chessai-playrouter (md5 5f42c561eda200551c2c4d3300310c8c).
+- Without --play-router it is identical to chessai-blendplay: 0 non-log diff lines on all four identity scripts
+  (probit/identity/run2.sh, tanroute/identity/run.sh, lrshare/identity/extra.sh, eloss/identity/lrrouters.sh;
+  chain2.sh -> chain.out).
+
+Offline (offline.sh -> offline.out): offline-c15 as leshare/run.sh, 100k threshold. Each tree has the same leaves as
+its plain twin: the model files differ only in the router blocks (checked by diff, and by splice.py below).
+- Identity: ne-100k-ref (chessai-playrouter, no flag) has offline-c15 ne-100k's md5.
+- Calibrated log-loss, mean over the 10 test parts, paired against the twin (95% intervals):
+
+| tree | twin | play routers | log-loss diff | winner diff |
+|---|---|---|---|---|
+| T-L-Ne | 0.6144 | 0.6215 | 0.0071 [0.0040, 0.0102] | 0.0035 [-0.0003, 0.0073] |
+| T-L-Le | 0.6158 | 0.6214 | 0.0056 [0.0032, 0.0080] | 0.0011 [-0.0008, 0.0031] |
+| T-L-Nc | 0.6077 | 0.6137 | 0.0059 [0.0036, 0.0083] | 0.0024 [0.0006, 0.0043] |
+| T-L-Ne, share 0.1 | 0.6086 | 0.6120 | 0.0034 [0.0012, 0.0055] | 0.0019 [0.0000, 0.0038] |
+
+- Arenas, play routers against the twin, cal-own (600 own games each), league policy:
+  - T-L-Ne: ply 1 -30 (-39 to -22) over 2000 games; ply 2 -67 (-93 to -40) over 600.
+  - T-L-Le: ply 1 -32 (-41 to -22); ply 2 -26 (-52 to 1).
+- Training CPU: the play routers add about 20-25% (T-L-Ne 14.7 against 12.1 user-s; T-L-Le 17.3 against 13.9).
+
+Where the damage is (hybrid/: splice.py builds hybrids of each pair, eval.sh -> eval.out; scored with
+chessai-sparsefit, which loads trees mixing CNBP and LR routers):
+
+| tree | bottom delegators only | root only |
+|---|---|---|
+| T-L-Ne | 0.0008 [-0.0011, 0.0026] | 0.0067 [0.0033, 0.0101] |
+| T-L-Le | 0.0038 [0.0009, 0.0067] | 0.0028 [0.0012, 0.0044] |
+| T-L-Nc | 0.0023 [0.0009, 0.0038] | 0.0034 [0.0019, 0.0049] |
+| T-L-Ne, share 0.1 | 0.0007 [-0.0003, 0.0016] | |
+
+- These are log-loss differences against the twin. "Bottom" means delegators whose children are all leaves: the
+  positions reaching them come through training routers above, just as in training.
+- T-L-Ne's damage is nearly all at the root. Elsewhere both placements lose.
+- Two causes are likely:
+  - Online targets: a play router regresses errors of children that change all through training (AdaGrad, no
+    forgetting), whereas errwhy B refitted on frozen children.
+  - Whole-tree replacement: errwhy B scored one delegator at a time with the others' own routers, while a root play
+    router sends positions down subtrees that never trained on them.
+
+Self-play smoke (smoke/run.sh -> smoke/run.out): the scaled-down T-L-Ne recipe (500 games a round, 150k threshold,
+seed 21, 2 threads). plain ran 14 rounds; pr ran 9 rounds with --play-router, then was resumed to 14.
+- The ladders are identical, so self-play and training are unchanged, fresh and resumed. Both v14 trees have 10
+  nodes, and the files differ in the routers.
+- chessai-sparsefit loads and scores the play-router file exactly as chessai-playrouter does (0.8571 on the held-out
+  LR d2 set), and plays it in arenas.
+- v14 on the held-out LR d2 set: pr 0.8571 against plain 0.8588 (winner 0.6597 against 0.6641). Arena at ply 1
+  (held-out cal specs, 400 games): 17 (-9 to 42).
+- That was the exception. Over versions (smoke/run2.sh -> smoke/run2.out), the play-router tree is worse on the
+  held-out set at v8-v13 (by 0.0008 to 0.0076; v14 is 0.0017 better).
+- In cal-own arenas over v10-v14 (400 games a pair at ply 1, 120 at ply 2), pr against plain scores -37 (-48 to -26)
+  at ply 1 and -80 (-102 to -58) at ply 2, every pair negative.
+
+Next (not run):
+- Refit the play routers per version on frozen children, the errwhy B way, e.g. on the next round's games before
+  training on them.
+- Caveats: errwhy B scored one delegator at a time on league positions, and here even the bottom-only routers lost,
+  so whole-tree refits may still compound.
+- By errwhy's ceiling, routing can't take a tree much past flat LR anyway: the leaves bind.
+
+CPU: build and tests about 4 CPU-min, identity 1, offline and arenas about 7 (offline.time: 3.4 user-min), hybrids
+and smoke about 4. About 16 CPU-min.

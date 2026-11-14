@@ -1,0 +1,95 @@
+Twin pilot (2026-11-08/09): T-L-Ne-share-c vs a flat LR "twin" trained on exactly its self-play games.
+Question: on the same data, does the routed tree beat a flat model?
+Answer for this tree: yes, by about 290 Elo at v428/v452. The flat twin is an ordinary flat LR (about F-L-c at the
+same version), so the tree's self-play games are not a better curriculum.
+Still open: is the edge the model, or the own steps' league data (9.9% of the tree's positions, which this twin
+lacks)? The full-data twin settles it; see league/summary.txt.
+
+METHOD
+  Games: each self-play round r (v_r vs v_{r-1}, 1000 games) replayed with chessai-lrshare arena from the tree's own
+    model files: bdt{r} vs bdt{r-1}, --use-probs --games 1000 --seed derive_seed(21, r, 0) (seed.py). The other
+    defaults equal self-play's. Rounds 0-1 (bdt0 is never saved) come from a scratch self-play with the lineage's
+    flags; its bdt1/bdt2 are byte-identical to the run's.
+    All 416 rounds matched the log exactly (A's +W -L =D and plies; logs/progress.txt, no FAIL).
+  Twin: F-L-c's recipe, chessai-cyc5 train --model lr --use-probs (defaults, rate 0.05), from scratch, round by
+    round in the tree's order. Streamed (stream.py): generate, check, train, delete.
+    - Round r is trained alone with --start and seed 21^sm(r)^sm(0). This is byte-identical to one train --seed 21
+      over all rounds (checked on rounds 0-1).
+    - train differs from self-play's training only in the within-round shuffle. On round 0, train's weights
+      correlate 0.947 with self-play's, about the same as two train seeds do with each other (0.956).
+    - LR training is byte-identical in chessai-cyc5 and chessai-lrshare.
+  Own steps: 36 kept versions (28 52 67 ... 446) trained on league-pool games that aren't kept, so the twin stays
+    unchanged at them. They are 9.9% of the tree's training positions (11.5M of 116.2M; ownshare2.py), and the
+    twin lacks them.
+    Their value is unknown: a league position is not worth a self-play one. The 36 kept own steps gained a median
+    69 Elo over the pre-step model in their 100-game gates (quartiles 37 to 99; kept ones only, so biased up).
+    The full-data twin (league/summary.txt) is the test.
+  Sanity: through round 27 the tree was still one leaf (leaves: v28 1, v122 5, v452 11). Its games through round 27
+    are F-L-c's (identical W/L/D), and twin v28's weights correlate 0.967 with F-L-c v28's, i.e. shuffle noise.
+  Kept: twin models at the tree's 45 league versions, including champion v428 and current v452 (lr/).
+  Matches (compare.sh, control.sh): chessai-sparsefit arena, depth 2 both sides, log-odds-softmax T0.1,
+    --use-probs, seed 11, 2000 games. Each side is calibrated on its own games, made as the driver makes them
+    (600 games, d1, seed 5, from heldout-lr-d2-s555). These are identical to the driver's for tree v428, tree v452
+    and F-L-c v4100 (determinism.txt).
+
+MATCHES (A - B in Elo, 95% range)
+  tree v122 (5 leaves) vs twin v122     191 [174, 208]   (A 1442-442-116)
+  tree v217            vs twin v217     236 [218, 255]
+  tree v428 (champion) vs twin v428     292 [273, 313]
+  tree v452 (11 leaves)vs twin v452     294 [274, 315]   (A 1655-277-68)
+  twin v428 vs F-L-c v4100             -218 [-237, -201]
+  twin v452 vs F-L-c v4100             -217 [-235, -199]
+  tree v452 vs F-L-c v4100                4 [-10, 19]
+  control, F-L-c at the same version (its own 452 rounds):
+  twin v452 vs F-L-c v452               -19 [-35, -4]
+  tree v452 vs F-L-c v452               247 [229, 267]
+  (Elo isn't transitive across these: tree-twin 294 vs 4 - (-217) = 221 via F-L-c v4100.)
+
+OFFLINE (eval-loss --fit-calibration: calibrated log-loss / winner log-loss; offline/evalloss.txt)
+                 heldout-d2play (287k, 75% decisive)   heldout (599k, 3% decisive)
+  tree v122      0.9256 / 0.5694                       0.1389 / 0.5017
+  tree v217      0.9085 / 0.5576                       0.1385 / 0.5028
+  tree v428      0.9090 / 0.5545                       0.1385 / 0.5005
+  tree v452      0.9069 / 0.5563                       0.1376 / 0.4915
+  twin v122      0.9475 / 0.5953                       0.1406 / 0.5261
+  twin v217      0.9402 / 0.5854                       0.1402 / 0.5233
+  twin v428      0.9340 / 0.5816                       0.1397 / 0.5137
+  twin v452      0.9342 / 0.5832                       0.1396 / 0.5139
+  F-L-c v452     0.9260 / 0.5771                       0.1398 / 0.5048
+  F-L-c v4100    0.9180 / 0.5661                       0.1384 / 0.5028
+  The tree predicts better than its twin on both sets, at every version.
+
+NOT SEPARATED
+  The test can't tell routing/specialisation apart from the leaves' younger AdaGrad sums (bigger steps; see
+  leafcmp).
+  The near-flat D-L-Nc-c twin is the control: its full tree equals its leaf 3 in play. If it too beats its twin by
+  a lot, the edge is youth rather than routing.
+  A one-factor follow-up on the same games: a flat twin whose AdaGrad sums are forgotten, or with a larger rate.
+
+COST (machine load 10-16, nice 19, 2 jobs of 4 threads)
+  Pilot regeneration: 2206 s CPU (5.3 s per arena round, 414 rounds), plus 9 s scratch self-play.
+  Pilot training: 187 s CPU (0.45 s per round).
+  Wall: 933 s (2.2 s per round).
+  Comparisons: 990 s CPU, 6 min wall (10 own-cal sets, 9 matches, 20 eval-loss runs).
+  Pilot total: about 57 min CPU, 22 min wall.
+  Disk: streamed, about 37 MB per round in flight; kept models 4.7 MB.
+  Other trees: rounds on the latest version's training path x (spot-check arena CPU plus 0.45 s). One round per
+  binary replays exactly (spot/summary.txt; analysis: path.py, analyze.py).
+    T-L-Ne-c v1872        1824 rounds: chessai-cyc2 rounds 0-412, chessai-cyc5 414-1871
+                          about 3.3 h CPU, 70 min wall; own share 2.4%
+    T-L-Nc-c v1206         966 rounds (v720 is a copy of v516, so rounds 516-719 are not in its history):
+                          chessai-cyc2 0-435, chessai-cyc5 437-1205
+                          about 1.7 h CPU, 36 min wall; own share 3.8%
+    T-L-Nc-share-c v537    510 rounds: chessai-lrshare
+                          about 0.9 h CPU, 19 min wall; own share 6.2%
+    D-L-Nc-c v2074        2007 rounds: chessai-dag
+                          about 3.1 h CPU, 75 min wall; own share 2.3%
+    All four: about 9 h CPU, 3.3 h wall at 2 jobs, plus about 15 min CPU of comparisons each.
+  Before scaling, stream.py needs a binary choice per round range and T-L-Nc-c's copy (a twin jump to v516's).
+
+FILES
+  seed.py, stream_seed.py, stream.py, compare.sh, control.sh, spot.sh, ownshare2.py, path.py, analyze.py,
+  wcmp.py (LR weight comparison).
+  T-L-Ne-share-c/: lr/ (twin), models/ (copies), cal/, match/, offline/, logs/ (per-round checks and times),
+  matches.txt.
+  idt/: the cyc5-vs-lrshare training identity check.

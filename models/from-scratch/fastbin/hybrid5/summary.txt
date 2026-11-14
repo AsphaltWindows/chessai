@@ -1,0 +1,109 @@
+HYBRID5: EXACT FIXED-POINT PLAY FOR TREES AND DAGS (2026-11-09 23:59 to 2026-11-10 ~01:15, the hybrid5 fork)
+
+Task: make play of compound models (trees, DAGs, mixtures) much cheaper with exactly the same results, and swap it
+into the running experiments. The user has said yes to any exact, deterministic speedup.
+
+RESULT
+- Binary: models/from-scratch/bin/chessai-hybrid5 (md5 3154f5a990cf524c6571aacacf5f6e05).
+  - Source: models/from-scratch/fastbin/hybrid5-src, a copy of hybrid4gfx-src.
+  - It has the same commands, flags and files as chessai-hybrid4gfx.
+- It is the tournament binary of single-split, single-split-probit and cluster-error, from cycles 112, 123 and 40.
+- Live tournament CPU per game, new / old: 0.37 (single-split), 0.59 (single-split-probit), 0.49 (cluster-error).
+  Own calibration: 0.87-0.96. Cycles finish 20-36% sooner. Details under LIVE below.
+
+HOW IT WORKS
+- Only calibrated trees and DAGs at ply 1 and 2 take the new path: `cal:` over bdt or bdd, with no per-leaf
+  calibration or blend. Everything else is unchanged: training, self-play, flat models, mixtures (moe, nbgate) and FM.
+- Each node keeps its sums in fixed point, with weights at 2^-32. A move updates only the features it changes. TAN
+  routers also update the features whose parent changed.
+- A router picks its class from the integer sums when its margin is wider than a proven rounding bound. Inside the
+  bound, it routes in float.
+- Ply 1: the route is fixed point. The leaf's value is computed in float, so it is the exact float value.
+- Ply 2:
+  - Every reply gets a fixed-point estimate of its leaf value, with a proven error bound.
+  - Probit leaves get a bound per position. Outside |z| < 30 they are valued in float.
+  - Only replies that could still be the best, given the bounds, are valued in float. That is almost always one per
+    move.
+  - The float search loop then runs over those exact values in legal-move order, with the same tie and NaN rules.
+- So every value that reaches the move choice is the float value, bit for bit.
+
+IDENTITY (all byte-identical; only game_cpu.csv and the timings in logs differ)
+- 17 calibrated arenas on the final binary, 2,260 games in all.
+  - Real models, copied read-only from the three experiments and the DAG runs (D-L-Ne, D-L-Ne-home).
+  - Depths: d1, d2, and d1 against d2.
+  - Routers: LR, NB and TAN. Leaves: LR and probit.
+  - Also: the own-calibration format (600 games at d1), a mixture, and a flat model.
+  - 4 of the runs were in check mode, which asserts every incremental sum, bound and root value against float.
+- 15 more arenas ran on an earlier build of the same method; 3 of them were checked.
+- A tournament with the league's flags and players-file format: 21 players (17 from single-split and
+  single-split-probit, and the 4 random references), 2 rounds, 3,371 files.
+- In situ:
+  - single-split-probit's first hybrid5 cycle (cycle 123: 3,000 games) was replayed on chessai-hybrid4gfx from the
+    tour dir as it was before the cycle.
+  - The own-calibration sets the cleanup had removed were made again on chessai-hybrid4gfx.
+  - The 7 tournament outputs and all 12,000 saved-game files are identical.
+- Training: bdt from scratch, bdt resumed from a state, and LR give identical model and state files.
+- 155 unit tests pass. The 6 new ones cover:
+  - exact values with LR, NB and TAN routers and LR, NB and probit leaves;
+  - a DAG;
+  - ties falling back to float;
+  - estimates within their bounds;
+  - the best-reply loop.
+- Fallbacks to float, over the 17 arenas on the final binary:
+  - router decisions: 2 of 103.8 million;
+  - ply-2 replies: 77.0 million estimated, 3.08 million valued in float (one per searched move; 6 moves needed a
+    second);
+  - no reply had to be valued in float at once, and no move needed all its replies in float.
+
+SPEED (new CPU / old, per game)
+- Pinned benchmark: one core; two models of a kind, each at ply 1 and ply 2; 4 rounds, twice, alternating binaries;
+  the same games on both.
+    kind                                  d1-d1   d1-d2   d2-d2   (d2-d2 old -> new)
+    LR routers (T-L-Le, T-L-Lc-merge)     0.76    0.35    0.33    52.0 -> 17.1 ms
+    NB routers (T-L-Ne, T-L-Nc-merge)     0.69    0.28    0.27    76.5 -> 20.4 ms
+    TAN routers (T-L-Te, T-L-Tc-merge)    0.86    0.39    0.38    76.1 -> 28.8 ms
+    probit leaves (T-P-Le, T-P-Nc-merge)  0.70    0.46    0.44    45.6 -> 19.9 ms
+    probit leaves (T-P-Te, T-P-Tc-merge)  0.92    0.59    0.57    47.5 -> 26.9 ms
+    DAG (D-L-Ne, D-L-Ne-home)             0.43    0.17    0.15   128.0 -> 19.6 ms
+    flat control (F-L, F-P)               1.02    1.01    1.00    10.6 -> 10.5 ms
+- The league-like tournament (21 players): 0.48 overall. Tree against tree at ply 2 is 0.35; flat against tree is 0.53.
+- The in-situ replay of single-split-probit's cycle 123: 35.5 s of game CPU against 63.7 s (0.56).
+
+LIVE (totals.csv, the 5 cycles before each swap against the cycles after)
+- single-split, cycles 107-111 against 112-116:
+  - tournament game CPU 23.5 -> 8.8 ms a game (0.37); process CPU 0.41; 70.6 -> 26.4 s a cycle;
+  - own calibration 0.87; cycle wall 76 -> 49 s.
+- single-split-probit, cycles 118-122 against 123-127:
+  - 20.6 -> 12.0 ms a game (0.59); process CPU 0.62; 61.7 -> 36.1 s a cycle;
+  - own calibration 0.88; cycle wall 66 -> 53 s.
+- cluster-error, cycles 35-39 against 40-44:
+  - 18.5 -> 9.1 ms a game (0.49); process CPU 0.52; 191.2 -> 94.0 s a cycle;
+  - own calibration 0.96; cycle wall 199 -> 139 s.
+- Together, the three tournaments use about 167 s less CPU a cycle. Wall times also depend on the machine's load.
+
+DEPLOYMENT
+- First check: no engine rule reads measured CPU. Rounds, self-play budgets and copies use prices and plies;
+  measured CPU is only recorded.
+- For each experiment:
+  1. leagues.py stop, then wait for its repeat.sh to exit after the cycle;
+  2. change only config.json's tournament.binary (atomic write; the one-line diff was checked);
+  3. restart repeat.sh, detached.
+- The swaps:
+  - single-split: after cycle 111; restarted 00:53:37, pid 1404770 (was 1324482).
+  - single-split-probit: after cycle 122; restarted 00:56:51, pid 1406175 (was 1332165).
+  - cluster-error: after cycle 39; restarted 00:58:26, pid 1407148 (was 1338340).
+- Each experiment's first cycle on hybrid5 (112, 123, 40) finished without errors.
+- Not swapped: the flat-only experiments (selfplay-depth and nb-settings-2 are running). Flat models play the same
+  code in both binaries, so there is nothing to gain.
+- Notes:
+  - leagues/FORMATS.md has a change note.
+  - models/NEW-DESIGN.md has the swap entries.
+  - The draft spec leagues/specs/batch3/5-dag-home.json now names chessai-hybrid5 as its tournament binary. It was
+    not created or launched.
+
+CAVEATS
+- Ply 1 gains less: 0.7-0.9 for trees and 0.43 for DAGs. The leaf value is still computed in float for every move.
+- Own calibration gains only 4-13%. It plays at ply 1, and fitting the calibration at load is a fixed cost.
+- Mixtures (moe, nbgate) and FM are not done. They play the float path, unchanged.
+- The second priority was not started: training speedups and probit self-play.
+- CPU used: about 40 CPU min, at nice 19. That covers the builds, the checks, the benchmarks and the in-situ replay.

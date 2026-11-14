@@ -1,0 +1,617 @@
+DEGENERACY CENSUS: trees, DAGs and mixers of the champion league (cycles/champ), 2026-11-09
+Question: did the routed models and mixtures degenerate (router to flat, mixer to flat, mixer to router, converged leaves)?
+
+WHAT WAS MEASURED
+- Models: each lineage's latest version (copied from cycles/runs; ratings from state.json, cycle 71): 64 routed or
+  mixture lineages (active, retired and frozen), plus 9 flat references as context rows. A second pass measured each
+  lineage's champion version (column "at champion").
+- Positions: models/from-scratch/modelopt/games/round0 (cycle-70 pool sample: 2,983 games, 256,074 positions). Usage
+  counts every position; predictions are compared on every 10th (25,608).
+- Usage. Routers (trees, DAGs, Hoeffding trees, and the hard MoEs, which predict with their argmax expert): share of
+  positions per leaf, "max" share, Neff = 1/sum(p^2), leaves with >= 1%. Soft mixers: the top expert's mean weight
+  ("w") and argmax share ("arg"), share of positions whose max weight is >= .9, effective experts per position ("eff",
+  exp of the mean weight entropy).
+- Similarity. "top": correlation, over the 25,608 positions, of the whole model's white-win minus black-win log-odds
+  with those of its dominant part alone (the busiest leaf, or the expert with the highest mean weight). "off": the same,
+  on the positions routed to another leaf or expert only. "w": median correlation of win-minus-loss weights between
+  LR parts with >= 1% share, over the 819 features F-L-c uses (as whytrees). NB table correlations are in the details.
+- Reference bar: F-L-c and F-P-tau0-c (flat LR and flat probit) correlate at 0.9922 on these positions.
+
+VERDICT RULES (in order)
+- router to flat: one leaf (never split, or merged back), or the busiest leaf gets >= 95% of positions. Observed:
+  99.0 to 100%, against 90.5% for the next highest.
+- converged leaves: shares spread, but "top" >= 0.9922, so swapping the whole for its busiest leaf changes predictions
+  less than swapping LR for probit. Observed: 0.9937 to 1.0000, against at most 0.9908 for the rest.
+- mixer to flat: a soft mixture with "top" >= 0.9922. "flat by weight": the top expert has w >= .8 and arg >= .9, but
+  "top" is below the bar.
+- mixer to router: max weight >= .9 on >= 75% of positions, and no expert is argmax on >= 90% of them.
+- healthy router or mixer: anything else. "dominated": the busiest leaf has >= 50% of positions (mixers: top expert
+  w >= .5). "borderline": "top" is within 0.002 of the bar.
+
+HEAD-TO-HEAD (last column)
+- The dominant part, saved as a standalone model, plays the whole model of the same version. A match is played when
+  the part has >= 50% share or the verdict is flat, converged or router. It is skipped ("identical") when the part gives
+  the whole model's prediction on >= 99.99% of positions.
+- The league's method: each side calibrated on its own play (600 d1 games, seed 5, starting from the lineage's
+  held-out set; the whole model reuses the league's own games from cycles/champ/owncal where kept, 28 of 34).
+  200 games at depth 2, seed 11, log-odds softmax T 0.1, --use-probs, paired colours, chessai-hybrid4g.
+- Elo is part minus whole, with a 95% CI of about ±45. Positive means the part alone is stronger.
+
+lineage                arch, recipe                            status   Elo now ±CI (cycle)  champ  peak  parts     usage                              similarity                   verdict                                 at champion     part-whole Elo [95%]
+---------------------  --------------------------------------  -------  -------------------  -----  ----  --------  ---------------------------------  ---------------------------  --------------------------------------  --------------  --------------------
+T-L-Ne-share3-c        tree LR|NB err share.3                  active   1889.9±20 c71        1890   1890  11lv d4   max .41 Neff 3.4 7≥1%              top .998 off .996 w .999     converged leaves                        converged       5 [-41, 51]
+T-L-Ne-pre-c           tree LR|NB err presplit                 active   1847.0±20 c71        1842   1847  11lv d4   max .48 Neff 3.4 7≥1%              top .984 off .969 w .967     healthy router                          healthy         -
+T-L-LLs-merge-c        tree LR|LR clu>err merge                active   1837.9±20 c71        1827   1838  3lv d1    max .51 Neff 2.6 3≥1%              top 1.000 off 1.000 w 1.000  converged leaves                        flat 100%       -2 [-47, 44]
+T-L-Nc-fresh-c         tree LR|NB clu fresh                    active   1836.8±20 c71        1825   1837  11lv d3   max .28 Neff 6.0 9≥1%              top .981 off .971 w .963     healthy router                          healthy         -
+M-L8-L-c               moe 8LR|LR                              active   1834.8±20 c71        1816   1835  8ex       w .87 arg .97 ≥.9 61% eff 1.39     top .952 off .944 w .377     mixer to flat by weight                 flat by weight  -89 [-138, -43]
+T-L-NNs-merge-c        tree LR|NB clu>err merge                active   1834.3±20 c71        1836   1839  1lv d0    max 1.00 Neff 1.0 1≥1%             top 1.000 off -              router to flat (1 leaf)                 1 leaf          identical
+D-L-Nc-c               DAG LR|NB clu bf9                       active   1819.8±19 c71        1852   1869  3lv d1    max 1.00 Neff 1.0 1≥1%             top 1.000 off -              router to flat                          flat 100%       identical
+T-L-Ne-fresh-c         tree LR|NB err fresh                    active   1819.8±19 c71        1856   1858  11lv d4   max .61 Neff 2.4 6≥1%              top .984 off .973 w .982     healthy router (dominated)              healthy         9 [-38, 55]
+F-L-c                  flat LR                                 active   1818.2±19 c71        1831   1841  flat      -                                  -                            flat (reference)                        -               -
+F-P-tau0-d2jit-c       flat probit tau0,d2                     active   1817.9±19 c71        1847   1860  flat      -                                  -                            flat (reference)                        -               -
+T-L-Nc-share-c         tree LR|NB clu share.1                  active   1810.8±19 c71        1861   1863  11lv d3   max .25 Neff 5.9 10≥1%             top .995 off .993 w .995     converged leaves                        converged       -12 [-57, 33]
+T-L-Ne-bal-c           tree LR|NB err bal                      active   1809.4±19 c71        1790   1809  11lv d3   max .31 Neff 6.0 11≥1%             top .982 off .972 w .976     healthy router                          healthy         -
+T-L-Te-merge-c         tree LR|TAN err merge                   active   1808.3±19 c71        1872   1876  7lv d2    max .77 Neff 1.6 4≥1%              top .994 off .984 w .993     converged leaves                        converged       -19 [-65, 26]
+M-L4-N-c               nbgate 4LR|NB                           active   1808.0±19 c71        1846   1859  4ex       w .41 arg .41 ≥.9 86% eff 1.11     top .984 off .960 w .949     mixer to router                         mixer->router   12 [-33, 58]
+T-L-Nc-share-merge-c   tree LR|NB clu share.1,merge            active   1802.9±19 c71        1813   1830  3lv d1    max .72 Neff 1.8 3≥1%              top 1.000 off 1.000 w 1.000  converged leaves                        1 leaf          0 [-45, 45]
+T-L-Nc-c               tree LR|NB clu                          active   1800.1±19 c71        1862   1862  11lv d3   max .29 Neff 5.0 10≥1%             top .984 off .972 w .962     healthy router                          healthy         -
+T-L-Ne-merge-c         tree LR|NB err merge                    active   1800.1±19 c71        1845   1845  3lv d1    max .76 Neff 1.6 3≥1%              top .999 off .999 w 1.000    converged leaves                        1 leaf          9 [-37, 55]
+T-L-Ne-c               tree LR|NB err                          active   1799.9±19 c71        1844   1862  11lv d3   max .58 Neff 2.7 7≥1%              top .980 off .963 w .971     healthy router (dominated)              healthy         5 [-41, 51]
+T-L-Nc-merge-c         tree LR|NB clu merge                    active   1796.9±19 c71        1838   1838  3lv d1    max .73 Neff 1.7 3≥1%              top 1.000 off 1.000 w 1.000  converged leaves                        1 leaf          -16 [-62, 30]
+T-L-NNs-c              tree LR|NB clu>err                      active   1795.5±19 c71        1818   1831  11lv d3   max .28 Neff 5.9 9≥1%              top .966 off .950 w .965     healthy router                          healthy         -
+T-L-Ne-share-c         tree LR|NB err share.1                  active   1795.0±19 c71        1842   1842  11lv d3   max .31 Neff 4.9 7≥1%              top .991 off .990 w .995     healthy router (borderline)             healthy         -
+T-L-Nc-share-l10-c     tree LR|NB clu share.1,lim10            active   1794.5±19 c71        1832   1832  11lv d3   max .23 Neff 6.2 10≥1%             top .994 off .992 w .992     converged leaves                        converged       -7 [-53, 39]
+T-L-Le-fresh-c         tree LR|LR err fresh                    active   1792.6±19 c71        1798   1800  3lv d1    max .53 Neff 2.2 3≥1%              top .999 off .998 w 1.000    converged leaves                        flat 98%        28 [-16, 73]
+M-LP-L-d2jit-c         hybrid LR+P|LR d2                       active   1786.9±19 c71        1791   1791  2ex       w .99 arg 1.00 ≥.9 99% eff 1.03    top 1.000 off .996           mixer to flat                           mixer->flat     -19 [-65, 26]
+M-LP-L-win-c           hybrid LR+P|LR gate:win                 active   1782.9±19 c71        1783   1783  2ex       w 1.00 arg 1.00 ≥.9 100% eff 1.00  top 1.000 off -              mixer to flat                           mixer->flat     identical
+M-LP-L-hard-c          hybrid LR+P|LR hard                     active   1780.2±19 c71        1813   1813  2ex hard  w .96 arg .99 ≥.9 90% eff 1.12     top 1.000 off .986           router to flat                          flat 98%        42 [-3, 88]
+D-L-Ne-skill-c         DAG LR|NB err split-on skill            active   1778.4±19 c71        1757   1778  7lv d4    max .35 Neff 3.8 5≥1%              top .984 off .973 w .976     healthy router                          healthy         -
+T-L-NLs-d2jit-c        tree LR|NB+LR clu>err st100k,d2         active   1777.6±19 c71        1787   1787  11lv d3   max .33 Neff 5.3 8≥1%              top .976 off .955 w .941     healthy router                          healthy         -
+T-L-H-c                Hoeffding LR                            active   1777.0±19 c71        1772   1777  21lv      max .19 Neff 11.2 17≥1%            top .959 off .955 w .983     healthy router                          healthy         -
+F-L-d2jit-c            flat LR d2                              active   1775.4±19 c71        1811   1820  flat      -                                  -                            flat (reference)                        -               -
+T-L-NLs-merge-d2jit-c  tree LR|NB+LR clu>err merge,st100k,d2   active   1771.4±19 c71        1798   1815  3lv d1    max .43 Neff 2.8 3≥1%              top .998 off .998 w 1.000    converged leaves                        converged       17 [-28, 63]
+D-L-Ne-lreg-c          DAG LR|NB err split-on leaf-regret      active   1768.5±19 c71        1794   1809  7lv d4    max .34 Neff 3.7 5≥1%              top .983 off .970 w .978     healthy router                          healthy         -
+T-L-Te-c               tree LR|TAN err                         active   1762.7±19 c71        1810   1829  9lv d3    max .47 Neff 3.2 5≥1%              top .983 off .978 w .977     healthy router                          healthy         -
+D-L-Ne-rf16-c          DAG LR|NB err rff16                     active   1756.8±19 c71        1759   1759  5lv d5    max .67 Neff 2.1 5≥1%              top .991 off .982 w .983     healthy router (dominated, borderline)  healthy         -63 [-110, -19]
+D-L-Ne-c               DAG LR|NB err                           active   1753.4±19 c71        1805   1805  5lv d4    max .66 Neff 2.1 4≥1%              top .987 off .975 w .974     healthy router (dominated)              healthy         42 [-3, 88]
+T-L-Ne-new-c           tree LR|NB err                          active   1740.1±19 c71        1774   1780  9lv d3    max .34 Neff 4.0 6≥1%              top .985 off .977 w .975     healthy router                          healthy         -
+M-LP-L-c               hybrid LR+P|LR                          active   1739.4±19 c71        1758   1787  2ex       w .92 arg .97 ≥.9 76% eff 1.23     top 1.000 off .997           mixer to flat                           mixer->flat     -44 [-90, 1]
+M-L4-L-d2jit-c         moe 4LR|LR d2                           ret c49  1734.3±19 c49        1765   1770  4ex       w .59 arg .64 ≥.9 13% eff 1.70     top .983 off .977 w .770     healthy mixer                           healthy         -37 [-84, 9]
+D-L-Ne-skip-c          DAG LR|NB err leaf-skip                 active   1734.1±19 c71        1743   1743  7lv d4    max .30 Neff 4.1 5≥1%              top .982 off .978 w .980     healthy router                          healthy         -
+T-L-Le-share3-c        tree LR|LR err share.3                  frozen   1723.4±19 c58        1806   1817  11lv d3   max .45 Neff 3.5 8≥1%              top .998 off .997 w .999     converged leaves                        converged       -12 [-58, 34]
+T-L-Le-pre-c           tree LR|LR err presplit                 ret c49  1701.8±19 c49        1711   1727  11lv d3   max 1.00 Neff 1.0 1≥1%             top 1.000 off .984           router to flat                          flat 100%       -31 [-77, 13]
+M-L4-L-hard-c          moe 4LR|LR hard                         active   1694.5±19 c71        1694   1694  4ex hard  w .86 arg .90 ≥.9 80% eff 1.32     top .961 off .396 w .391     healthy router (dominated)              healthy         123 [77, 173]
+F-P-tau0-c             flat probit tau0                        active   1690.2±19 c71        1685   1702  flat      -                                  -                            flat (reference)                        -               -
+T-L-Le-merge-c         tree LR|LR err merge                    frozen   1684.6±20 c35        1697   1697  5lv d2    max .99 Neff 1.0 1≥1%              top 1.000 off .999           router to flat                          converged       0 [-45, 45]
+T-L-Le-bal-c           tree LR|LR err bal                      active   1664.1±19 c71        1743   1743  9lv d2    max .72 Neff 1.8 4≥1%              top .988 off .983 w .989     healthy router (dominated)              converged       23 [-23, 69]
+T-L-LLs-c              tree LR|LR clu>err                      active   1639.6±20 c71        1685   1704  11lv d3   max .65 Neff 1.9 3≥1%              top .987 off .944 w .963     healthy router (dominated)              healthy         145 [98, 197]
+T-L-NLs-c              tree LR|NB+LR clu>err                   ret c58  1637.3±19 c58        1713   1724  11lv d3   max .22 Neff 6.2 9≥1%              top .958 off .949 w .958     healthy router                          healthy         -
+T-L-NLs-merge-c        tree LR|NB+LR clu>err merge             active   1619.3±20 c71        1829   1843  3lv d1    max .58 Neff 1.9 2≥1%              top .988 off .997 w 1.000    healthy router (dominated)              1 leaf          94 [47, 145]
+T-N-Nc-merge-c         tree NB|NB clu share.1,merge            active   1610.5±20 c71        1635   1635  5lv d2    max .50 Neff 2.6 5≥1%              top 1.000 off 1.000          converged leaves                        converged       -5 [-51, 40]
+T-L-Le-c               tree LR|LR err                          active   1607.3±20 c71        1789   1805  11lv d3   max 1.00 Neff 1.0 1≥1%             top 1.000 off -              router to flat                          flat 100%       identical
+M-L4-L-c               moe 4LR|LR                              active   1602.7±20 c71        1788   1806  4ex       w .90 arg .98 ≥.9 69% eff 1.35     top .945 off .857 w .854     mixer to flat by weight                 flat by weight  0 [-47, 47]
+T-L-Le-merge-d2jit-c   tree LR|LR err merge,st100k,d2          ret c35  1593.9±20 c35        1766   1771  3lv d1    max .39 Neff 2.9 3≥1%              top .977 off .988 w 1.000    healthy router                          1 leaf          -
+FM-c                   flat FM                                 ret c35  1576.8±20 c35        1651   1659  flat      -                                  -                            flat (reference)                        -               -
+T-N-NNs-merge-d2jit-c  tree NB|NB clu>err merge,st300k,d2      active   1574.2±20 c71        1559   1575  5lv d2    max .62 Neff 2.3 5≥1%              top .998 off .991            converged leaves                        converged       0 [-46, 46]
+M-N4-L-c               moenb 4NB|LR                            active   1564.8±20 c71        1553   1574  4ex       w .40 arg .42 ≥.9 21% eff 2.17     top .027 off .092            healthy mixer                           healthy         -
+T-N-Nc-merge-d2jit-c   tree NB|NB clu share.1,merge,st200k,d2  active   1554.0±21 c71        1542   1561  1lv d0    max 1.00 Neff 1.0 1≥1%             top 1.000 off -              router to flat (1 leaf)                 1 leaf          identical
+F-N-d2jit-c            flat NB d2                              active   1530.2±21 c71        1558   1558  flat      -                                  -                            flat (reference)                        -               -
+T-N-NNs-merge-c        tree NB|NB clu>err merge                ret c71  1517.1±21 c71        1570   1586  11lv d3   max .24 Neff 5.6 7≥1%              top .967 off .965            healthy router                          converged       -
+T-N-Nc-fresh-c         tree NB|NB clu share.1,fresh            active   1508.4±21 c71        1512   1512  5lv d2    max .44 Neff 3.6 5≥1%              top .910 off .961            healthy router                          healthy         -
+T-N-H-c                Hoeffding NB                            active   1498.6±22 c71        1538   1538  28lv      max .16 Neff 12.8 19≥1%            top .930 off .930            healthy router                          healthy         -
+FM-d2jit-c             flat FM d2                              active   1495.5±22 c71        1518   1518  flat      -                                  -                            flat (reference)                        -               -
+F-N-c                  flat NB                                 ret c57  1454.8±21 c57        1574   1576  flat      -                                  -                            flat (reference)                        -               -
+T-N-LLs-merge-c        tree NB|LR clu>err merge                active   1439.1±23 c71        1583   1583  7lv d2    max .54 Neff 2.4 3≥1%              top .901 off .765            healthy router (dominated)              flat 100%       63 [18, 111]
+T-N-Nc-c               tree NB|NB clu share.1                  ret c50  1430.7±21 c50        1425   1448  11lv d3   max .28 Neff 5.0 10≥1%             top .969 off .974            healthy router                          healthy         -
+TAN-c                  flat TAN                                ret c64  1375.5±23 c64        1438   1440  flat      -                                  -                            flat (reference)                        -               -
+T-N-Ne-c               tree NB|NB err                          frozen   1362.2±24 c44        1391   1407  11lv d3   max .69 Neff 1.9 6≥1%              top .974 off .958            healthy router (dominated)              healthy         28 [-18, 75]
+T-N-NLs-merge-c        tree NB|NB+LR clu>err merge             ret c58  1349.5±23 c58        1544   1556  9lv d3    max .27 Neff 5.7 7≥1%              top .813 off .782            healthy router                          1 leaf          -
+T-N-Ne-merge-c         tree NB|NB err merge                    active   1346.0±25 c71        1494   1494  9lv d3    max .37 Neff 4.0 8≥1%              top .982 off .982            healthy router                          converged       -
+T-N-Lc-merge-c         tree NB|LR clu share.1,merge            ret c40  1323.4±24 c40        1463   1490  9lv d4    max 1.00 Neff 1.0 1≥1%             top 1.000 off -              router to flat                          flat 100%       identical
+T-N-Le-merge-c         tree NB|LR err merge                    active   1286.2±26 c71        1396   1396  9lv d3    max .87 Neff 1.3 3≥1%              top .990 off .978            healthy router (dominated)              healthy         33 [-13, 81]
+T-N-LNs-merge-c        tree NB|LR+NB clu>err merge             ret c35  1269.2±23 c35        1290   1294  5lv d2    max .50 Neff 2.3 3≥1%              top .997 off .998            converged leaves                        healthy         -56 [-104, -10]
+M-N4-N-c               nbmix 4NB                               ret c44  1118.3±25 c44        1182   1186  4ex       w .35 arg .33 ≥.9 32% eff 1.63     top .038 off .052            healthy mixer                           healthy         -
+T-N-NNs-c              tree NB|NB clu>err                      ret c35  1077.7±24 c35        1149   1162  11lv d3   max .46 Neff 3.3 8≥1%              top .793 off .846            healthy router                          healthy         -
+
+PATTERNS
+
+1. Degeneration is common. At the latest versions, 25 of 64 lineages are functionally flat (14 converged leaves,
+   8 router to flat, 3 mixer to flat). Two more mixers are flat by weight, and one mixer became a router.
+   36 are healthy (33 routers, 3 mixers), and 12 of those are dominated by one part. At the champion versions,
+   31 were functionally flat.
+
+2. The recipe decides it.
+   - Leaf sharing makes near-copies. Every LR-leaf tree with --leaf-share converged: Ne-share3, Le-share3, Nc-share
+     and Nc-share-l10, with LR weights at 0.992 to 0.999. Ne-share is borderline at 0.9908. NB leaves with share .1
+     stay apart (T-N-Nc 0.969, T-N-Nc-fresh 0.910) unless the tree also merges.
+   - Merging (--revise 0) keeps trees at one leaf or a few near-copies. 18 of 20 merge lineages were functionally flat
+     at their champion version, 8 of them with a single leaf; 13 still are.
+   - LR routers can collapse. Three LR error-routed trees send nearly everything to one leaf: T-L-Le 100%, Le-pre
+     99.7%, Le-merge 99.0%. So does T-N-Lc-merge (LR cluster router), at 100%. The other 9 LR-routed trees keep 39
+     to 87% in their busiest leaf, and 4 of those have converged leaves.
+   - NB-routed LR-leaf trees and DAGs without share or merge stay healthy: 15 lineages, "top" 0.958 to 0.991, busiest
+     leaf 22 to 67%. The exception is the DAG D-L-Nc-c: its cluster router sends all but 9 of 256,074 positions to one
+     of its 3 leaves. The Hoeffding trees spread widest (Neff 11 and 13).
+   - Mixers.
+     - LR-gated LR experts lean on one expert: M-L4-L w .90 and M-L8-L .87, argmax 97 to 98%. The leftover weight
+       still moves predictions ("top" 0.945 and 0.952). M-L4-L-d2jit keeps two experts (.59 and .35).
+     - The LR+probit hybrids fall onto the LR expert. Probit mean weight: .083 (M-LP-L), .008 (d2jit), .00005 (win).
+     - The NB-gated M-L4-N became a router. One expert has >= .9 weight on 86% of positions, and its four experts
+       split them 12/41/10/37%.
+     - The NB-expert mixers (M-N4-L, M-N4-N) stay mixers. Their components are not standalone predictors ("top" 0.03
+       and 0.04).
+
+3. Known cases, confirmed.
+   - The hard MoEs predict with one expert by design (moe-hard, hybrid-hard). On all 25,608 positions, the whole
+     model's output equals its argmax expert's exactly.
+     - M-LP-L-hard's LR expert takes 99.1% of positions (router to flat).
+     - M-L4-L-hard's expert 0 takes 90.5% (dominated router). Its other experts disagree with expert 0 ("off" 0.40).
+   - M-LP-L's gate starves the probit expert. The LR expert has mean weight .917 and argmax 97.4%, and the mixture is
+     functionally the LR expert ("top" 0.9997).
+   - Consistent with whytrees: the share trees' leaves are near-copies (Nc-share's champion v545 "top" 0.9937;
+     Ne-share LR weights 0.995).
+
+4. Strength. Degeneration does not track rating.
+   - T-L-Ne-share3-c (1889.9, top of the league) has converged leaves ("top" 0.998), and its busiest leaf alone plays
+     the whole level (5 [-41, 51]). 4 of the top 8 lineages are functionally flat. Whatever lifts share3 above F-L-c
+     (1818.2) lies in how its leaves are trained, not in routing.
+   - Where a model is functionally flat, its dominant part plays like the whole: 18 of 19 such matches are level
+     within the CI. The exception is T-N-LNs-merge's leaf, at -56 [-104, -10].
+   - Some dominated healthy routers are weaker than their own busiest leaf, so their minor leaves cost strength:
+     T-L-LLs 145 [98, 197], M-L4-L-hard 123 [77, 173], T-L-NLs-merge 94 [47, 145], T-N-LLs-merge 63 [18, 111].
+   - The whole beats its dominant part in two cases:
+     - M-L8-L: -89 [-138, -43]. The minor experts matter despite their 13% of the weight.
+     - D-L-Ne-rf16: -63 [-110, -19].
+   - Five merge lineages had one leaf or converged leaves at their champion version and have distinct leaves now:
+     NLs-merge, T-N-NLs-merge, Le-merge-d2jit, T-N-Ne-merge and T-N-LLs-merge. They sit 144 to 210 below their
+     champions; the other merge lineages sit between -64 and 16. Large drops also happen without a structure change
+     (T-L-Le -182, M-L4-L -186, T-N-Lc-merge -140), so structure is not the whole story.
+
+CAVEATS
+- One position set (league positions from the cycle-70 pool). The depth-2 search also visits other positions.
+- 200-game matches have a CI of about ±45. Across 34 matches, about 2 chance results are expected at 95%.
+- NB tables are a poor similarity measure because rare values dominate their correlation. T-N-NLs-merge's leaf tables
+  correlate at 0.998, while their log-odds correlate at 0.78 on positions routed elsewhere. For NB, use "top" and
+  "off".
+- "peak" is the highest entry rating with CI <= 30 in ratings.csv. Retired and idle entries keep frozen ratings that
+  run about 25 to 40 above today's field, so old peaks are inflated. "Elo now" for retired or frozen lineages is from
+  the cycle shown.
+- The champion is the best version by rating, so the drop from champion to latest includes selection (version SD
+  about 17).
+
+CPU (nice 19, at most 2 single-threaded jobs), about 16 min in all:
+- census tool builds, about 7 min (a copy of hybrid4g-src with a census command, in census-src/; estimated from wall
+  time);
+- census of 128 models (latest and champion versions), 2.2 min;
+- analysis, about 0.7 min;
+- own calibrations and matches, 5.9 min (34 matches, 40 calibrations).
+
+FILES (models/from-scratch/degeneracy/)
+- summary.txt (this file), table.txt and details.txt.
+- lineages.json.
+- census/ and census-champ/: per-model JSON.
+- components/ and components-champ/: each leaf or expert as a standalone model, plus series.tsv (per position: routed
+  part, whole model, parts, references).
+- analysis2.json and analysis2-champ.json.
+- cal/, match/ and h2h.log.
+- Scripts: lineages.py, run_census.py, analyze.py, analyze2.py, verdict.py, run_h2h.py, write_summary.py.
+
+DETAILS (latest version; per leaf: index/depth and share; per expert: kind, mean weight/argmax share)
+
+T-L-Ne-share3-c v398 (tree LR|NB err share.3): converged leaves, leaves near-copies
+  shares: L8/d2 40.6% L7/d2 33.5% L15/d4 10.1% L4/d2 5.5% L5/d2 4.7% L9/d2 1.9% L3/d1 1.1% L14/d4 1.0% L13/d4 0.7% L10/d3 0.5% L11/d3 0.2%
+  whole vs dominant part (corr of log-odds, all positions) 0.9980, mean |diff| 0.122 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 59.3% routed elsewhere .9958, .206 (refs .9891, .319)
+  weight correlation between parts (win-minus-loss, LR weights; 21 pairs of parts with >= 1%): min 0.9944, median 0.9985
+  champion v394: converged leaves, 11 leaves, busiest leaf 40.6%, whole vs dominant part 0.9977
+  dominant part (leaf8) vs whole, d2, 200 games: part +91 -88 =21, part minus whole 5 [-41, 51]
+
+T-L-Ne-pre-c v1449 (tree LR|NB err presplit): healthy router
+  shares: L7/d2 47.7% L8/d2 19.9% L2/d1 10.1% L4/d2 8.7% L15/d4 7.9% L6/d2 3.5% L9/d2 1.4% L14/d4 0.6% L12/d3 0.2% L10/d3 0.1% (+1 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9842, mean |diff| 0.272 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 52.1% routed elsewhere .9688, .522 (refs .9930, .294)
+  weight correlation between parts (win-minus-loss, LR weights; 21 pairs of parts with >= 1%): min 0.9289, median 0.9675
+  champion v1435: healthy router, 11 leaves, busiest leaf 47.5%, whole vs dominant part 0.9851
+
+T-L-LLs-merge-c v3444 (tree LR|LR clu>err merge): converged leaves, leaves near-copies
+  shares: L3/d1 50.8% L2/d1 27.5% L1/d1 21.6%
+  whole vs dominant part (corr of log-odds, all positions) 0.9999, mean |diff| 0.041 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 49.2% routed elsewhere 1.0000, .084 (refs .9910, .343)
+  weight correlation between parts (win-minus-loss, LR weights; 3 pairs of parts with >= 1%): min 1.0000, median 1.0000
+  champion v2767: router to flat, 3 leaves, busiest leaf 100.0%, whole vs dominant part 1.0000
+  dominant part (leaf3) vs whole, d2, 200 games: part +87 -88 =25, part minus whole -2 [-47, 44]
+
+T-L-Nc-fresh-c v2959 (tree LR|NB clu fresh): healthy router
+  shares: L7/d2 28.1% L10/d2 17.3% L12/d2 14.1% L8/d2 12.7% L11/d2 12.3% L4/d2 6.6% L6/d2 3.4% L15/d3 2.8% L13/d3 1.3% L9/d2 0.8% L14/d3 0.6%
+  whole vs dominant part (corr of log-odds, all positions) 0.9813, mean |diff| 0.299 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 71.8% routed elsewhere .9712, .417 (refs .9904, .323)
+  weight correlation between parts (win-minus-loss, LR weights; 36 pairs of parts with >= 1%): min 0.9288, median 0.9633
+  champion v2899: healthy router, 11 leaves, busiest leaf 28.1%, whole vs dominant part 0.9754
+
+M-L8-L-c v326 (moe 8LR|LR): mixer to flat by weight, gate near-flat, but the small weights still move predictions
+  experts (kind, mean weight, argmax share): E0 lr 0.000/0.000, E1 lr 0.001/0.000, E2 lr 0.000/0.000, E3 lr 0.051/0.032, E4 lr 0.874/0.965, E5 lr 0.000/0.000, E6 lr 0.075/0.003, E7 lr 0.000/0.000
+  mean max weight 0.888; max >= .9 on 61.4%, >= .99 on 7.5%; effective experts per position 1.39 (of the mean weights 1.60)
+  whole vs dominant part (corr of log-odds, all positions) 0.9519, mean |diff| 1.235 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 3.4% routed elsewhere .9440, 3.028 (refs .9858, .314)
+  weight correlation between parts (win-minus-loss, LR weights; 3 pairs of parts with >= 1%): min 0.3767, median 0.3768
+  champion v305: mixer to flat by weight, 8 experts, top expert weight 87.5%, whole vs dominant part 0.9606
+  dominant part (expert4) vs whole, d2, 200 games: part +66 -116 =18, part minus whole -89 [-138, -43]
+
+T-L-NNs-merge-c v2955 (tree LR|NB clu>err merge): router to flat, one leaf: never split, or merged back
+  shares: L0/d0 100.0%
+  whole vs dominant part (corr of log-odds, all positions) 1.0000, mean |diff| 0.000 (F-L-c vs F-P-tau0-c 0.9922, 0.331); no sampled position is routed elsewhere
+  champion v2645: router to flat, 1 leaf, busiest leaf 100.0%, whole vs dominant part 1.0000
+
+D-L-Nc-c v2328 (DAG LR|NB clu bf9): router to flat, all but 9 of 256,074 positions reach one leaf
+  shares: L3/d1 100.0% (+2 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 1.0000, mean |diff| 0.000 (F-L-c vs F-P-tau0-c 0.9922, 0.331); no sampled position is routed elsewhere
+  champion v2043: router to flat, 3 leaves, busiest leaf 100.0%, whole vs dominant part 1.0000
+
+T-L-Ne-fresh-c v1714 (tree LR|NB err fresh): healthy router, dominated
+  shares: L2/d1 60.9% L1/d1 19.5% L9/d3 10.3% L13/d4 4.8% L15/d4 2.3% L14/d4 1.4% L10/d3 0.4% L6/d2 0.3% L11/d3 0.1% (+2 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9837, mean |diff| 0.226 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 39.0% routed elsewhere .9733, .580 (refs .9955, .304)
+  weight correlation between parts (win-minus-loss, LR weights; 15 pairs of parts with >= 1%): min 0.9507, median 0.9816
+  champion v1659: healthy router, 11 leaves, busiest leaf 60.6%, whole vs dominant part 0.9825
+  dominant part (leaf2) vs whole, d2, 200 games: part +95 -90 =15, part minus whole 9 [-38, 55]
+
+T-L-Nc-share-c v716 (tree LR|NB clu share.1): converged leaves, leaves near-copies
+  shares: L9/d2 25.0% L12/d2 23.5% L10/d2 17.7% L8/d2 11.1% L11/d2 4.5% L5/d2 4.3% L14/d3 3.8% L7/d2 3.8% L6/d2 3.1% L15/d3 3.0% L13/d3 0.4%
+  whole vs dominant part (corr of log-odds, all positions) 0.9953, mean |diff| 0.188 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 75.0% routed elsewhere .9928, .251 (refs .9908, .329)
+  weight correlation between parts (win-minus-loss, LR weights; 45 pairs of parts with >= 1%): min 0.9882, median 0.9951
+  champion v545: converged leaves, 11 leaves, busiest leaf 24.9%, whole vs dominant part 0.9937
+  dominant part (leaf9) vs whole, d2, 200 games: part +83 -90 =27, part minus whole -12 [-57, 33]
+
+T-L-Ne-bal-c v431 (tree LR|NB err bal): healthy router
+  shares: L11/d2 31.0% L12/d2 19.1% L9/d2 10.0% L8/d2 9.7% L10/d2 8.5% L13/d3 5.5% L5/d2 4.9% L4/d2 4.1% L14/d3 3.5% L15/d3 2.2% L7/d2 1.5%
+  whole vs dominant part (corr of log-odds, all positions) 0.9818, mean |diff| 0.328 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 69.1% routed elsewhere .9721, .474 (refs .9927, .311)
+  weight correlation between parts (win-minus-loss, LR weights; 55 pairs of parts with >= 1%): min 0.9460, median 0.9759
+  champion v397: healthy router, 11 leaves, busiest leaf 32.3%, whole vs dominant part 0.9820
+
+T-L-Te-merge-c v1142 (tree LR|TAN err merge): converged leaves, flat by dominance, leaves differ
+  shares: L5/d2 77.4% L7/d2 13.0% L3/d1 6.4% L6/d2 1.4% L8/d2 0.9% L4/d2 0.7% L9/d2 0.1%
+  whole vs dominant part (corr of log-odds, all positions) 0.9939, mean |diff| 0.118 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 22.6% routed elsewhere .9844, .523 (refs .9953, .300)
+  weight correlation between parts (win-minus-loss, LR weights; 6 pairs of parts with >= 1%): min 0.9829, median 0.9927
+  champion v999: converged leaves, 5 leaves, busiest leaf 80.0%, whole vs dominant part 0.9958
+  dominant part (leaf5) vs whole, d2, 200 games: part +83 -94 =23, part minus whole -19 [-65, 26]
+
+M-L4-N-c v512 (nbgate 4LR|NB): mixer to router, one-hot per position, experts split the positions
+  experts (kind, mean weight, argmax share): E0 lr 0.122/0.122, E1 lr 0.412/0.412, E2 lr 0.095/0.095, E3 lr 0.371/0.371
+  mean max weight 0.956; max >= .9 on 86.1%, >= .99 on 71.1%; effective experts per position 1.11 (of the mean weights 3.36)
+  whole vs dominant part (corr of log-odds, all positions) 0.9835, mean |diff| 0.323 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 58.8% routed elsewhere .9596, .536 (refs .9883, .318)
+  weight correlation between parts (win-minus-loss, LR weights; 6 pairs of parts with >= 1%): min 0.9050, median 0.9492
+  champion v338: mixer to router, 4 experts, top expert weight 40.7%, whole vs dominant part 0.9823
+  dominant part (expert1) vs whole, d2, 200 games: part +91 -84 =25, part minus whole 12 [-33, 58]
+
+T-L-Nc-share-merge-c v888 (tree LR|NB clu share.1,merge): converged leaves, leaves near-copies
+  shares: L1/d1 72.1% L3/d1 21.0% L2/d1 6.9%
+  whole vs dominant part (corr of log-odds, all positions) 0.9999, mean |diff| 0.021 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 27.9% routed elsewhere .9997, .077 (refs .9956, .296)
+  weight correlation between parts (win-minus-loss, LR weights; 3 pairs of parts with >= 1%): min 0.9999, median 0.9999
+  champion v727: router to flat, 1 leaf, busiest leaf 100.0%, whole vs dominant part 1.0000
+  dominant part (leaf1) vs whole, d2, 200 games: part +86 -86 =28, part minus whole 0 [-45, 45]
+
+T-L-Nc-c v1440 (tree LR|NB clu): healthy router
+  shares: L9/d2 29.1% L12/d2 25.8% L10/d2 17.1% L8/d2 11.7% L6/d2 5.0% L5/d2 3.8% L13/d3 2.5% L15/d3 2.2% L11/d2 1.5% L14/d3 1.0% L7/d2 0.3%
+  whole vs dominant part (corr of log-odds, all positions) 0.9836, mean |diff| 0.319 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 70.9% routed elsewhere .9719, .451 (refs .9899, .323)
+  weight correlation between parts (win-minus-loss, LR weights; 45 pairs of parts with >= 1%): min 0.9346, median 0.9624
+  champion v1349: healthy router, 11 leaves, busiest leaf 29.0%, whole vs dominant part 0.9857
+
+T-L-Ne-merge-c v2889 (tree LR|NB err merge): converged leaves, leaves near-copies
+  shares: L3/d1 76.3% L2/d1 15.6% L1/d1 8.1%
+  whole vs dominant part (corr of log-odds, all positions) 0.9989, mean |diff| 0.066 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 23.8% routed elsewhere .9990, .277 (refs .9957, .290)
+  weight correlation between parts (win-minus-loss, LR weights; 3 pairs of parts with >= 1%): min 0.9996, median 0.9997
+  champion v2571: router to flat, 1 leaf, busiest leaf 100.0%, whole vs dominant part 1.0000
+  dominant part (leaf3) vs whole, d2, 200 games: part +92 -87 =21, part minus whole 9 [-37, 55]
+
+T-L-Ne-c v2074 (tree LR|NB err): healthy router, dominated
+  shares: L7/d2 58.4% L4/d2 11.4% L10/d3 9.1% L15/d2 8.6% L9/d2 7.6% L14/d2 3.6% L5/d2 1.1% L11/d3 0.2% L12/d3 0.1% (+2 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9803, mean |diff| 0.247 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 41.5% routed elsewhere .9627, .595 (refs .9949, .288)
+  weight correlation between parts (win-minus-loss, LR weights; 21 pairs of parts with >= 1%): min 0.9438, median 0.9708
+  champion v2003: healthy router, 11 leaves, busiest leaf 57.0%, whole vs dominant part 0.9808
+  dominant part (leaf7) vs whole, d2, 200 games: part +92 -89 =19, part minus whole 5 [-41, 51]
+
+T-L-Nc-merge-c v3775 (tree LR|NB clu merge): converged leaves, leaves near-copies
+  shares: L1/d1 72.6% L2/d1 20.4% L3/d1 7.1%
+  whole vs dominant part (corr of log-odds, all positions) 0.9998, mean |diff| 0.031 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 27.3% routed elsewhere .9999, .112 (refs .9955, .295)
+  weight correlation between parts (win-minus-loss, LR weights; 3 pairs of parts with >= 1%): min 1.0000, median 1.0000
+  champion v3616: router to flat, 1 leaf, busiest leaf 100.0%, whole vs dominant part 1.0000
+  dominant part (leaf1) vs whole, d2, 200 games: part +84 -93 =23, part minus whole -16 [-62, 30]
+
+T-L-NNs-c v2989 (tree LR|NB clu>err): healthy router
+  shares: L9/d2 28.3% L12/d2 17.7% L10/d2 13.7% L7/d2 13.6% L11/d2 11.7% L6/d2 5.8% L14/d3 3.6% L15/d3 3.2% L5/d2 2.3% L8/d2 0.1% (+1 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9661, mean |diff| 0.409 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 71.6% routed elsewhere .9500, .571 (refs .9903, .323)
+  weight correlation between parts (win-minus-loss, LR weights; 36 pairs of parts with >= 1%): min 0.9318, median 0.9653
+  champion v2883: healthy router, 11 leaves, busiest leaf 28.2%, whole vs dominant part 0.9736
+
+T-L-Ne-share-c v623 (tree LR|NB err share.1): healthy router, borderline
+  shares: L15/d3 31.4% L9/d2 22.0% L7/d2 19.1% L10/d3 10.9% L6/d2 6.1% L5/d2 5.8% L14/d3 4.2% L11/d3 0.2% L2/d1 0.1% (+2 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9908, mean |diff| 0.288 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 68.4% routed elsewhere .9900, .421 (refs .9943, .321)
+  weight correlation between parts (win-minus-loss, LR weights; 21 pairs of parts with >= 1%): min 0.9856, median 0.9949
+  champion v492: healthy router, 11 leaves, busiest leaf 33.9%, whole vs dominant part 0.9918
+
+T-L-Nc-share-l10-c v363 (tree LR|NB clu share.1,lim10): converged leaves, leaves near-copies
+  shares: L12/d2 23.1% L7/d2 22.9% L11/d2 18.3% L9/d2 9.4% L5/d2 6.1% L10/d2 6.0% L8/d2 5.7% L6/d2 3.4% L15/d3 2.7% L14/d3 1.4% L13/d3 0.9%
+  whole vs dominant part (corr of log-odds, all positions) 0.9937, mean |diff| 0.222 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 76.9% routed elsewhere .9922, .289 (refs .9933, .311)
+  weight correlation between parts (win-minus-loss, LR weights; 45 pairs of parts with >= 1%): min 0.9864, median 0.9924
+  champion v325: converged leaves, 11 leaves, busiest leaf 23.7%, whole vs dominant part 0.9940
+  dominant part (leaf12) vs whole, d2, 200 games: part +89 -93 =18, part minus whole -7 [-53, 39]
+
+T-L-Le-fresh-c v1744 (tree LR|LR err fresh): converged leaves, leaves near-copies
+  shares: L2/d1 53.1% L1/d1 40.3% L3/d1 6.6%
+  whole vs dominant part (corr of log-odds, all positions) 0.9990, mean |diff| 0.063 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 46.9% routed elsewhere .9984, .134 (refs .9940, .327)
+  weight correlation between parts (win-minus-loss, LR weights; 3 pairs of parts with >= 1%): min 0.9998, median 0.9998
+  champion v1542: router to flat, 5 leaves, busiest leaf 98.4%, whole vs dominant part 0.9999
+  dominant part (leaf2) vs whole, d2, 200 games: part +92 -76 =32, part minus whole 28 [-16, 73]
+
+M-LP-L-d2jit-c v472 (hybrid LR+P|LR d2): mixer to flat, weights near-flat too
+  experts (kind, mean weight, argmax share): E0 lr 0.992/0.999, E1 probit 0.008/0.001
+  mean max weight 0.993; max >= .9 on 98.6%, >= .99 on 87.0%; effective experts per position 1.03 (of the mean weights 1.05)
+  whole vs dominant part (corr of log-odds, all positions) 1.0000, mean |diff| 0.006 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 0.1% routed elsewhere .9959, .366 (refs .9714, .443)
+  champion v342: mixer to flat, 2 experts, top expert weight 87.1%, whole vs dominant part 0.9967
+  dominant part (expert0) vs whole, d2, 200 games: part +83 -94 =23, part minus whole -19 [-65, 26]
+
+M-LP-L-win-c v417 (hybrid LR+P|LR gate:win): mixer to flat, weights near-flat too
+  experts (kind, mean weight, argmax share): E0 lr 1.000/1.000, E1 probit 0.000/0.000
+  mean max weight 1.000; max >= .9 on 100.0%, >= .99 on 99.9%; effective experts per position 1.00 (of the mean weights 1.00)
+  whole vs dominant part (corr of log-odds, all positions) 1.0000, mean |diff| 0.000 (F-L-c vs F-P-tau0-c 0.9922, 0.331); no sampled position is routed elsewhere
+  champion v401: mixer to flat, 2 experts, top expert weight 100.0%, whole vs dominant part 1.0000
+
+M-LP-L-hard-c v525 (hybrid LR+P|LR hard): router to flat, 99.1% of positions reach one leaf
+  experts (kind, mean weight, argmax share): E0 lr 0.961/0.991, E1 probit 0.039/0.009
+  mean max weight 0.963; max >= .9 on 89.6%, >= .99 on 55.7%; effective experts per position 1.12 (of the mean weights 1.18)
+  whole vs dominant part (corr of log-odds, all positions) 0.9997, mean |diff| 0.006 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 0.9% routed elsewhere .9859, .583 (refs .9922, .360)
+  champion v473: router to flat, 2 experts, top expert weight 94.8%, whole vs dominant part 0.9994
+  dominant part (expert0) vs whole, d2, 200 games: part +98 -74 =28, part minus whole 42 [-3, 88]
+
+D-L-Ne-skill-c v261 (DAG LR|NB err split-on skill): healthy router
+  shares: L12/d4 34.7% L10/d4 31.9% L7/d4 16.1% L2/d3 11.5% L8/d4 5.3% L9/d4 0.6% (+1 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9835, mean |diff| 0.302 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 65.2% routed elsewhere .9728, .463 (refs .9916, .313)
+  weight correlation between parts (win-minus-loss, LR weights; 10 pairs of parts with >= 1%): min 0.9572, median 0.9761
+  champion v238: healthy router, 7 leaves, busiest leaf 34.2%, whole vs dominant part 0.9834
+
+T-L-NLs-d2jit-c v2570 (tree LR|NB+LR clu>err st100k,d2): healthy router
+  shares: L8/d2 32.7% L10/d2 17.5% L11/d2 16.2% L13/d3 8.6% L5/d2 8.3% L12/d2 7.1% L4/d2 6.2% L14/d3 3.2% L6/d2 0.2% (+2 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9761, mean |diff| 0.465 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 67.3% routed elsewhere .9549, .691 (refs .9899, .321)
+  weight correlation between parts (win-minus-loss, LR weights; 28 pairs of parts with >= 1%): min 0.8024, median 0.9409
+  champion v2384: healthy router, 11 leaves, busiest leaf 32.5%, whole vs dominant part 0.9806
+
+T-L-H-c v3446 (Hoeffding LR): healthy router
+  shares: L25 19.0% L26 11.7% L36 9.4% L5 8.0% L40 7.0% L35 6.9% L28 5.6% L24 5.6% L11 4.1% L32 4.0% L27 4.0% L30 3.6% L38 2.9% L21 1.7% L19 1.7% L15 1.7% L33 1.4% L31 1.0% L39 0.4% L23 0.2% L17 0.1%
+  whole vs dominant part (corr of log-odds, all positions) 0.9593, mean |diff| 0.513 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 81.0% routed elsewhere .9550, .633 (refs .9930, .336)
+  weight correlation between parts (win-minus-loss, LR weights; 136 pairs of parts with >= 1%): min 0.9457, median 0.9830
+  champion v3029: healthy router, 20 leaves, busiest leaf 19.0%, whole vs dominant part 0.9602
+
+T-L-NLs-merge-d2jit-c v4012 (tree LR|NB+LR clu>err merge,st100k,d2): converged leaves, leaves near-copies
+  shares: L1/d1 42.8% L3/d1 36.4% L2/d1 20.8%
+  whole vs dominant part (corr of log-odds, all positions) 0.9981, mean |diff| 0.179 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 57.1% routed elsewhere .9979, .313 (refs .9948, .323)
+  weight correlation between parts (win-minus-loss, LR weights; 3 pairs of parts with >= 1%): min 1.0000, median 1.0000
+  champion v3612: converged leaves, 3 leaves, busiest leaf 45.0%, whole vs dominant part 0.9989
+  dominant part (leaf1) vs whole, d2, 200 games: part +92 -82 =26, part minus whole 17 [-28, 63]
+
+D-L-Ne-lreg-c v253 (DAG LR|NB err split-on leaf-regret): healthy router
+  shares: L10/d4 34.4% L11/d4 32.5% L15/d4 18.2% L1/d3 7.5% L13/d4 6.7% L14/d4 0.6% (+1 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9826, mean |diff| 0.325 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 65.5% routed elsewhere .9704, .496 (refs .9916, .313)
+  weight correlation between parts (win-minus-loss, LR weights; 10 pairs of parts with >= 1%): min 0.9541, median 0.9776
+  champion v218: healthy router, 7 leaves, busiest leaf 34.6%, whole vs dominant part 0.9849
+
+T-L-Te-c v321 (tree LR|TAN err): healthy router
+  shares: L7/d2 47.1% L8/d2 25.3% L12/d3 13.5% L2/d1 10.7% L6/d2 2.4% L4/d2 0.6% L10/d3 0.2% L11/d3 0.1% L9/d2 0.1%
+  whole vs dominant part (corr of log-odds, all positions) 0.9829, mean |diff| 0.299 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 53.0% routed elsewhere .9778, .563 (refs .9950, .321)
+  weight correlation between parts (win-minus-loss, LR weights; 10 pairs of parts with >= 1%): min 0.9458, median 0.9775
+  champion v200: healthy router, 5 leaves, busiest leaf 73.3%, whole vs dominant part 0.9886
+
+D-L-Ne-rf16-c v276 (DAG LR|NB err rff16): healthy router, dominated, borderline
+  shares: L1/d4 66.5% L2/d4 16.9% L7/d5 7.5% L8/d5 5.1% L9/d5 4.0%
+  whole vs dominant part (corr of log-odds, all positions) 0.9905, mean |diff| 0.190 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 33.6% routed elsewhere .9822, .565 (refs .9944, .305)
+  weight correlation between parts (win-minus-loss, LR weights; 10 pairs of parts with >= 1%): min 0.9736, median 0.9829
+  champion v233: healthy router, 5 leaves, busiest leaf 64.4%, whole vs dominant part 0.9915
+  dominant part (leaf1) vs whole, d2, 200 games: part +67 -103 =30, part minus whole -63 [-110, -19]
+
+D-L-Ne-c v346 (DAG LR|NB err): healthy router, dominated
+  shares: L2/d3 65.9% L9/d4 13.3% L3/d3 12.1% L7/d4 8.2% L8/d4 0.6%
+  whole vs dominant part (corr of log-odds, all positions) 0.9866, mean |diff| 0.223 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 34.1% routed elsewhere .9749, .654 (refs .9954, .304)
+  weight correlation between parts (win-minus-loss, LR weights; 6 pairs of parts with >= 1%): min 0.9498, median 0.9743
+  champion v327: healthy router, 5 leaves, busiest leaf 66.2%, whole vs dominant part 0.9872
+  dominant part (leaf2) vs whole, d2, 200 games: part +100 -76 =24, part minus whole 42 [-3, 88]
+
+T-L-Ne-new-c v335 (tree LR|NB err): healthy router
+  shares: L4/d2 34.3% L6/d2 29.9% L3/d1 17.0% L9/d2 8.8% L10/d3 6.9% L8/d2 2.5% L11/d3 0.5% (+2 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9850, mean |diff| 0.321 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 65.8% routed elsewhere .9766, .487 (refs .9922, .311)
+  weight correlation between parts (win-minus-loss, LR weights; 15 pairs of parts with >= 1%): min 0.9523, median 0.9753
+  champion v234: healthy router, 7 leaves, busiest leaf 34.0%, whole vs dominant part 0.9810
+
+M-LP-L-c v469 (hybrid LR+P|LR): mixer to flat, weights near-flat too
+  experts (kind, mean weight, argmax share): E0 lr 0.917/0.974, E1 probit 0.083/0.026
+  mean max weight 0.924; max >= .9 on 76.0%, >= .99 on 29.2%; effective experts per position 1.23 (of the mean weights 1.33)
+  whole vs dominant part (corr of log-odds, all positions) 0.9997, mean |diff| 0.035 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 2.7% routed elsewhere .9971, .285 (refs .9943, .354)
+  champion v387: mixer to flat, 2 experts, top expert weight 100.0%, whole vs dominant part 1.0000
+  dominant part (expert0) vs whole, d2, 200 games: part +74 -99 =27, part minus whole -44 [-90, 1]
+
+M-L4-L-d2jit-c v2717 (moe 4LR|LR d2): healthy mixer, dominated
+  experts (kind, mean weight, argmax share): E0 lr 0.348/0.292, E1 lr 0.001/0.000, E2 lr 0.588/0.642, E3 lr 0.063/0.066
+  mean max weight 0.764; max >= .9 on 13.0%, >= .99 on 0.0%; effective experts per position 1.70 (of the mean weights 2.37)
+  whole vs dominant part (corr of log-odds, all positions) 0.9834, mean |diff| 0.486 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 35.7% routed elsewhere .9772, 1.041 (refs .9940, .290)
+  weight correlation between parts (win-minus-loss, LR weights; 3 pairs of parts with >= 1%): min 0.7277, median 0.7703
+  champion v2431: healthy mixer, 4 experts, top expert weight 47.8%, whole vs dominant part 0.9855
+  dominant part (expert2) vs whole, d2, 200 games: part +80 -101 =19, part minus whole -37 [-84, 9]
+
+D-L-Ne-skip-c v272 (DAG LR|NB err leaf-skip): healthy router
+  shares: L14/d4 30.2% L3/d3 25.3% L13/d4 21.4% L10/d4 21.2% L12/d4 1.2% L11/d4 0.6% (+1 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9822, mean |diff| 0.339 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 69.9% routed elsewhere .9779, .485 (refs .9934, .309)
+  weight correlation between parts (win-minus-loss, LR weights; 10 pairs of parts with >= 1%): min 0.9566, median 0.9799
+  champion v155: healthy router, 3 leaves, busiest leaf 58.3%, whole vs dominant part 0.9853
+
+T-L-Le-share3-c v523 (tree LR|LR err share.3): converged leaves, leaves near-copies
+  shares: L8/d2 45.4% L12/d2 23.7% L6/d2 8.8% L10/d2 7.6% L9/d2 5.9% L14/d3 4.0% L7/d2 2.5% L4/d2 1.0% L11/d2 0.9% L15/d3 0.1% (+1 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9979, mean |diff| 0.145 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 54.3% routed elsewhere .9969, .268 (refs .9910, .299)
+  weight correlation between parts (win-minus-loss, LR weights; 28 pairs of parts with >= 1%): min 0.9978, median 0.9989
+  champion v264: converged leaves, 9 leaves, busiest leaf 36.0%, whole vs dominant part 0.9977
+  dominant part (leaf8) vs whole, d2, 200 games: part +87 -94 =19, part minus whole -12 [-58, 34]
+
+T-L-Le-pre-c v1380 (tree LR|LR err presplit): router to flat, all but 672 of 256,074 positions reach one leaf
+  shares: L7/d3 99.7% L9/d3 0.2% L4/d2 0.1% (+8 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9999, mean |diff| 0.001 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 0.2% routed elsewhere .9844, .615 (refs .9962, .382)
+  champion v1069: router to flat, 11 leaves, busiest leaf 100.0%, whole vs dominant part 1.0000
+  dominant part (leaf7) vs whole, d2, 200 games: part +78 -96 =26, part minus whole -31 [-77, 13]
+
+M-L4-L-hard-c v285 (moe 4LR|LR hard): healthy router, dominated
+  experts (kind, mean weight, argmax share): E0 lr 0.864/0.905, E1 lr 0.018/0.000, E2 lr 0.014/0.000, E3 lr 0.103/0.095
+  mean max weight 0.915; max >= .9 on 80.1%, >= .99 on 2.0%; effective experts per position 1.32 (of the mean weights 1.64)
+  whole vs dominant part (corr of log-odds, all positions) 0.9612, mean |diff| 0.197 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 9.5% routed elsewhere .3964, 2.070 (refs .9922, .281)
+  weight correlation between parts (win-minus-loss, LR weights; 6 pairs of parts with >= 1%): min 0.3464, median 0.3914
+  champion v275: healthy router, 4 experts, top expert weight 88.6%, whole vs dominant part 0.9729
+  dominant part (expert0) vs whole, d2, 200 games: part +122 -54 =24, part minus whole 123 [77, 173]
+
+T-L-Le-merge-c v2617 (tree LR|LR err merge): router to flat, all but 2,622 of 256,074 positions reach one leaf
+  shares: L5/d2 99.0% L6/d2 0.6% L4/d2 0.3% L3/d1 0.2% (+1 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9996, mean |diff| 0.007 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 1.0% routed elsewhere .9990, .698 (refs .9981, .351)
+  champion v2053: converged leaves, 3 leaves, busiest leaf 86.4%, whole vs dominant part 0.9943
+  dominant part (leaf5) vs whole, d2, 200 games: part +87 -87 =26, part minus whole 0 [-45, 45]
+
+T-L-Le-bal-c v416 (tree LR|LR err bal): healthy router, dominated
+  shares: L5/d2 71.6% L7/d2 19.1% L11/d2 7.1% L9/d2 1.0% L6/d2 0.9% L10/d2 0.1% L8/d2 0.1% L4/d2 0.1% (+1 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9875, mean |diff| 0.202 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 28.2% routed elsewhere .9830, .714 (refs .9949, .301)
+  weight correlation between parts (win-minus-loss, LR weights; 6 pairs of parts with >= 1%): min 0.9824, median 0.9889
+  champion v283: converged leaves, 9 leaves, busiest leaf 78.2%, whole vs dominant part 0.9931
+  dominant part (leaf5) vs whole, d2, 200 games: part +98 -85 =17, part minus whole 23 [-23, 69]
+
+T-L-LLs-c v1127 (tree LR|LR clu>err): healthy router, dominated
+  shares: L14/d3 64.7% L11/d3 32.9% L3/d1 2.4% (+8 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9871, mean |diff| 0.238 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 35.1% routed elsewhere .9441, .678 (refs .9847, .300)
+  weight correlation between parts (win-minus-loss, LR weights; 3 pairs of parts with >= 1%): min 0.9620, median 0.9633
+  champion v986: healthy router, 11 leaves, busiest leaf 53.5%, whole vs dominant part 0.9854
+  dominant part (leaf14) vs whole, d2, 200 games: part +129 -50 =21, part minus whole 145 [98, 197]
+
+T-L-NLs-c v2055 (tree LR|NB+LR clu>err): healthy router
+  shares: L12/d2 21.7% L7/d2 20.5% L9/d2 19.0% L11/d2 15.0% L6/d2 7.3% L10/d2 7.0% L13/d3 3.5% L14/d3 3.4% L8/d2 2.0% L15/d3 0.5% (+1 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9576, mean |diff| 0.468 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 78.3% routed elsewhere .9494, .597 (refs .9936, .318)
+  weight correlation between parts (win-minus-loss, LR weights; 36 pairs of parts with >= 1%): min 0.9262, median 0.9577
+  champion v1677: healthy router, 11 leaves, busiest leaf 22.8%, whole vs dominant part 0.9474
+
+T-L-NLs-merge-c v2777 (tree LR|NB+LR clu>err merge): healthy router, dominated
+  shares: L2/d1 58.3% L1/d1 41.6% (+1 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9877, mean |diff| 0.372 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 41.2% routed elsewhere .9973, .904 (refs .9926, .341)
+  weight correlation between parts (win-minus-loss, LR weights; 1 pairs of parts with >= 1%): min 0.9996, median 0.9996
+  champion v2350: router to flat, 1 leaf, busiest leaf 100.0%, whole vs dominant part 1.0000
+  dominant part (leaf2) vs whole, d2, 200 games: part +121 -68 =11, part minus whole 94 [47, 145]
+
+T-N-Nc-merge-c v3509 (tree NB|NB clu share.1,merge): converged leaves, leaves near-copies
+  shares: L1/d1 50.5% L2/d1 35.5% L4/d2 5.0% L6/d2 4.9% L5/d2 4.1%
+  whole vs dominant part (corr of log-odds, all positions) 1.0000, mean |diff| 0.007 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 49.6% routed elsewhere 1.0000, .014 (refs .9952, .316)
+  weight correlation between parts (win-minus-loss, NB log-prob table; 10 pairs of parts with >= 1%): min 1.0000, median 1.0000
+  champion v3420: converged leaves, 3 leaves, busiest leaf 63.3%, whole vs dominant part 1.0000
+  dominant part (leaf1) vs whole, d2, 200 games: part +87 -90 =23, part minus whole -5 [-51, 40]
+
+T-L-Le-c v1895 (tree LR|LR err): router to flat, every position reaches one leaf
+  shares: L10/d2 100.0% (+10 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 1.0000, mean |diff| 0.000 (F-L-c vs F-P-tau0-c 0.9922, 0.331); no sampled position is routed elsewhere
+  champion v1660: router to flat, 11 leaves, busiest leaf 100.0%, whole vs dominant part 1.0000
+
+M-L4-L-c v912 (moe 4LR|LR): mixer to flat by weight, gate near-flat, but the small weights still move predictions
+  experts (kind, mean weight, argmax share): E0 lr 0.059/0.018, E1 lr 0.042/0.000, E2 lr 0.000/0.000, E3 lr 0.899/0.981
+  mean max weight 0.903; max >= .9 on 68.6%, >= .99 on 19.8%; effective experts per position 1.35 (of the mean weights 1.49)
+  whole vs dominant part (corr of log-odds, all positions) 0.9447, mean |diff| 2.089 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 1.9% routed elsewhere .8573, 1.196 (refs .9856, .372)
+  weight correlation between parts (win-minus-loss, LR weights; 3 pairs of parts with >= 1%): min 0.8506, median 0.8536
+  champion v652: mixer to flat by weight, 4 experts, top expert weight 94.7%, whole vs dominant part 0.9392
+  dominant part (expert3) vs whole, d2, 200 games: part +93 -93 =14, part minus whole 0 [-47, 47]
+
+T-L-Le-merge-d2jit-c v2404 (tree LR|LR err merge,st100k,d2): healthy router
+  shares: L1/d1 39.4% L3/d1 33.7% L2/d1 26.9%
+  whole vs dominant part (corr of log-odds, all positions) 0.9771, mean |diff| 0.968 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 60.5% routed elsewhere .9884, 1.600 (refs .9922, .320)
+  weight correlation between parts (win-minus-loss, LR weights; 3 pairs of parts with >= 1%): min 0.9999, median 1.0000
+  champion v1404: router to flat, 1 leaf, busiest leaf 100.0%, whole vs dominant part 1.0000
+
+T-N-NNs-merge-d2jit-c v4524 (tree NB|NB clu>err merge,st300k,d2): converged leaves, leaves near-copies
+  shares: L2/d1 61.9% L5/d2 14.8% L6/d2 14.5% L3/d1 7.3% L4/d2 1.5%
+  whole vs dominant part (corr of log-odds, all positions) 0.9980, mean |diff| 0.063 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 38.1% routed elsewhere .9914, .166 (refs .9752, .335)
+  weight correlation between parts (win-minus-loss, NB log-prob table; 10 pairs of parts with >= 1%): min 0.9982, median 0.9998
+  champion v4413: converged leaves, 5 leaves, busiest leaf 61.8%, whole vs dominant part 0.9995
+  dominant part (leaf2) vs whole, d2, 200 games: part +90 -90 =20, part minus whole 0 [-46, 46]
+
+M-N4-L-c v427 (moenb 4NB|LR): healthy mixer
+  experts (kind, mean weight, argmax share): E0 cnbp 0.175/0.167, E1 cnbp 0.228/0.210, E2 cnbp 0.397/0.420, E3 cnbp 0.201/0.203
+  mean max weight 0.698; max >= .9 on 21.4%, >= .99 on 0.2%; effective experts per position 2.17 (of the mean weights 3.79)
+  whole vs dominant part (corr of log-odds, all positions) 0.0267, mean |diff| 2.252 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 57.9% routed elsewhere .0922, 2.097 (refs .9938, .330)
+  weight correlation between parts (win-minus-loss, NB log-prob table; 6 pairs of parts with >= 1%): min -0.3527, median -0.0005
+  champion v374: healthy mixer, 4 experts, top expert weight 36.8%, whole vs dominant part 0.0111
+
+T-N-Nc-merge-d2jit-c v3645 (tree NB|NB clu share.1,merge,st200k,d2): router to flat, one leaf: never split, or merged back
+  shares: L0/d0 100.0%
+  whole vs dominant part (corr of log-odds, all positions) 1.0000, mean |diff| 0.000 (F-L-c vs F-P-tau0-c 0.9922, 0.331); no sampled position is routed elsewhere
+  champion v3506: router to flat, 1 leaf, busiest leaf 100.0%, whole vs dominant part 1.0000
+
+T-N-NNs-merge-c v1949 (tree NB|NB clu>err merge): healthy router
+  shares: L14/d2 24.4% L5/d2 23.2% L13/d2 16.9% L9/d3 14.2% L7/d3 8.9% L15/d2 5.9% L12/d2 5.8% L8/d3 0.6% (+3 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9670, mean |diff| 0.314 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 75.4% routed elsewhere .9650, .416 (refs .9936, .314)
+  weight correlation between parts (win-minus-loss, NB log-prob table; 21 pairs of parts with >= 1%): min 0.9902, median 0.9977
+  champion v1540: converged leaves, 3 leaves, busiest leaf 71.6%, whole vs dominant part 1.0000
+
+T-N-Nc-fresh-c v1685 (tree NB|NB clu share.1,fresh): healthy router
+  shares: L1/d1 44.5% L6/d2 19.6% L3/d1 14.2% L5/d2 13.5% L4/d2 8.1%
+  whole vs dominant part (corr of log-odds, all positions) 0.9098, mean |diff| 0.565 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 55.5% routed elsewhere .9614, 1.018 (refs .9949, .322)
+  weight correlation between parts (win-minus-loss, NB log-prob table; 10 pairs of parts with >= 1%): min 0.9253, median 0.9644
+  champion v1666: healthy router, 7 leaves, busiest leaf 44.5%, whole vs dominant part 0.9096
+
+T-N-H-c v3721 (Hoeffding NB): healthy router
+  shares: L18 15.8% L49 10.9% L52 10.4% L50 9.8% L9 6.8% L34 5.4% L33 5.0% L46 4.4% L36 4.2% L26 4.2% L29 3.5% L21 3.4% L54 3.1% L11 2.5% L39 2.4% L53 2.0% L31 1.5% L37 1.5% L45 1.2% L27 0.4% L23 0.3% L15 0.3% L17 0.3% L19 0.2% L41 0.2% L43 0.1% L47 0.1% L51 0.1%
+  whole vs dominant part (corr of log-odds, all positions) 0.9300, mean |diff| 0.440 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 84.3% routed elsewhere .9301, .522 (refs .9924, .327)
+  weight correlation between parts (win-minus-loss, NB log-prob table; 171 pairs of parts with >= 1%): min 0.8901, median 0.9792
+  champion v3567: healthy router, 26 leaves, busiest leaf 15.8%, whole vs dominant part 0.9300
+
+T-N-LLs-merge-c v1729 (tree NB|LR clu>err merge): healthy router, dominated
+  shares: L7/d2 54.4% L6/d2 32.9% L5/d2 12.7% (+4 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9008, mean |diff| 0.377 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 45.4% routed elsewhere .7651, .830 (refs .9898, .338)
+  weight correlation between parts (win-minus-loss, NB log-prob table; 3 pairs of parts with >= 1%): min 0.9967, median 0.9984
+  champion v1588: router to flat, 3 leaves, busiest leaf 100.0%, whole vs dominant part 1.0000
+  dominant part (leaf7) vs whole, d2, 200 games: part +107 -71 =22, part minus whole 63 [18, 111]
+
+T-N-Nc-c v1981 (tree NB|NB clu share.1): healthy router
+  shares: L12/d2 28.0% L9/d2 27.2% L10/d2 16.3% L7/d2 11.5% L4/d2 6.7% L11/d2 2.7% L13/d3 2.5% L5/d2 1.8% L14/d3 1.4% L15/d3 1.4% L8/d2 0.4%
+  whole vs dominant part (corr of log-odds, all positions) 0.9691, mean |diff| 0.363 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 72.0% routed elsewhere .9738, .504 (refs .9939, .313)
+  weight correlation between parts (win-minus-loss, NB log-prob table; 45 pairs of parts with >= 1%): min 0.9609, median 0.9798
+  champion v1647: healthy router, 11 leaves, busiest leaf 28.8%, whole vs dominant part 0.9628
+
+T-N-Ne-c v1029 (tree NB|NB err): healthy router, dominated
+  shares: L13/d2 69.4% L15/d2 17.7% L5/d2 4.6% L4/d2 2.7% L8/d2 1.3% L7/d2 1.2% L6/d2 1.0% L10/d3 0.8% L12/d3 0.5% L11/d3 0.4% L14/d2 0.3%
+  whole vs dominant part (corr of log-odds, all positions) 0.9737, mean |diff| 0.152 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 30.5% routed elsewhere .9582, .498 (refs .9950, .306)
+  weight correlation between parts (win-minus-loss, NB log-prob table; 15 pairs of parts with >= 1%): min 0.9431, median 0.9728
+  champion v719: healthy router, 11 leaves, busiest leaf 71.5%, whole vs dominant part 0.9729
+  dominant part (leaf13) vs whole, d2, 200 games: part +99 -83 =18, part minus whole 28 [-18, 75]
+
+T-N-NLs-merge-c v1943 (tree NB|NB+LR clu>err merge): healthy router
+  shares: L8/d2 27.1% L11/d3 19.0% L7/d2 18.2% L5/d2 13.8% L9/d2 8.9% L10/d3 7.0% L12/d3 4.8% L4/d2 1.0% L3/d1 0.2%
+  whole vs dominant part (corr of log-odds, all positions) 0.8125, mean |diff| 0.557 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 72.9% routed elsewhere .7820, .764 (refs .9934, .316)
+  weight correlation between parts (win-minus-loss, NB log-prob table; 21 pairs of parts with >= 1%): min 0.9952, median 0.9983
+  champion v1473: router to flat, 1 leaf, busiest leaf 100.0%, whole vs dominant part 1.0000
+
+T-N-Ne-merge-c v1732 (tree NB|NB err merge): healthy router
+  shares: L10/d2 36.6% L1/d1 27.6% L8/d3 14.9% L7/d3 12.0% L12/d2 2.9% L6/d2 2.1% L4/d2 2.1% L9/d3 1.6% L11/d2 0.2%
+  whole vs dominant part (corr of log-odds, all positions) 0.9824, mean |diff| 0.240 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 63.4% routed elsewhere .9823, .378 (refs .9942, .331)
+  weight correlation between parts (win-minus-loss, NB log-prob table; 28 pairs of parts with >= 1%): min 0.9857, median 0.9924
+  champion v1423: converged leaves, 7 leaves, busiest leaf 46.0%, whole vs dominant part 0.9966
+
+T-N-Lc-merge-c v682 (tree NB|LR clu share.1,merge): router to flat, every position reaches one leaf
+  shares: L10/d4 100.0% (+8 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 1.0000, mean |diff| 0.000 (F-L-c vs F-P-tau0-c 0.9922, 0.331); no sampled position is routed elsewhere
+  champion v435: router to flat, 5 leaves, busiest leaf 100.0%, whole vs dominant part 1.0000
+
+T-N-Le-merge-c v1262 (tree NB|LR err merge): healthy router, dominated
+  shares: L7/d3 87.1% L10/d2 8.1% L5/d2 4.2% L11/d2 0.4% L9/d3 0.2% (+4 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9896, mean |diff| 0.045 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 12.8% routed elsewhere .9783, .353 (refs .9939, .292)
+  weight correlation between parts (win-minus-loss, NB log-prob table; 3 pairs of parts with >= 1%): min 0.9765, median 0.9795
+  champion v700: healthy router, 9 leaves, busiest leaf 26.6%, whole vs dominant part 0.9849
+  dominant part (leaf7) vs whole, d2, 200 games: part +103 -84 =13, part minus whole 33 [-13, 81]
+
+T-N-LNs-merge-c v987 (tree NB|LR+NB clu>err merge): converged leaves, leaves near-copies
+  shares: L2/d1 49.8% L5/d2 42.5% L1/d1 7.7% (+2 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.9971, mean |diff| 0.126 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 50.1% routed elsewhere .9985, .251 (refs .9952, .317)
+  weight correlation between parts (win-minus-loss, NB log-prob table; 3 pairs of parts with >= 1%): min 0.9989, median 0.9990
+  champion v270: healthy router, 3 leaves, busiest leaf 50.1%, whole vs dominant part 0.9790
+  dominant part (leaf2) vs whole, d2, 200 games: part +77 -109 =14, part minus whole -56 [-104, -10]
+
+M-N4-N-c v485 (nbmix 4NB): healthy mixer
+  experts (kind, mean weight, argmax share): E0 cnbp 0.135/0.126, E1 cnbp 0.351/0.331, E2 cnbp 0.207/0.213, E3 cnbp 0.307/0.329
+  mean max weight 0.769; max >= .9 on 31.7%, >= .99 on 9.1%; effective experts per position 1.63 (of the mean weights 3.77)
+  whole vs dominant part (corr of log-odds, all positions) 0.0383, mean |diff| 23.645 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 66.8% routed elsewhere .0524, 25.238 (refs .9935, .329)
+  weight correlation between parts (win-minus-loss, NB log-prob table; 6 pairs of parts with >= 1%): min -0.7090, median -0.1435
+  champion v102: healthy mixer, 4 experts, top expert weight 39.3%, whole vs dominant part 0.0646
+
+T-N-NNs-c v1017 (tree NB|NB clu>err): healthy router
+  shares: L1/d1 45.8% L11/d2 28.5% L12/d2 11.2% L14/d3 4.1% L8/d3 3.5% L15/d3 2.5% L9/d3 2.4% L13/d3 1.0% L7/d3 0.7% L10/d2 0.3% (+1 leaves under 0.05%)
+  whole vs dominant part (corr of log-odds, all positions) 0.7925, mean |diff| 0.829 (F-L-c vs F-P-tau0-c 0.9922, 0.331); on the 54.2% routed elsewhere .8464, 1.530 (refs .9950, .321)
+  weight correlation between parts (win-minus-loss, NB log-prob table; 28 pairs of parts with >= 1%): min 0.8286, median 0.9264
+  champion v341: healthy router, 11 leaves, busiest leaf 50.0%, whole vs dominant part 0.8417

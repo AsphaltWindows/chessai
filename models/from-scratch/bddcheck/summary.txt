@@ -1,0 +1,37 @@
+bddcheck: the BDD (the user's router-split DAG) with T-L-Ne-c's recipe, before deploying D-L-Ne-c (2026-11-08)
+
+VERDICT: it works and is level with its BDT twin offline, so D-L-Ne-c was staged for the league (cycle 33->34).
+- BDD minus BDT, held out, one seed: log-loss -0.0018 [-0.0043, 0.0006], winner log-loss 0.0001 [-0.0017, 0.0019]
+  (10 test parts, paired t, 9 df). Whole test set with a fitted calibration: BDD 0.6229 / 0.3321, BDT 0.6242 / 0.3316.
+- Splits (split threshold 100k, split limit 5, 2.3M positions): the BDD made all 5 splits, 3 leaf splits and 2
+  delegator splits; the BDT made 3 leaf splits. Both end with 7 leaves.
+- The two delegator splits form one chain: the root became a router over sub-routers 4, 5, 6 (copies of its old
+  router, all routing to its old children 1, 2, 3), and sub-router 4 split again into 13, 14, 15. So it is the Nov 5
+  "chain of routers among the same children" shape. It is not degenerate in what it does: the sub-routers route
+  differently on the test set (routing-de.txt):
+  - root: 74% to 4, 4% to 5, 22% to 6; 4: 90% to 13, 4% to 14, 6% to 15;
+  - 6 sends 99.9% to child 3; 13 spreads 30/38/33 over 1, 2, 3; 5 sends 69% to child 1; 15 sends 44% to child 3.
+- In the league (5M split threshold) the delegator splits will take part of the 5-split budget, so D-L-Ne-c may end
+  with fewer leaves than T-L-Ne-c's 11. That is part of the design, not a change of recipe.
+
+The line, and one forced change:
+- D-L-Ne-c = T-L-Ne-c's line with --model bdd instead of --model bdt, on chessai-cyc5 (own step chessai-cyc5-labels).
+- The BDD refuses --reset-leaves: "revisable structure (revise, reset_leaves) is for BDTs only" (bdd.rs:44, panic on
+  the first try, run.sh). So the line drops T-L-Ne-c's --reset-leaves inf.
+- That flag only logs in a BDT: the BDT trained with and without it gives byte-identical bdt1-4.model (run2.sh,
+  ne-100k-noreset against ne-100k-ref), so D-L-Ne-c stays one factor (the model kind) from T-L-Ne-c.
+- ne-100k-ref (chessai-cyc5) is byte-identical to offline-c15's ne-100k (chessai-cyc5-labels).
+
+Setup: offline-c15's benchmark as in tanroute/offline.sh: train on cycle 15's round-robins 80-83 in one pass
+(--seed 1 --rounds 4 --use-probs), score on round 84 with a fitted calibration; parts are tanroute/parts/p0-p9.
+Recipe: --leaf lr --branch-factor 3 --split-threshold 100000 --split-limit 5 --forget-factor 1 --router cnbp --route
+error --error log. Training CPU: BDD 18.1 s, BDT 10.6 s (user), so the BDD costs about 1.7x to train once split.
+
+Smoke (smoke/smoke.sh) for the three lines staged at the 33->34 boundary (T-L-Te-c, T-L-Nc-share-merge-c,
+D-L-Ne-c): self-play 2 x 20 games from scratch, --resume to round 3, the own step's train --start {kind}3.state on
+three league pair dirs with each lineage's own-step binary, and chessai-sparsefit loading each model: all OK.
+Deploy rehearsal (rehearsal/): the staged-c33 watcher in a sandbox copy (DEPLOY_REHEARSAL=1): swap, selftest and
+status OK, the three lineages active with costs.
+
+Files: run.sh, run2.sh, eval.out, parts.csv, routing-de.txt, m/ (de-100k, ne-100k-ref, ne-100k-noreset), smoke/,
+rehearsal/. CPU: about 3 CPU-min in all, nice 19, at most 2 jobs.

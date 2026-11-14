@@ -1,0 +1,59 @@
+EXTEND fork: leagues.py extend (2026-11-12 ~21:25-23:00). Built, proven, swapped in. NO extension launched.
+
+Command: python3 leagues/leagues.py extend LEAGUE --cycles N [--dry-run]
+  An experiment that ended at its cap C (not on its plateau rule) goes on to cap N as if N had been its cap from the
+  start. Cycle C (it rated and decided but trained nothing) runs again as an ordinary cycle from the state at the end
+  of cycle C-1 (a crowning in it undone); its games are cut and replayed (rounds seeded by number). The originals go
+  first to <league>/extend/cap-C/ (with the old finals' models and training states: a warm-start source); the cycle
+  that runs again checks itself against them (field, games, decisions, ratings, plateau) and fails on a difference.
+  config.json: cycles N plus a cap_history entry; the cycle report, status, the dashboard and the library show it.
+  After extend, start the run's repeat.sh again (it exits when the run is done).
+  Refused, changing nothing: not an experiment, a driver holds it, not done, ended on its plateau rule, N <= C, N not
+  a rated cycle under rate_every, options the test doesn't cover (self-play/global lines, replay, train_filter,
+  frozen_references, self_games_topup, reference_window), records that don't line up, extend/cap-C/ already there.
+
+Proof
+- extend_test (alone: t2.out; inside the full selftest: full.out): extended runs vs fresh runs with the final cap,
+  184 items byte for byte (games, cold games, ratings, models and states, records, reports, config, state), but
+  totals.csv's cal_made of the cycles that ran again (own calibration games remade: the same games). Pairs: a cap
+  5 -> 13 (5 lines with a growing tree and DAG, rate_every 4, draw-aware test, guard; owncal/ and scan-cache/ deleted;
+  6 faults injected into the redo), b 2 -> 5 -> 6 (observer, cold games that train, openings), c 2 -> 4 (warm start,
+  ply 3). 7 crownings undone and made again; tampered backups stopped the redo; 9 refusals. CPU 107-111 s.
+- Full selftest on the work copy (md5 b89c6a4c...): 245 rule checks, 19 runs, passed. Quick selftest after the swap:
+  passed (quick-postswap.out).
+- Old vs new driver on the six running experiments (each re-created from its spec, run K cycles on the new driver and
+  compared with the live run): std-v1-p2-s1 and -x3 (5 cycles, 9,792 games each), -s2 (3 cycles, 5,712),
+  explore-t015-p1 and probit-field-p1 (5 cycles, 9,792 each), residual-p2 (5 cycles, 9,348; boolean set flags, an
+  entry's hybrid6rp). Identical: config, 260 model and state files, games, records, reports. Problems: none.
+- Dry runs, read-only: all 13 runs that ended at their cap (dryrun-candidates.txt) and the five picks at their new
+  caps (dryrun5.txt) pass.
+
+Swap: 22:56:00. leagues/leagues.py 1315b8ef... -> b89c6a4c603f77c68a054758e0642cb9 (backup leagues.py.before-extend).
+  All six live runs started their next cycles on it at 22:56:01-27 and run on. Docs: FORMATS.md (Cap history,
+  extend/cap-<C>/, Changes; now 27d574b6...) and BUILD.md "Extend" (eb382ff3...), each with a .before-extend backup.
+  Earlier, also with .before-extend backups: library/build_index.py and LIBRARY.md (end reason `extending`: the row
+  stays the old-cap final until the run ends again; old finals' snapshots kept) and dashboard.py (a "cap raised from
+  C to N" line; servers not restarted).
+
+The five picks (coordinator, analyst 6.96/6.97), plateau Monte Carlo (caps5.py; the cap cycle again included):
+  run            cap          P(plateau before N)  expected cycles  CPU-h expected / to N
+  std-v1-p1-s1   601 -> 801   0.98                  40               0.30 / 1.51
+  std-v1-p1-s2   601 -> 801   0.52                 153               1.15 / 1.51
+  flat-p3-w4     100 -> 200   0.24                  89               2.89 / 3.28
+  flat-p3-w3f1   100 -> 200   0.84                  30               0.19 / 0.65
+  treeonly-p1    400 -> 500   0.97                  19               0.08 / 0.41
+  Total expected ~4.6 CPU-h (at most 7.4). Skipped (8): treeonly-p1-coldrate, -coldtrain, -open, -t002,
+  fponly-p1-coldtrain, fponly-p1-t002, grow-p1, flat-p2-w3 (caps.txt has suggested caps; the two t002 runs crown 0.45
+  and 0.27 per cycle and show no plateau within +2000).
+
+Caveats
+- To launch: python3 leagues/leagues.py extend leagues/experiments/E --cycles N, then restart its repeat.sh.
+- std-v1-p1-s1/-s2: N must be 1 mod 4 (801 is). Their guard (guard_z 1, 8 lines) holds 83-86% of quiet rated cycles,
+  so s2 is about a coin flip to plateau before 801.
+- flat-p3-w4 is the costly one: 117 s a cycle, expected 2.9 CPU-h.
+- treeonly-p1 and std-v1-p1-s1 will most likely stop within 20-40 cycles: cheap, mostly a confirmation.
+- Each backup keeps the old finals' training states (hard links), which the run's cleanup would delete: some disk.
+- Runs reuse the binaries their configs record (older ones for older runs); the redo check verifies the games.
+- Each extended run's cycle-C.md is rewritten with an "- Extended" line (the original in the backup).
+- The S7 fork may change leagues.py after this swap: diff it against b89c6a4c... and leagues.py.before-extend.
+Cost of this build: about 1 CPU-h (the six repros 0.49 measured, selftests and extend_tests ~0.4, the rest ~0.1).

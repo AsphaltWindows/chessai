@@ -1,0 +1,121 @@
+LR ANCHOR (--split-anchor-l2), 2026-11-11
+
+Task (theory-2 6.23 item 4): copy-on-split LR leaves that keep a frozen copy of the parent's weights at the split and
+are pulled towards it by an L2 penalty, strength matched to the probit trees' split noise 0.03 (the probit mechanism
+of 6.14 done for LR). Build it off by default and byte-identical when off, check it, sweep the strength offline on
+held-out games, draft (not create) the league test.
+
+BINARY
+- models/from-scratch/bin/chessai-hybrid6an (md5 26195379e1cd11f1e046bcbf69755561), a new file; built from
+  lranchor/src-h6a/, an rsync copy of fastbin/hybrid6-src (the lines' training binary chessai-hybrid6). rs/ and every
+  other binary untouched. cargo build --release -j 2 under nice 19, CARGO_TARGET_DIR=lranchor/target.
+- train (and self-play) --split-anchor-l2 L, default 0 = off. Only for --model bdt with --leaf lr, without
+  --leaf-residual or --leaf-share. Refused with one clear error (checked): flat lr, probit leaves, residual leaves,
+  --leaf-share, a negative L, and --model bdd (DAGs: not enabled).
+
+DESIGN
+- A split's new leaves, and leaves reset to their delegator's shadow (--reset-leaves), get an anchor: a frozen copy
+  of the weights they start from (the parent's at the split), a per-weight stamp `last` and a counter t of the
+  examples the leaf has trained on since. Shadows, trial copies and merged leaves get none; a leaf that splits drops
+  its anchor (it is a delegator now). Model files are unchanged (plain LR leaves): hybrid13 and hybrid4gfx load and
+  score them identically (checked).
+- After each AdaGrad step of an anchored leaf, every weight the example used (the bias and one value per feature, each
+  class) gets the proximal step of the penalty L/2 (w - a)^2 for each of the k examples since its last pull:
+      w = a + (w - a) / (1 + eta * L * k),   eta = rate / sqrt(squares) (the weight's AdaGrad step size)
+  k counts the examples the weight missed, so the penalty is L per weight per example of the leaf, as a dense penalty
+  (lazy, so the cost is per used weight). Weights with no AdaGrad history are not pulled. The penalty does not enter
+  the AdaGrad sums. (The lazy form applies the k missed pulls after the step instead of before it; same equilibrium
+  to first order, a little tighter for weights with eta*L*k ~ 1.)
+- Equilibrium: a weight used by a fraction f of the leaf's examples settles at a + (w* - a) f v / (f v + L), with v
+  ~ 0.2 the softmax curvature: weights used by fewer than L/v of the leaf's examples stay near the parent, common ones
+  follow the leaf's data. (--residual-l2 instead shrinks every weight by the same factor, S1 of 6.1.)
+- State files hold the anchors (t, weights, stamps) only when L != 0; the tree's option string gains
+  ", split_anchor_l2: L" only when L != 0, so off runs write the old bytes and a state written with the anchor is
+  refused without it.
+
+STRENGTH (the derivation)
+- Probit trees widen each child's weights by s^2, s = 0.03, at a split: the child's prior is ~N(parent, s^2) in probit
+  units (beta = 1; the parent's own posterior variance is far below s^2 for any weight it has used much).
+- Units: near even positions the ordered probit's win/loss log-odds move 2 phi(eps)/Phi(-eps) = 2.28 per unit of
+  latent (eps = 0.5); an LR class weight moves them by itself, and the win and loss weights' difference has width
+  sqrt(2) s_L. sqrt(2) s_L = 2.28 * 0.03 gives s_L = 0.048 per LR class weight.
+- A prior of width s_L is a total penalty (w - a)^2 / (2 s_L^2); the anchor's is L/2 (w - a)^2 per example, N L/2 after
+  N examples. Matching them at N_ref, a new child's examples in one gate window (split threshold / branch factor):
+      L* = 1 / (s_L^2 N_ref)
+  League (threshold 1M, branch 3): N_ref = 333k, L* = 1.3e-3. Testbed (threshold 300k): N_ref = 100k, L* = 0.0043.
+  Recipe default (5M): 2.6e-4. (Without the unit conversion, s = 0.03 itself: 3.3e-3 and 0.011.)
+- The anchor is weaker than the probit prior before N_ref and stronger after (a tether, not a prior that washes out).
+
+CHECKS (scripts and logs in lranchor/ident/ and lranchor/resume/)
+- Unit tests (unit-tests.log): 156 + 1 passed (hybrid6: 155). New: the pull's closed form for k = 1 and 2, no pull
+  without AdaGrad history, the anchor's state round trip; in a tree, children's anchors are the parent's weights, the
+  delegator has none, anchored children (L 0.5) stay nearer the parent than plain copies, a state with anchors is
+  refused without the flag; state_round_trip_trains_on_identically gains two anchored variants (merges by the stream
+  gate; LR router, resets and the fresh gate).
+- Off = chessai-hybrid6, every model and state file byte-identical and every log line equal (timings aside), on
+  bddstudy/train (ply-2 league positions, ~115k a round):
+  - 4 rounds: F-L, F-P, F-N (cnbp), T-L-Nc-merge fresh gate, T-P-Nc-merge, D-L-Ne (bdd);
+  - 20 rounds at threshold 100k, limit 4: T-L-Nc fresh gate (7 leaves, 1 merge), stream gate (6 merges), resets only
+    (--revise inf --reset-leaves 0: 12 resets), T-P-Nc-merge (5 merges), D-L-Ne (7 leaves);
+  - the sweep's own recipe, 60 rounds: all 61 files equal to theory-2/l2sweep/m/gate-fresh (hybrid6's), so that arm
+    is the sweep's anchor 0.
+  (D-L-Nc's --dag-leaves is not in the hybrid6 lineage: not checked.)
+- On (L 0.0111, threshold 100k): 20 rounds in one go = 10 rounds, then rounds 10-19 as ten single-round pieces with
+  --start (each piece's seed 1^sm(r)^sm(0), as check_rp.sh): models 11-20 and the final state byte-identical, for
+  the fresh gate (up to 7 leaves, 3 merges), the stream gate (splits and merges across piece boundaries, 6 merges) and
+  resets only (14 resets). 4 threads = 1 thread (all 21 files).
+- Cost: ~1.5 CPU-min for the identity runs, ~1 for resume.
+
+OFFLINE SWEEP (lranchor/sweep/: run_sweep.sh, run_seeds.sh, analyse.py, analyse_seeds.py and their .out files)
+- No ply-1 stream is saved (lr-trees-p1 kept results only), so the testbed is theory-2/l2sweep's (6.1): bddstudy/
+  train, 60 rounds of ~115k ply-2 league positions. Recipe = l2sweep's gate-fresh arm: T-L-Nc, threshold 300k,
+  limit 4, --revise 0 --revise-on fresh, --reset-leaves inf, plus --split-anchor-l2 L. L* = 0.0043 here; arms
+  0.0013, 0.004, 0.012, 0.04 (about L*/3, L*, 3 L*, 9 L*) and 0 (= gate-fresh, reproduced byte for byte).
+  Fresh scoring as l2sweep: model N scored on round N before it trains on it, N = 1..59. Seeds 1-3 (the shuffle in
+  each round; the same 60 rounds, so not independent data).
+- Fresh log-loss against anchor 0, mean of the per-round differences over rounds 1-59 (nats; negative = better):
+
+      L        vs no anchor (seeds 1/2/3)       winner LL   vs flat    leaves v59   merges
+      0        0                                0           -0.0078    9/9/9        0/0/0
+      0.0013   +0.0007 (+0.0006/+0.0007/+0.0006)  +0.0008   -0.0071    9/9/9        0/0/0
+      0.004    +0.0029 (+0.0030/+0.0029/+0.0028)  +0.0017   -0.0048    7/5/7        1/1/1
+      0.012    +0.0028 (+0.0029/+0.0028/+0.0027)  +0.0017   -0.0050    7/5/7        1/1/1
+      0.04     +0.0031 (+0.0037/+0.0029/+0.0027)  +0.0018   -0.0047    1/5/5        2/1/1
+
+  (Round-to-round SE of one seed's mean ~0.0004-0.0007, an understatement: rounds are autocorrelated. Anchor 0's
+  winner log-loss gain over flat is 0.0040, so L*/3 gives up a fifth of it and L* or more over two fifths.)
+- No strength helps. While the structure is the same as anchor 0's (seed 1, rounds 11-34: the root's three children,
+  then five leaves), the arms up to L 0.012 are within 0.0001 of it on average, but per round they swing by up to 0.01
+  both ways, partly in the draw part of the loss (on decisive positions recalibrated by `routing`, L 0.004 is 0.003
+  better than anchor 0 at v26, level at v29 and 0.007 worse at v30). From L* up, the root's branch then loses its gain
+  over the root's shadow and the fresh gate merges it back (round 33 in every seed and strength, -0.9 to -5 SE; L 0.04
+  seed 1 at rounds 15 and 56 instead), and the tree regrows (5-7 leaves by v59): that merge is most of the cost. L*/3
+  never merges but splits earlier (9 leaves by v40, anchor 0 by v59) and loses 0.0015 in rounds 21-40.
+- The anchor does what it is built for: at v29 (L 0.004, seed 1) the leaves' log-odds differ less pairwise (mean
+  |difference| 0.28 against anchor 0's 0.38), with the routers' shares identical to anchor 0's to 0.1%.
+- Training CPU: 24-40 s a 60-round arm (anchor 0: 27 s), within run-to-run noise; the pull is per used weight.
+
+PICK AND LEAGUE DRAFT
+- The arm for the league test: L*/3, i.e. --split-anchor-l2 4e-4 at the league's threshold 1M (1.3e-3 / 3.3; the
+  testbed's 0.0013 scaled by 300k/1M). It is the only strength that never merged; the matched L* (1.3e-3 at 1M)
+  lost 0.003 with a root merge in all three seeds. Offline, then, the prediction is no gain over plain copies (a
+  small loss); the analyst's was 60-90 over F-L against the plain copies' 43 (lr-trees-p1).
+- leagues/specs/batch5/lr-anchor-p1.DRAFT.json, NOT created or launched: T-L-Nc-merge-anchor (limit 4, 1M, fresh,
+  L 4e-4) x2 against T-L-Nc-merge (limit 4, 1M, fresh) x2, pure ply-1 LR field, seed 32, hybrid13 tournament at
+  its default, scaled plateau (floor 200), as probit-limit8-p1. make_config accepts it (dry run, nothing written).
+  After `leagues.py create`, run `python3 leagues/specs/ply1/train_binary.py LDIR chessai-hybrid6an` so that the
+  plain lines train on the same binary (byte-identical to hybrid6 for them).
+- Recipe row T-L-Nc-merge-anchor in make_recipes.py's HAND and recipes.txt (8e-5 at the row's 5M: the same L*/3);
+  make_recipes.py re-run into a scratch file reproduces recipes.txt byte for byte. Documented in leagues/FORMATS.md
+  (recipes section and Changes).
+- The league path works: version 0 from no games, then six single-round cycles with --start and a new seed each
+  (lranchor/leaguecheck): the tree splits, the state holds the anchors, hybrid13 scores the model. A state resumes
+  only with the same --split-anchor-l2 (another value, none, or a plain state with the flag: refused).
+
+NOT CHECKED
+- Self-play with hybrid6an against hybrid4gfx's games (training only was compared; the draft is local-only).
+- DAGs (--model bdd) are refused, not built. --dag-leaves isn't in the hybrid6 lineage.
+- A ply-1 stream: the sweep is on ply-2 positions. Play strength: only the league can say.
+
+COST: ~0.3 CPU-h in all (build and tests, identity and resume runs, 15 sweep arms with scoring), nice 19, at most
+two single-threaded jobs at a time.

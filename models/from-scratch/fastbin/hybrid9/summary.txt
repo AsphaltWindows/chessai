@@ -1,0 +1,104 @@
+HYBRID9: PROBIT-LEAF TREE ESTIMATES FROM THE ln PHI TABLE; OWN CALIBRATION FITTED ONCE (2026-11-10 ~19:05 to ~20:00,
+the hybrid9 implementation fork, from the 11-10 evening performance review)
+
+RESULT
+- Binary: models/from-scratch/bin/chessai-hybrid9 (md5 431c119a75e6f3e76eb6fb5eb43ba283).
+  - Source: models/from-scratch/fastbin/hybrid9-src, a copy of hybrid8-src. Same commands, flags and files.
+  - Changed:
+    1. compound.rs: a probit leaf's reply estimate (compound's depth-2 play for trees and DAGs) takes ln Phi from
+       hybrid8's table (fastprobit::ln_phi) instead of two probit::ln_cdf_first calls; the bound adds the table's
+       error (below). CHESSAI_FX_CTABLE=off gives hybrid8's estimate.
+    2. main.rs: `arena` with the same spec for A and B (own calibration: cal:HELDOUT:KIND:MODEL twice) loads the model
+       once, so the held-out calibration (163,219 positions) is fitted once, and prints again what the second load
+       printed (the "calibration on" line, and leafcal/blend's leaf lines), so stdout is the same.
+       CHESSAI_ARENA_SHARE=off loads twice. Shared only for kinds whose loading prints nothing else (cnbp, lr, probit,
+       bdt, bdd, rand, inside cal/leafcal/blend/float); other kinds load twice as before.
+    Everything else is hybrid8's.
+  - Item 3 (caching the parsed held-out set across processes) not done: within a process item 2 already reads it
+    once; a cache file across processes is not trivially exact (a format and invalidation to prove).
+
+METHOD
+- Item 1. The estimate only chooses which replies are valued in float (compound::best: replies whose lower bound is
+  at most the smallest upper bound); negamax's loop then runs over those in move order, so values, ties and moves are
+  unchanged as long as every estimate is within its bound.
+  - The table value's distance from the float ln Phi at the same z, and from the true ln Phi there, is bounded by
+    fastprobit::ln_phi's err (hybrid8's proof: chord + h^2/16 within h^2/16 since -1 < (ln Phi)'' < 0; the table's
+    and the float ln Phi's approximations; interpolation and x rounding).
+  - The exact path's float ln Phi at its own z is allowed 1e-13 + 16u |ln Phi| each, as before, with |ln Phi| there
+    under |l| + 1. The move from the estimate's z to the exact z is covered by hybrid5's derivative and z-rounding
+    terms, unchanged. So approx = ew + eb + 2e-13 + 16u (|lw| + |lb| + 2), then hybrid5's x4 and 1e-10.
+  - |z| > 29.5: hybrid8's rational ln Phi and its allowance.
+  - The looser bound (about 1e-5 instead of 1e-12) values no extra replies in float: CHESSAI_FX_STATS on two T-P@2
+    entries, 10 games: 937,792 depth-2 replies, 40,597 valued in float (0 beyond one per position), the same counts on
+    hybrid8 and hybrid9.
+- Item 2. A model never changes during play, and every game builds each side's fixed-point state afresh (compound_of,
+  fixed_of), as self-play already does with one model for both sides; the calibrated model's compound tables are a
+  OnceLock built from the model alone. So one load serves A and B.
+
+IDENTITY (chessai-hybrid8 against hybrid9, every output compared byte for byte; 2 threads, nice 19; suite9.log)
+- Unit tests: 161 pass (cargo test --release; unit-tests.log). hybrid8's compound test asserted every estimate's
+  bound under 1e-6; probit leaves' table bound is ~5e-6, so it now allows 1e-4 and asserts >100 estimates came from
+  the table (estimates within their bounds, as before).
+- Real experiment states (snap9.py, run9.py, cmp9.sh: reflink snapshots taken after a cycle's tournament, the
+  league's exact flags from config.json, every tour/ file, every saved game, game_cpu.csv without its CPU column,
+  stdout with times masked):
+  - split-growth-probit (T-P trees with NB routers, limits 1 and 4, and F-P; 6,183 round-robins): a cycle (9
+    round-robins, 12,312 saved game files) SAME; a second cycle chained on each binary's output SAME; hybrid9 with
+    CHESSAI_FX_CHECK=1 (every estimated reply's float value asserted within its bound, every value bit-equal) SAME.
+  - error-targets-probit (T-P trees with LR error routers, and F-P): play SAME, check mode SAME.
+  - small-field (LR trees and F-L; old design, --anchor random): play SAME (56 round-robins, 12,544 files).
+  - probit-settings-new (flat probit; batch 4: no references, no --anchor): play SAME.
+  - nb-settings-new (flat NB; batch 4): play SAME.
+  - 0 failures.
+- Own-calibration arenas (arena9.py: the logged 600-game command, models copied, both binaries twice): game files and
+  stdout identical (the "calibration on" line printed twice on both) for lr (lr-settings-new), probit
+  (probit-settings-new), bdt with LR leaves (small-field T-L-Tc-merge), bdt with probit leaves (split-growth-probit
+  T-P-Ne limit 4; error-targets-probit T-P-Le), F-P (split-growth-probit) and cnbp (nb-settings-2); and leafcal on a
+  T-P tree (23 stdout lines with the leaf lines, identical).
+- No check named a path inside a live experiment dir.
+
+SAVING
+- Item 1, T-P@2 moves (two T-P@2 entries of split-growth-probit, the same 20 games, perf stat, pinned to one core,
+  4 runs each in ABBA order): cycles 1664M -> 1592M on a P-core (x0.957), 2075M -> 2030M on an E-core (x0.978);
+  instructions 5,885M -> 5,910M (x1.004: the table and its bound are more instructions, but no long-latency ln Phi).
+  The F-P control (unchanged code): x1.009 on the P-core, x0.998 on the E-core.
+  - Wall clock in the loaded machine (60 games, 1 thread, 8 runs each, ABBA): 172.7 -> 164.8 us a ply (x0.954) for
+    T-P-Ne vs T-P-Nc limit 4, 162.4 -> 156.0 (x0.960) for two T-P-Le; the F-P control 92.7 -> 94.3 (x1.018). So
+    about 3-5%, not the 15-25% the review estimated: a reply costs ~3,100 instructions (incremental sums of every
+    node, routing, move generation), and ln Phi is a small part of it.
+  - A cycle's games (the suite's play runs): split-growth-probit 33.3 -> 32.2 s of game CPU (T-P@2 vs T-P@2 x0.943,
+    vs others x0.961; games without a T-P@2 x1.023), error-targets-probit 31.4 -> 30.0 s (x0.930, x0.950; control
+    x1.004).
+- Item 2, the own-calibration step per version (process CPU, 2 runs each): lr 0.97 -> 0.80 s, probit 1.12 -> 0.94,
+  F-P 1.49 -> 1.28, T-L tree 1.45 -> 1.27, T-P-Le 1.65 -> 1.40, T-P-Ne limit 4 2.08 -> 1.67, cnbp 1.42 -> 1.17:
+  0.17-0.40 s less (12-19%).
+- Together: ~2.5 s a cycle in split-growth-probit and error-targets-probit (~1.2 s of games, 5 versions' calibration
+  ~1.2 s), ~0.75 s in a 3-line flat run. Projected over the batch-4 queue: ~1.5-2 CPU-h from item 2 and ~0.5-1 from
+  item 1 (the review's 3-5 CPU-h for item 1 assumed 15-25%).
+
+DEPLOYMENT (11-10 19:39-19:40; deploy9.py, every write atomic and its diff checked; deploy-*.log)
+- Batch 4: batch4.py's TOURNAMENT is chessai-hybrid9, its checks accept hybrid8 or hybrid9 (TOURNAMENTS, so the reruns
+  already made still pass), and the 17 specs whose experiment wasn't created yet (the reruns, small-field-x4, the held
+  selfplay-depth and covered nb-settings-no-random3) name hybrid9. `batch4.py check`: no problems. The queue
+  processes (pids 1809879, 1841378) untouched; they call batch4.py create-item afresh for each experiment.
+- Pair arenas: pairs.py's BINARY is chessai-hybrid9. The watcher running since ~17:30 (pid 1801292) loaded hybrid8
+  and keeps it until it restarts (ply1watch copies each pair's spec, so it follows). Not restarted: the gain before the
+  probit-tree pairs is a few CPU s a pair.
+- Running experiments (config.json's tournament.binary swapped atomically; the driver reads config.json once when a
+  cycle's process starts, so the cycle under way kept hybrid8; old configs in config-before/):
+  - split-growth-probit: cycle 717 on (own games of version 716 at 19:40:15 on), error-targets-probit: 667 on,
+    nb-settings-new: 33 on. Each finished cycles on hybrid9 cleanly (checked in repeat.log and the owncal .arena logs).
+  - Not swapped: small-field (LR trees, ending at 400; item 2 only, seconds), probit-settings-new (ended at 256 by the
+    plateau rule before the suite finished).
+- Undo: copy config-before/<experiment>.json back (atomic), and restore batch4.py, the specs and pairs.py by
+  reversing the diffs in deploy-*.log.
+
+CPU used by the checks: ~870 s (tournament runs 707 s, arenas 45 s, benchmarks ~120 s), plus the build and tests.
+
+FILES
+- hybrid9-src/ (source); unit-tests.log.
+- snap9.py, run9.py, cmp9.sh, arena9.py, suite9.sh, suite9.log: the identity suite (hybrid8's method; run9.py takes
+  the flags from the experiment's config, so batch-4 experiments run without --anchor).
+- bench9.py, bench9.log; st/stats/perf-abba.txt, perfP-abba.txt: per-ply timing and pinned cycle counts. cyc9.py: a
+  cycle's game CPU by group.
+- deploy9.py, deploy-batch4.log, deploy-pairs.log, deploy-configs.log, config-before/.

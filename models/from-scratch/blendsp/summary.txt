@@ -1,0 +1,132 @@
+Topic 3 (2026-11-07/08 night): blend in self-play. Does soft-routed self-play make better training data than hard
+routing?
+
+Answer: no. No blend lineage is proposed.
+- Per round of data from scratch, blended self-play does make better trees at ply 2: 69 (45 to 93) over five version
+  pairs.
+- But it costs 2.2-2.3x the CPU, and at equal CPU the hard arm is ahead: -35 at ply 1, -73 at ply 2.
+- Resumed from a mature lineage (the league's case), blended data is slightly worse at ply 1 (-20) and level at
+  ply 2.
+- Single versions vary by up to 75 Elo at ply 1 and 200 at ply 2 between adjacent versions. Only the pooled
+  comparisons below are reliable; single pairs misled at first.
+
+Pooled comparisons (the blend-trained arm's Elo, 95% interval; cal-own specs, league policy; each version pair 400
+games at ply 1 and 120 at ply 2, seed = version; pool.py run4.out run5.out):
+
+| comparison | pairs | ply 1 (2000 games) | ply 2 (600 games) |
+|---|---|---|---|
+| (a) resumed, equal data: a-blend - a-hard | v337-v341 | -20 (-32 to -8) | -13 (-40 to 14) |
+| (b) from scratch, equal data: b-blend - b-hard | v20-v24 | 10 (-1 to 21) | 69 (45 to 93) |
+| (b) from scratch, equal CPU: b-blend v20-v24 - b-hard | v31, v34, v37, v39, v43 | -35 (-47 to -24) | -73 (-98 to -47) |
+
+- Equal CPU: each b-hard version is the one whose cumulative self-play CPU matches the b-blend version's. Play runs
+  at the measured 1.88 (blend) and 1.54 (hard) CPU per wall-s, and training is taken as single-threaded.
+- In each window both arms have the same tree structure.
+
+Single version pairs (run.sh -> run.out, run2.sh -> run2.out; superseded by the pooled ones):
+
+| arms | spec | ply | games | Elo |
+|---|---|---|---|---|
+| (a) a-blend v341 - a-hard v341 | cal-own | 1 | 2000 | -3 (-15 to 9) |
+| (a) | blend:1:own | 1 | 2000 | -3 (-14 to 8) |
+| (a) | cal-own | 2 | 600 | -104 (-133 to -76) |
+| (b) b-blend v24 - b-hard v24 (equal data) | cal-own | 1 | 2000 | 24 (13 to 35) |
+| (b) | blend:1:own | 1 | 2000 | -1 (-12 to 10) |
+| (b) | cal-own | 2 | 600 | 6 (-17 to 29) |
+| (b) b-blend v24 - b-hard v42 (equal CPU) | cal-own | 1 | 2000 | -89 (-101 to -77) |
+| (b) | cal-own | 2 | 600 | -238 (-270 to -206) |
+| (b) b-blend v24 - b-hard v60 (1.67x the CPU) | cal-own | 1 | 2000 | -60 (-72 to -48) |
+| (b) | cal-own | 2 | 600 | -123 (-149 to -97) |
+
+Version noise:
+- Against the same opponent, b-blend v24, adjacent b-hard versions differ widely:
+  - v42: -89 at ply 1, -238 at ply 2;
+  - v43: -15 and -38 (run5, 400 and 120 games);
+  - v39: -106 and -219 (paired with v23).
+- b-hard's tree has had the same 11 leaves (the split limit) since v18, so this is not split timing.
+- Its own-game calibrations differ too. The fitted parameters for v42 are 1.21, 0.67, 1.02, 0.79; for v43 0.97, 0.69,
+  1.07, 1.05.
+- run6.sh plays v42 against v43 directly, with cal-own and with the same held-out calibration for both, to tell the
+  trees from their calibrations. Results below when it finishes.
+- For the league: single-version ratings at ply 2 may carry noise of this size, and a peak rule picks the lucky
+  versions.
+
+Against the common start (run3.sh -> run3.out): (a)'s arms against the league's v326, cal-own:
+
+| arm v341 against v326 | ply 1 (2000 games) | ply 2 (600 games) |
+|---|---|---|
+| a-hard | 15 (3 to 26) | -43 (-70 to -16) |
+| a-blend | 1 (-10 to 13) | -121 (-150 to -92) |
+
+- a-hard is the league's lineage: its v330, v335 and v341 are byte-identical to cycles/runs/T-L-Le-c's.
+- These are single versions, and the pooled (a) result at ply 2 is level, so read them with the noise above in mind.
+
+Why: an earlier hypothesis, that blended play hides the seams from self-play so the leaves stop being corrected and
+search suffers, rested on the single-pair -104 at ply 2. The pooled results don't support it: from scratch, the blend
+arm is better at ply 2. What the evidence does support:
+- The blend arms end with their leaves further apart: (a) 0.667 against 0.512; (b) 0.605 against 0.517.
+- Per round from scratch, blended data trains better ply-2 players.
+- Per CPU it loses, and from a mature tree it doesn't help.
+
+What a blend lineage would have needed (for the record):
+- Training: --play-blend 1 on chessai-blendplay. No driver change.
+- League entries: a per-lineage play spec, blend:1:OWN:bdt:PATH. That is a driver change.
+- Tournament binary: unchanged, since chessai-sparsefit loads blend specs.
+- Cost: 2.2-2.3x self-play CPU, 4-5x a league game.
+
+CPU spent:
+- Self-play: 712.6 CPU-s (a-hard 83.6, a-blend 193.5, b-blend 162.9, b-hard 272.6).
+- Own games and arenas: 3.5 wall-min at 2 threads, so at most 7 CPU-min.
+- About 19 CPU-min in all, plus about 8 for run2-run6.
+
+Code: ../blendplay-src = ../eloss-src + blendplay.patch.
+- New self-play option --play-blend TAU, for --model bdt only.
+- The players choose their moves with copies of the tree whose predictions blend the leaves' log-probabilities.
+  - The weights are the routers' probabilities softened by TAU: Graph::leaf_weights, paths below 0.001 dropped.
+  - This is blend:TAU:... without recalibrating the leaves, since there are no own games inside self-play.
+- Training and saved models are unchanged. It goes through the same play-copy hook as --probit-play-eps.
+- Train accepts and ignores it.
+- New unit test: one leaf blends to itself; at tau 0 two leaves average; without blending, the routed leaf. 139 tests
+  pass.
+
+Binary: ../bin/chessai-blendplay (md5 ee5167b428b9e36481aaa21847a28724).
+- Without --play-blend it is identical to chessai-eloss: 0 non-log diff lines on all four identity scripts
+  (identity.sh -> identity.out).
+- It was built before a one-line fix to the new test's setup (params(true) -> params(false), test code only). A
+  rebuild after the fix has md5 0628ed8c6b4f04318bbeb8f4dda7f198 and was not installed. The release code is the same.
+
+Setup (run.sh -> run.out; pool.py):
+- (a) T-L-Le-c resumed from the league's v326 (5 leaves).
+  - The v325/v326 states were copied from cycles/runs/T-L-Le-c/cycle-states, with empty placeholders for the older
+    model files.
+  - The league's recipe and round size (1000 games, vN vs vN-1), seed 21, 15 rounds an arm: a-hard and a-blend
+    (--play-blend 1).
+  - Check: a-hard's v327 is byte-identical to the league's v327 (md5 cefbf28c...), so the resume reproduces the league.
+- (b) From scratch, lrshare/smoke's scaled-down T-L-Le recipe (500 games a round, 150k threshold, seed 21).
+  - b-blend ran 24 rounds.
+  - b-hard ran 60 rounds. Its v24 has equal data; its v60 used 1.67x the blend arm's CPU (272.6 against 162.9 CPU-s).
+- Comparison: 600 own games at ply 1 per compared version (league spec, as leaguecal), then arenas of cal-own specs at
+  ply 1 (4 x 500 games) and ply 2 (3 x 200), and of blend:1:OWN specs at ply 1. League policy.
+
+Self-play cost and games (2 threads, wall s; CPU from /usr/bin/time):
+
+| arm | rounds | play | train | CPU user-s | decisive | plies a game |
+|---|---|---|---|---|---|---|
+| a-hard | 15 x 1000 | 26.6 | 34.0 | 83.6 | 11.2% | 239 |
+| a-blend | 15 x 1000 | 87.8 | 34.5 | 193.5 | 10.5% | 235 |
+| b-blend | 24 x 500 | 70.0 | 31.2 | 162.9 | 11.5% | 277 |
+| b-hard, first 24 | 24 x 500 | 28.0 | 31.8 | about 75 | 12.0% | 286 |
+| b-hard | 60 x 500 | 101.3 | 116.7 | 272.6 | 11.7% | 280 |
+
+- Resumed, blend self-play costs 2.3x the CPU in all (3.3x on play).
+- From scratch it costs 2.2x (2.5x on play).
+
+Tree shapes on the LR d2 held-out set (leaf-pair mean |log-odds difference|):
+- a-hard v341: 7 leaves, 0.512. a-blend v341: 7 leaves, 0.667.
+- b-hard v24: 11 leaves, 0.517. b-blend v24: 11 leaves, 0.605.
+
+Self-play's move choice is mostly jitter.
+- WldScoreJitter10 multiplies each move's expected score by U(0.9, 1.1), and plays a non-top move 84-86% of the time
+  for LR models (nbcal).
+- So blending, which reorders close moves, changes self-play's move distribution little. That blended play still
+  changes the data this much says the seams matter.

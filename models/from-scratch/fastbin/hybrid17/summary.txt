@@ -1,0 +1,64 @@
+chessai-hybrid17 (2026-11-12, implementation fork; candidates 1 and 2 of the ~06:45 performance review)
+=====================================================================================================
+
+What: hybrid16 plus two exact changes. Source: fastbin/hybrid17-src (copy of hybrid16-src); patch: hybrid17.patch
+(src/tournament.rs, src/selfplay.rs; Cargo files unchanged). Built with nice -n 15 cargo build --release -j 2 (rustc
+1.94.0); the copied tree rebuilt hybrid16's md5 (0cb3d238...) before the edits.
+Installed: models/from-scratch/bin/chessai-hybrid17, md5 e4a4fbd4bb104579c942fb654cbf3e11 (cp -n; nothing overwritten).
+  1. Rating fits' field search (tournament.rs, Blocks::new -> first_fields): each tournament's set of free variables
+     joins the first field that holds it. hybrid16 tested every field's k-wide bitmap (in the global league ~5k fields
+     x ~15.2k players, ~75 MB a fit, six fits a cycle). Now each variable keeps the list of fields holding it, in the
+     order they were made; a set scans only the fields of its variable in the fewest fields so far, testing containment
+     against the field's sorted variable list. Any field that holds the set holds that variable, so the first field
+     found is the first field that holds the set: the same fields, field_of and blocks; the floating-point work after
+     them is unchanged.
+  2. write_round (selfplay.rs -> outcome_text, push_decimal): the feature values' decimal digits go straight into one
+     byte buffer with single spaces and a newline a position. hybrid16 built a String per value, a Vec of them and a
+     joined line (72 allocations a position: 95.9% of an own calibration's mallocs). Values are u8 (Encoded = [u8; 70]),
+     so the bytes are the same by construction.
+
+Identity (all against bin/chessai-hybrid16; nice 19, pinned to cores 4-7; scratch under fastbin/hybrid17/):
+  - Unit tests: 202 pass (test-all.txt). New: first_fields_match_the_bitmap_search (400 random set families, copies,
+    subsets and empty sets, ordered as Blocks::new orders them, against hybrid16's bitmap search: equal fields and
+    field_of; holds_all edge cases) and outcome_text_matches_the_string_join (every byte value at every feature, each
+    result, a game without positions, and the files write_round writes, against hybrid16's formatting).
+  - Global league tournament step (scripts/snapg.py, tourrun.py, cmpout.py): a consistent snapshot of the RUNNING league
+    in cycle 5060's train phase (tour/, and the four entries' own games and models; nothing written in the live dir),
+    25,305 round-robins of history (elo_history.csv 10.39 GB). The driver's tournament command replays 5 round-robins
+    (280 games, --save-games, --game-cpu), once per binary from a pristine reflink copy. Runs h16, h17 (fit cache on, as
+    live) and h16off, h17off, h17off2, h16off2 (CHESSAI_CALCACHE=off); four comparisons (h16/h17, h16off/h17off,
+    h16/h17off2, h16off2/h17): 1,152 files identical each time (1,120 pool game files, 5.56 MB; ratings.csv/.md,
+    head_to_head.csv/.md, games.csv, elo_history.key, players.txt, retired.txt, the own games). elo_history.csv: the same
+    size, the 3.27 MB appended identical, and its 81,761 prefix extents still the snapshot's in both (the append path:
+    untouched). game_cpu.csv identical except cpu_s; tournament.log identical except "tables in Ns". Fit-cache files
+    differ by design (their key holds the binary's bytes).
+  - grow-p1b (finished, 12 entries, 4,236 round-robins): own games regenerated from owncal/<key>.json, then a 12-round-
+    robin replay (1,584 games): 6,407 files identical (6,336 pool game files, 25.9 MB; elo_history.csv's 1.04 MB appended
+    identical, 1,605 prefix extents untouched).
+  - Own calibration (scripts/ownrun.py; make_own's arena command, 600 games at ply 1, seed 5, T 0.1): 13 versions, i.e.
+    grow-p1b's 4 F-P and 8 T-P-Ne-grow (bar and no bar) and error-routing-p1's capped T-P-Ne v314: 52 files (135 MB)
+    identical; the arena logs differ only in wall times.
+  - Self-games (scripts/selfrun.py; replay-games as phase_selfgames: entries then twins, seed + 1000003): grow-p1b's 12
+    entries x 12 rounds, 144 games: the game lines and 576 files (2.39 MB) identical.
+  - self-play (probit, 2 rounds x 40 games, seed 7): 11 files identical (3.38 MB of games, results, models).
+  - Training: unchanged code (build check only).
+
+Saving (CPU = user + sys of the process):
+  - Global tournament step, cache off, ABBA: hybrid16 9.12 and 9.29 CPU-s (user 8.21 / 8.36), hybrid17 6.71 and 6.84
+    (user 5.97 / 6.09): x0.74, about 2.4 CPU-s a cycle. The quadratic part (all fields per tournament) is gone, so the
+    saving grows with history. Wall 7.4 s -> 6.0-8.1 s (load ~11, noisy). sys fell only 0.92 -> 0.75.
+  - Own calibration at ply 1: 1.295 -> 1.073 CPU-s a version (x0.83; 13 versions, the binaries alternating).
+  - grow-p1b's step (12 round-robins, 1,584 saved games): 5.79 -> 5.03 CPU-s (x0.87).
+  - A six-line ply-1 experiment cycle: ~1.3 (own cal) + ~0.7 (tournament) = ~2 of ~16-18 CPU-s (~11-12%). The global
+    league: ~2.4 + ~0.4 (two own cals) = ~2.8 of ~15 CPU-s (~19%) a cycle.
+
+Swaps: none (the directive: for new work; swaps are the main session's call). If swapped: change config.json's
+tournament binary between cycles (fastbin/hybrid16/swap16.py's procedure). The fit cache keys hold the binary's bytes,
+so the first cycle after a swap refits every entry once (~0.12-0.14 s each); arena.py's own-games cache keys on the
+binary's md5, so arenas remake own games once. Training binaries are unaffected. The running global league would
+cycle faster with it, and so fill the disk faster (the ~06:45 review: ~4-5 days to full).
+
+Scratch (exclusive disk ~535 MB; the global copies' 119 GB apparent is shared extents of the live 10 GB elo_history.csv):
+  global/ (snap, snap-1..3 failed attempts, out/ 6 replays, clone-test-1/2.csv) 308 MB exclusive; exp/ 66 MB; own/
+  138 MB; selfplay/ 7 MB; hybrid17-src/target ~100 MB apparent (rebuildable). All deletable (the user's call); the
+  clones pin the live file's current extents only if that file is ever rewritten rather than appended.

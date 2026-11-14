@@ -10,6 +10,9 @@ models/**
 !models/*.md
 !models/archive/
 !models/archive/**
+# models/from-scratch stays ignored, but its engine source copies (Cargo.toml, Cargo.lock,
+# *.rs) and the studies' write-ups (summary.txt and notes) were force-added on 2026-11-14
+# (the user: "push everything"); add new ones with git add -f
 selfplay/**
 .idea/
 rs/target/

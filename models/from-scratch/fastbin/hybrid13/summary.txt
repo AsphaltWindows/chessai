@@ -1,0 +1,115 @@
+HYBRID13: ROOT CUT WINDOWS FOR THE LOW-TEMPERATURE LOG-ODDS SOFTMAX AND THE LOG-ODDS ARGMAX
+(2026-11-11 ~07:40 to ~08:15, the hybrid13 implementation fork: candidate 2 of the 06:50 performance review, an
+exact speedup of the T 0.02 reads; built on hybrid12)
+
+RESULT
+- Binary: models/from-scratch/bin/chessai-hybrid13 (md5 804710df132ac38e2bb35d0527af6918), a new file, installed
+  08:11. It plays the same games as hybrid12 (and so hybrid11, hybrid10 and hybrid9), byte for byte, at every
+  policy and temperature.
+- Game CPU a ply, hybrid13 / hybrid12 (pinned to the E-cores, ABBA, 1 thread; bench13.log, bench13-final.log):
+  - log-odds softmax T 0.02:
+    - W4 (flat-p3-w4 F-L#1 v99): ply 2 x0.843, ply 3 x0.765, ply 4 x0.740, ply 5 x0.721;
+    - the identity field's flat LR: x0.774, x0.771, x0.765, x0.763 (plies 2-5);
+    - flat probit: ply 2 x1.000 (fastprobit's own path), ply 3 x0.865, ply 4 x0.657, ply 5 x0.755;
+    - a tree (TL): ply 2 x0.978 (the compound path, unchanged), ply 3 x0.880, ply 4 x0.758;
+    - NB (cnbp): x1.000-1.006 at plies 2-4 (excluded, see below).
+  - log-odds argmax: W4 ply 3 x0.436, ply 4 x0.244.
+  - T 0.1 (the leagues' training temperature): W4 ply 3 x0.990, ply 4 x1.002; L ply 3 x1.000. Unchanged code.
+  - CHESSAI_WINDOWS=off at T 0.02: L ply 3 x0.995, ply 4 x1.000.
+  - Unpinned suite tournaments (2 threads): field B (six kinds at ply 4) T 0.02 x0.69, argmax x0.21; field A (plies
+    1-3) T 0.02 x0.87, T 0.001 x0.58, T 0.05 x0.97; field C (L, P, N at ply 5) x0.80; field D (DAG, MoE) x0.85.
+- How the picks were decided (check mode, K 40, T 0.02, 15,419 searches over L, P, TL, FM and W4 at plies 2-5):
+  38.3% of the root moves were cut. The bounds decided 98.50% of the picks; 1.08% needed a full search of some cut
+  moves the walk reached, 0.42% of every cut move (the bounds left the weights' sum undecided). 0.98% of the cut
+  moves were searched again (0.38% of all root moves).
+- Source: models/from-scratch/fastbin/hybrid13-src, a copy of hybrid12-src. Changed: src/player.rs (the windowed
+  policies), src/search.rs (windowable, root_values_windowed, root_value_of; the module doc says it too),
+  src/fixed.rs (FxLinear's root_windows flag) and src/cnbp.rs (NB's fixed point clears it). Same commands, flags
+  and files. Built at nice 19 (cargo build --release).
+
+WHAT CHANGED
+- choose_with_compound (every searching player's move: tournaments, arenas, self-games, self-play):
+  - log-odds softmax with 0 < T <= 0.05, on a windowable path: windowed_softmax;
+  - log-odds argmax on a windowable path: windowed_argmax;
+  - everything else exactly as hybrid12: T 0.1, the outcome policies (wld-score and its jitters, which use
+    root_outcomes; search labels use expected_outcome), depth 0 and Rand.
+- Windowable (Search::windowable, deciding as root_values does): depth >= 2 on the fixed-point search
+  (root_values_fx_full: flat LR, probit past depth 2) or the float negamax (trees and DAGs past depth 2, MoE, FM).
+  Not the compound path (trees and DAGs at depths 1-2), fastprobit (flat probit at depth 2), depth 1, or NB.
+- NB is excluded: its root values at T 0.02 cut only 3-6% of the moves, and the windows' ordering keys cost more than
+  that (the first candidate measured ply 2 x1.150, plies 3-5 x0.98-1.03). NB's fixed point carries
+  root_windows = false, kept through with_calibration.
+- root_values_windowed: the root moves in the order of their static keys (the children's values, best first, ties in
+  legal_moves order: the fixed-point keys as the search's depth >= 2 nodes key them, the float eval on the float
+  path). The first is searched with a full window, each other with the window (below(best), +inf). best is the
+  largest exact value so far; below(b) = b - K T for the softmax (K = 40), the next float below b for the argmax.
+  The search is fail-soft, so a value above the window's bottom is exact. A value at or below it is an upper bound:
+  at least the move's value, and below the best value. Every exact value has root_values's bits (up to the sign of a
+  zero, which no weight, sum or tie depends on).
+- softmax_sample_bounded (the softmax's pick from exact values and bounds; the RNG draws exactly once, as in
+  softmax_sample):
+  - The largest value is an exact one, so each exact move's weight exp((v - max) / T) is softmax_sample's, bit for
+    bit.
+  - A cut move's true weight lies in [0, hi]. hi is twice its bound's weight (exp needn't be monotone), and at least
+    the smallest normal number.
+  - Rounded addition and subtraction are monotone in each operand, which gives two facts:
+    - If the weights' sum in softmax_sample's order is the same bits with every cut weight at 0 and at hi, it is
+      that sum for any true weights, so random_range(0.0..sum) draws the same number.
+    - At a cut move the walk reaches with target >= hi and target - hi == target, every weight in [0, hi] leaves the
+      move unpicked and the target unchanged.
+  - Otherwise the move is searched in full (root_value_of: root_values's own call for that move) and the walk goes on
+    exactly. If the sum isn't decided, every cut move is searched in full before the draw, and the pick is
+    softmax_sample's own arithmetic. A non-finite value takes that path too: hybrid12's behaviour, whatever it is.
+- windowed_argmax: the tied moves (equal to the best value) are exact ones, because every bound is below the best.
+  The same ties give the same random_range(0..ties) draw.
+- K = 40 was the fastest of 38, 40, 42 and 45 on W4 at plies 3 and 4 (K changes only the speed, any K > 0 is
+  exact). CHESSAI_WINDOW_K changes it, for measurements.
+- Switches:
+  - CHESSAI_WINDOWS=off gives hybrid12's code, for checks.
+  - CHESSAI_WINDOW_CHECK=1 also searches every root move in full, and asserts at each windowed search: the exact
+    values bit-equal, each bound valid, the weights' sum bit-equal, and the pick equal to softmax_sample's for the
+    same draw (for the argmax, the same ties).
+  - CHESSAI_WINDOW_STATS=1 prints a WINDOW line a search.
+
+IDENTITY (hybrid12 against the hybrid13 candidate, md5-identical to the installed binary; every output compared byte
+for byte; nice 19; suite13.log for the final binary, suite13-first.log for the one before NB's exclusion,
+check13.log, check13b.log, unit-tests.log)
+- Unit tests: 173 pass, 4 of them new:
+  - bounded_softmax_picks_as_softmax_sample: 300,000 adversarial cases. The values include near ties, values on and
+    1e-9 around the window's bottom, mates, zeros of both signs and duplicates of the best. A simulated windowed
+    search cut them in random orders, with bounds anywhere in [value, bottom], at T 1e-6 to 0.05 and K 1 to 100.
+    Every pick and the generator's state afterwards equal softmax_sample's. The bounds decided 204,181 picks,
+    11,560 needed some cut moves and 84,259 all of them, so every path was exercised.
+  - windowed_root_values_are_exact_or_bounds: 2,856 cases on the fixed-point and float paths at depths 2-5, with
+    seven windows (softmax K 45 and 1 at T 0.02, 0.05 and 0.001; K 40; argmax). Exact values were bit-equal, bounds
+    valid, and root_value_of equal to root_values for every move.
+  - windowed_picks_are_the_full_searchs: 2,640 searched picks (softmax at three temperatures, and argmax) equal the
+    full search's, with the same generator state after.
+  - windowable_follows_root_values_paths: compound, fastprobit, depth 1 and NB (calibrated too) keep the full search.
+- Check mode (check13.sh on the candidate before NB's exclusion, check13b.sh on the final binary):
+  - Every case's games.csv md5 equals hybrid12's: 36 + 19 cases, 0 assertions fired.
+  - Coverage: L, P, N, TL, TP, FM and W4 at plies 2-5. Stress variants: K 1, where the bounds leave the sum open and
+    every cut move is searched again; K 38, with frequent walk re-searches; T 0.001; T 0.05; argmax.
+  - Together they asserted 51,999 windowed softmax searches and 7,023 argmax searches (check13.log 32,495 and 4,297).
+- Tournaments (tour13.py: the arenas' command plus --save-games; every tour file, every saved game, stdout). SAME:
+  - field A (22 players, plies 1-3, six kinds and the random references): T 0.1 (462 games, and 924 over two
+    round-robins), T 0.02, T 0.001, T 0.05 and argmax (462 each);
+  - field B (ply 4): T 0.1, T 0.02 and argmax (56 each);
+  - field C (L, P, N at ply 5): T 0.1 and T 0.02 (12 each);
+  - field D (a DAG and a MoE at plies 1-3): T 0.1, T 0.02 and argmax (42 each).
+- Other outputs, all SAME:
+  - replay-games (self-games): T 0.1, T 0.02 and argmax (36 games each);
+  - own calibration games: all six kinds, also the same as the field's;
+  - training: 10 runs, including search labels;
+  - self-play: 21 runs (lr, probit and cnbp at plies 2-4, with the default policy, softmax T 0.1 and softmax T 0.02);
+  - CHESSAI_WINDOWS=off at T 0.02 (field A).
+- 0 failures. The suite ran twice, on both binaries, 55 of 55 SAME each time. Nothing read or wrote inside a running
+  experiment or arena (none was running).
+
+NOT CHECKED / NOTES
+- NB's argmax keeps hybrid12's path too (NB is excluded whole). Its argmax might gain; it wasn't measured.
+- Policies with Value::Score (calibrated expected-score log-odds) go through the same windowed code. The unit tests
+  cover Score only through the full root_values paths, not the windowed decision. No league or arena uses Score
+  with a low-temperature softmax.
+- Self-play's first rounds (untrained models, nearly equal values) cut few moves: sp-lr-d4-cold x0.96.
+- Work dirs: st/ (prof and suite leftovers; removable), cand/ (a duplicate of the installed binary).

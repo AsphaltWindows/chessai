@@ -1,0 +1,296 @@
+errdag: error-routed DAGs (BDD + path context) with a router-split threshold, against the error-routed trees
+2026-11-11 ~10:00-11:20, the implementation fork for the user's error-DAG test. Nothing created or launched.
+
+1. Build
+- Source: models/from-scratch/fastbin/errdag-src, a copy of models/from-scratch/bddctx-src without target/.
+  Patch vs bddctx-src: models/from-scratch/errdag/errdag.patch (diff -ru, 205 lines).
+- Binary: models/from-scratch/bin/chessai-errdag (new file, md5 14366896cc13223c841cd07a0c0e7835).
+  No binary was overwritten and rs/ was not touched.
+- Tests: 166 passed (bdd:: 21), including two new ones:
+  - router_split_z_zero_is_the_stall_rule_and_inf_never_splits_routers (three bases: CNBP routing target;
+    path context with routing target; path context with home target);
+  - bdt_refuses_router_split_z.
+- target/: fastbin/errdag-src/target is 87M (bddctx-src/target is 87M too). Nothing deleted.
+
+2. The knob: --router-split-z Z (train, BDD only; a BDT refuses it)
+- It gates the delegator (router) split decision in bdd.rs check_delegator_split. It is a port of bddtrig2-q9's
+  "2b" rule. It fits as-is: the same window bookkeeping, only the test changes.
+- After each window of split_threshold examples, close_window gives:
+  - recent: the window's mean router error;
+  - previous: the previous window's mean;
+  - margin: Z x sqrt(se_recent^2 + se_previous^2).
+- With Z, a delegator splits iff all three hold:
+  - previous >= 0;
+  - recent - previous > margin (its error rose by more than Z standard errors);
+  - recent >= the mean router error of all routers over the window.
+- Without the flag: the old stall rule (previous - recent < margin at --split-z). Z = 0 is exactly the stall rule
+  at --split-z 0 (test: byte-identical models). Z = inf never splits a router; the DAG then makes only leaf splits.
+- Leaf splits are unchanged: they still use --split-z.
+- The split limit still counts leaf and router splits together.
+- Training only: not saved in model files; written in state options only when set.
+- Leaf-agnostic: the rule reads only router errors, so a probit-leaf BDD gets it for free.
+
+3. Identities (all checked)
+- Without the flag, errdag == chessai-bddctx byte for byte (models, state files, logs) for:
+  - bdd + --path-context;
+  - plain bdd;
+  - bdt.
+- Nesting: a BDD at --router-split-z inf, with or without --path-context, makes the same splits and the same
+  classifiers as the BDT with the same flags (T-L-Ne: --leaf lr --branch-factor 3 --router cnbp --route error
+  --error log --forget-factor 1).
+  - Games are byte-identical at depths 1 and 2; eval-loss is identical.
+  - Limit mapping: L <-> L (checked with a binding limit 2).
+  - The model files are NOT byte-identical. They differ only in the delegators' window bookkeeping fields
+    (num_trained_last, error_last, error_prev). The BDD opens and closes delegator windows, and forgets a window
+    after a leaf split, while the BDT keeps no such windows. None of these fields enter routing or prediction.
+  - So "the DAG is at least the tree" holds functionally, not file for file.
+- --reset-leaves inf (the T-L-Ne recipe) changes nothing in BDT models. hybrid6 BDT == errdag BDT.
+- Play: errdag vs chessai-hybrid13 gave identical games in 12 of 12 combinations:
+  - models F-L, T-L-Ne and D-L-Ne (non-ctx);
+  - depths 1 and 2;
+  - T 0.1 and 0.02;
+  - --policy log-odds-softmax, --reports-last, --sparse-fit.
+- Loading: errdag loads path-context models; hybrid13 refuses them ("invalid digit found in string:
+  pathcontext"). So any league or arena with path-context models must use errdag.
+- Flags: errdag accepts the pipeline flags of tournament, arena (own games), replay-games and self-games.
+  The dry run below exercises all of them.
+
+4. What a probit-leaf BDD port (in errdag-src) would need. Not built.
+- CLI: --model bdd accepts only LR/CNBP leaves today ("BDT only" for probit). It needs:
+  - --leaf probit;
+  - --split-noise for the BDD's leaf splits (the probit leaves' symmetry breaker);
+  - probit_shared_eps.
+- Path cells for probit nodes: one latent-mean weight posterior per (cell, value, class), prior N(0, noise^2) (the
+  analyst's addendum). The cell's value shifts the node's latent means, the way the LR/CNBP cells shift log-odds.
+  Each copy's update needs the probit moment-matching step with the cell weights included.
+- Errors and context code for probit leaves: prediction_errors / home_errors and pathctx's per-node context
+  application and update.
+- Formats: the model and state formats (the pathcontext registry plus probit cell blocks) and the loader.
+- Tests: the identity harness carries over unchanged. Without --path-context and at --router-split-z inf, a
+  probit BDD must make the same splits and play the same games as a T-P-Ne BDT.
+- Already leaf-agnostic: the router-split knob (it reads router errors only) and the identity harness.
+
+5. Offline calibration sweep (about 12 CPU-min: training 670 s, scoring 80 s; nice 15, 2 jobs x 1 thread)
+- Data: two F-L finals of train-t01-p1 (lr201) played each other at depth 1, T 0.1, log-odds-softmax.
+  - Training: 30 fixed rounds of 400 games (seeds 1000-1029), about 50k positions a round.
+  - Held out: 10 parts of 200 games (seeds 2000-2009), about 26k positions a part.
+  - The data is in the scratchpad (RAM), not kept.
+- Models: T-L-Ne flags with split threshold 100k, so the BDT makes 4 splits (9 leaves) in 30 rounds. Two seeds each
+  (11, 12).
+- Script: sweep.py (copy here). Results: sweep/eval2.txt and sweep/sweep.csv (per part). Final models in
+  sweep/ARM-sSEED/.
+- Scoring: eval-loss's own printed losses on each part.
+  - Gotcha: eval-loss --dump writes predict_log's raw log-scores, not normalized log-probabilities (exp sums > 1).
+  - My first scoring pass read them as log-probs and was wrong (sweep/eval.txt, superseded).
+- Table: held-out loss minus the BDT of the same limit and seed. Mean over seeds per part; mean and SE over the 10
+  parts (the SE covers held-out sampling, not seed-to-seed spread). Negative = better than the tree.
+  BDT absolute log-loss 0.5625.
+
+  arm (limit)         router splits / leaves (s11; s12)   log-loss            winner log-loss
+  ctx z 0,1,2,3,10 (8)  4/9; 3/9  (identical models)      0.0030 (SE 0.0013)  -0.0007 (SE 0.0007)
+  ctx z 30 (8)          4/9; 1/9                          -0.0000 (SE 0.0014)  0.0001 (SE 0.0006)
+  ctx z 100, inf (8)    0/9; 0/9  (= BDT)                  0                   0
+  no ctx z 0 (8)        4/9; 3/7                          0.0005 (SE 0.0014)  -0.0004 (SE 0.0008)
+  no ctx z inf (8)      0/9; 0/9  (= BDT)                  0                   0
+  ctx home z 0 = z 2 (8)  4/9; 4/9                        0.0025 (SE 0.0009)  -0.0002 (SE 0.0011)
+  ctx z 0 = z 2 (4)     2/5; 2/5                          0.0011 (SE 0.0011)  -0.0011 (SE 0.0008)
+  ctx z inf (4)         0/9; 0/9  (= BDT)                  0                   0
+
+  Per seed (log-loss), ctx z 0, limit 8: s11 -0.0036, s12 0.0096. The seeds disagree more than the SEs.
+- Reading:
+  1. Between 0 and 10 the knob does nothing. The router-error rises that trigger splits are about 10-100 SE:
+     z 30 drops some (seed 12, so some rises are 10-30 SE), and z 100 drops all.
+     - They are drift: the routing target (the best of the shared children) changes as the copies diverge. They are
+       not noise, so z does not act as a significance level.
+     - Drift t grows with the window. With the live 1M threshold, expect about sqrt(10) = 3x the SE count, so the
+       sweep's z 30 is roughly z 100 there.
+  2. No z beats the tree.
+     - Winner log-loss is within 1.5 SE of the tree everywhere.
+     - Full log-loss is slightly worse with path context at low z (0.0030, 2.3 SE) and seed-dependent.
+     - Router splits without context are equal.
+     - The home target is no better.
+  3. Limit 4: router splits spend the shared budget. At z 0, 2 router splits leave 2 leaf splits (5 leaves against
+     the tree's 9), and it still ties.
+- "At least equal" holds trivially at z >= 100 (here), where the DAG is the tree. Below that, it is within noise
+  either way.
+
+6. Draft experiment (NOT created, NOT launched): leagues/specs/batch5/error-dag-p1.DRAFT.json
+- Lines:
+  - F-L x2;
+  - T-L-Ne limit 4, 1M x2;
+  - D-L-Ne-ctx limit 4, 1M, --router-split-z 0 x2;
+  - D-L-Ne-ctx limit 4, 1M, --router-split-z 100 x2.
+- Run settings:
+  - tournament binary chessai-errdag;
+  - seed 34;
+  - entry ply 1;
+  - self_games true;
+  - plateau scaled, floor 300;
+  - cap 600;
+  - 12 rounds a cycle;
+  - prices P2.
+- Why these z:
+  - z 0 is the most router splitting the rule allows.
+  - z 100 at 1M windows is about the sweep's z 30, near where splits start to be refused.
+  - z inf would be the tree itself: the T-L-Ne lines.
+- Limits: 4 maps to 4, so z inf equals the tree. At finite z, router splits spend the same budget of 4.
+  - A separate router budget (say --router-split-limit) would keep the tree's 4 leaf splits. It needs a new knob;
+    not built.
+- Post-create step (in the description):
+  python3 leagues/specs/ply1/train_binary.py --from chessai-hybrid4gfx leagues/experiments/error-dag-p1
+  F-L and T-L-Ne then train on hybrid6 (exact); the DAG lines keep errdag.
+- New recipe row in leagues/recipes.txt (appended; the old file is in the scratchpad as recipes.txt.before):
+  D-L-Ne-ctx: bdd, errdag for training and self-play. Flags: the D-L-Ne flags plus --path-context.
+  - The same row is in make_recipes.py's HAND list, with a comment, so a re-run keeps it. The old file is in the
+    scratchpad as make_recipes.py.before; --check runs clean.
+- Cold read draft: leagues/specs/arenas/error-dag-p1-cold.DRAFT.json.
+  - Same shape as make_arm_read.py: plies 1-2, T 0.02, 75 round-robins, 4 random references.
+  - binary and owncal_binary are both chessai-errdag.
+  - Tags fl / ne / dz0 / dz100; contrasts with arm_btg.py TOUR ne.
+  - The versions read @FINAL: replace that with the experiment's last version before creating.
+- Dry run, under models/from-scratch/errdag/dry (spec dry-spec.json: the draft with root there, nice 15, 2 threads):
+  - create, then the train_binary swap (4 lines to hybrid6), then 3 cycles: about 65 CPU-s, exit 0.
+  - Every cycle ran own calibration games (40 calibration lines, 20 of them DAG versions, written by errdag), the
+    tournament (16 players), self-games (errdag replay-games, exit 0) and training of all 8 lines.
+  - The DAG models start "pathcontext 1 0", the format hybrid13 refuses. Their state files carry router_split_z
+    Some(0.0) and Some(100.0).
+- Arena dry run of the cold-read shape (arena-spec.json, arena-spec-v2.json; 1 round-robin each, 1 random reference,
+  errdag as binary and owncal_binary, entries by absolute experiment path):
+  - v3: own games for all 8 entries, then the round-robin; exit 0.
+  - v2: "calibrations: 8 identical to their experiment's". The arena's errdag own games reproduce the experiment's
+    calibration exactly for all 8 versions, the 4 path-context DAGs included.
+  - About 25 CPU-s.
+
+7. Disk, CPU, housekeeping
+- CPU, measured: sweep 720 s, dry runs about 90 s. Not measured exactly: the build, tests, identity and play
+  checks, data generation and the failed first sweep, about 15 min by estimate. About 0.4-0.5 CPU-h in all
+  (budget 0.6).
+- Outputs (on disk, here): sweep/ 81M (final models, lv/ leaf listings, logs), dry/ 86M. All can go once read.
+- Scratch tmpfs quota incident:
+  - The first sweep wrote every round's model to the scratchpad and hit the user's tmpfs quota (EDQUOT; 12.6G
+    limit). The failed sweep and the first dry run went down with it.
+  - I deleted only my own failed partial outputs (scratchpad errdag/sweep and errdag/dry) and moved outputs to disk.
+  - The quota is still at 11988M of 12625M.
+  - My scratchpad errdag/ holds 376M (the fixed rounds and held-out games); it can go.
+  - The rest belongs to other agents (sg 2.0G, gatecheck 1.7G, ladder 940M, leafsim 614M, c5id 439M,
+    routecells 403M, h5 391M, dash9 377M). Clearing those needs the user's OK.
+- target/: fastbin/errdag-src/target 87M (bddctx-src/target 87M). Nothing deleted.
+- Not touched: rs/, existing binaries, the running experiments, RESULTS.md, memory files.
+
+8. errdag2 (11-11 ~10:40-10:53, the coordinator's step 1): a separate router-split budget
+- Binary: models/from-scratch/bin/chessai-errdag2 (new file, md5 2f963aa0215a9e85bb3d0b9ee07599a0).
+  - Source: fastbin/errdag-src, edited in place. The errdag v1 source is kept in src-v1/, the errdag2 source in src-v2/.
+  - Patch vs v1: errdag2.patch.
+  - Tests: 168 passed, including two new ones:
+    - router_split_limit_is_the_tree_plus_router_splits (three bases);
+    - bdt_refuses_router_split_limit.
+- --router-split-limit N (BDD only; refuses split trials and --leaf-share): with it,
+  - --split-limit counts leaf splits only;
+  - router splits stop at N;
+  - a router may split only while router splits made < leaf splits made (the analyst's rule);
+  - the window is still checked as usual (bookkeeping only).
+  - Leaf splits are counted by the leaves: (leaves - 1) / (branch_factor - 1). That holds because the flag refuses
+    split trials and leaf sharing, and error routers do not merge.
+  - Without the flag, nothing changes.
+- Identity (identity2.sh, identity2.txt, outputs in id2/):
+  - Without the flag, errdag2 == errdag: every model and state file, and the log apart from timings. Checked for
+    bdd + ctx (with 3 router splits), plain bdd and bdt.
+  - With --router-split-limit 4 at --router-split-z inf (with and without path context): eval-loss on the 10
+    held-out parts identical to the tree. Games identical (100 vs F-L at depths 1 and 2, T 0.1 and 0.02).
+- Sweep (sweep2.py, sweep2/eval.txt): leaf limit 4 plus router limit 4, path context, 100k windows. Same data and
+  tree as section 5.
+
+  z      router splits / leaves (s11; s12)   log-loss vs tree     winner log-loss vs tree
+  0      4/9; 3/9                            0.0030 (SE 0.0013)   -0.0007 (SE 0.0007)
+  30     4/9; 1/9                            -0.0000 (SE 0.0014)  0.0001 (SE 0.0006)
+  50     4/9; 0/9                            -0.0018 (SE 0.0012)  0.0003 (SE 0.0005)
+  100    0/9; 0/9  (= tree)                  0                    0
+
+  Every arm keeps the tree's 9 leaves. Here the router budget gives the same predictions as limit 8 shared
+  (section 5): the data allowed only 4 leaf splits, and the router splits came after them. Seed 11 splits routers
+  on rises above 50 SE; seed 12's rises are 10-50 SE. So the count is bimodal by seed.
+- Draft (leagues/specs/batch5/error-dag-p1.DRAFT.json, rewritten; NOT created):
+  - D-L-Ne-ctx, leaf limit 4 plus router limit 4, 1M, at z 0 x2 and z 160 x2.
+  - Recipe row and tournament on chessai-errdag2. The D-L-Ne-ctx row's binaries are now errdag2, in recipes.txt and
+    in make_recipes.py's HAND list.
+  - The z were chosen by count. z 0 gives about 4 router splits per 4 leaf splits. The sweep's z 50 gives about 2;
+    times sqrt(10) for 1M windows that is about 160.
+  - The scaling is an assumption (drift t can grow faster or slower than sqrt(window)). Count the z-160 lines'
+    sibling sets once the trees have 4 leaf splits.
+  - The cold-read draft now uses errdag2 for binary and owncal_binary, with tags dz0 / dz160.
+- Dry run, 2 cycles (dry2/, dry2-spec.json; about 36 CPU-s): exit 0.
+  - Every phase ran: own calibration games, tournament, self-games and training.
+  - The DAG lines' states carry router_split_z Some(0.0) / Some(160.0) and router_split_limit Some(4).
+
+9. errdag3 (11-11 ~10:53-11:20, the coordinator's step 2): probit leaves in the BDD, with path cells
+- Binary: models/from-scratch/bin/chessai-errdag3 (new file, md5 261fe1991fab361bc5d75eb428660457).
+  - Source: fastbin/errdag-src (copy in src-v3/). Patch vs errdag2: errdag3.patch.
+  - Tests: 171 passed, including three new ones:
+    - probit_bdd_at_router_split_z_inf_is_the_probit_bdt (with and without path context and the router budget:
+      the BDT's splits and predictions, bit for bit);
+    - probit_path_cells_split_quietly_learn_and_round_trip (both sub-router targets);
+    - probit_path_context_needs_split_noise.
+- What changed:
+  - CLI: --model bdd takes --leaf probit, --split-noise and --probit-shared-eps (the last not with --path-context).
+    The BDT's probit leaf code (split copies widened by noise^2, the draw margin) was already in the shared graph
+    code; only the CLI and the path-context checks refused it.
+  - Path cells for probit nodes (pathctx.rs, the analyst's 6.25 addendum):
+    - Each probit node's table holds Gaussian latent weights, (mean, variance) per (cell, value). There is no class
+      index: the ordinal probit has one latent for all three results, so "per (cell, value, class)" collapses to
+      per (cell, value).
+    - A new cell starts at mean 0 and variance split_noise^2, so a split changes no latent mean. The added variance
+      makes predictions very slightly less confident (one 9e-4 per new cell, against beta^2 = 1).
+    - The cells are summed into the probit's latent like further features. They learn with its own weights in the
+      same ADF update (Probit::train_with_cells): dynamics tau^2, truncation, tempering, the eps gradient.
+    - A leaf split's copies get the leaf's table, forgotten like the classifier (variances times the forget factor)
+      and widened by split_noise^2 like its weights.
+    - The file format writes "pathtable probit 1 <values> <cells> ...", then the cells' prior variance, the means and
+      the variances. In state files, a probit node's table also stores its prior variance.
+  - With probit leaves, path context needs --split-noise > 0 (the cells' prior) and refuses --probit-shared-eps.
+- Identity (identity3.sh, identity3.txt, outputs in id3/):
+  - errdag3 == errdag2, every file and the log apart from timings, for: bdd + ctx, plain bdd, LR bdt, probit bdt
+    (T-P-Ne flags with --split-noise 0.03) and flat probit (F-P).
+  - Probit bdt and F-P trained by hybrid6 == errdag3 (all files).
+  - Play: errdag3 plays T-P-Ne vs F-P (error-routing-p1 v314) exactly as hybrid13 at depths 1 and 2, T 0.1 and
+    0.02 (4 of 4 settings, 60 games each).
+  - With probit leaves (T-P-Ne flags plus --split-noise 0.03) at --router-split-z inf with --router-split-limit 4,
+    with and without path context: eval-loss on the 10 held-out parts identical to the probit tree. Games identical
+    (100 vs F-L at depths 1 and 2, T 0.1 and 0.02).
+- Sweep (sweep3.py, sweep3/eval.txt): T-P-Ne's flags plus --split-noise 0.03, leaf limit 4 plus router limit 4, path
+  context, the same 30 fixed ply-1 rounds, 100k windows, seeds 11 and 12, scored on the 10 held-out parts against the
+  probit tree of the same seed (pbdt-L4, absolute log-loss 0.5691). Differences are mean (SE over parts).
+    z        router splits  leaves  log-loss vs tree        winner log-loss vs tree
+    0        4, 3           9, 7    0.0015 worse (0.0008)   0.0037 better (0.0009)
+    5, 10    4, 2           9, 7    0.0002 worse (0.0006)   0.0041 better (0.0011)
+    20       3, 2           9, 9    0.0024 worse (0.0007)   0.0025 worse (0.0010)
+    25-100   none           9, 9    the tree's models
+  - z 5 and z 10 made byte-identical models, as did z 25 and z 30.
+  - Probit's rises are smaller than LR's (LR's z 30 and 50 still split). The count falls from 2-3 straight to none
+    between z 20 and 25: in both seeds the largest rise before any router split was 20-25 SE, and once one router
+    splits, more follow (the routing targets move as the copies diverge).
+  - Seed 12 at z 0-10 made only 3 leaf splits within the 30 rounds (7 leaves); everywhere else the tree's 9.
+- Chosen z: 0 (about 4 router splits per 4 leaf splits) and 60: z 20, the fewest above none (2-3), times sqrt(10) for
+  1M windows is about 63, rounded down because z 25 (79) made none. Same scaling assumption as in step 1, and the
+  cliff makes it touchier here: count the z-60 lines' sibling sets once the trees have 4 leaf splits.
+- Draft: leagues/specs/batch5/error-dag-probit-p1.DRAFT.json (write_draft3.py, draft3-desc.txt).
+  - F-P x2; T-P-Ne {limit 4, 1M, noise 0.03} x2; D-P-Ne-ctx {the same, router limit 4} at z 0 x2 and z 60 x2.
+  - Tournament errdag3; seed 36; ply 1; self-games; plateau 300; 600 cycles.
+  - After create: train_binary.py --from chessai-hybrid4gfx moves F-P and T-P-Ne to hybrid6; the DAG lines keep
+    errdag3.
+  - Recipe row D-P-Ne-ctx (recipes.txt line 108, and in make_recipes.py's HAND list): the T-P-Ne row's flags for
+    --model bdd, plus --split-noise 0.03 and --path-context; binaries errdag3.
+- Cold read: leagues/specs/arenas/error-dag-probit-p1-cold.DRAFT.json. errdag3 for binary and owncal_binary; tags
+  fp/ne/dz0/dz60; entries @FINAL.
+- Dry run, 2 cycles (dry3/, dry3-spec.json; 37 CPU-s): exit 0.
+  - Every phase ran: own calibration games, tournament (errdag3 played all 16 players), self-games and training.
+    Cycle 2 resumed the DAG lines from their cycle-1 states.
+  - The DAG lines' states carry leaf Probit, path_context true, split_noise 0.03, router_split_z Some(0.0) or
+    Some(60.0), and router_split_limit Some(4). Their model files start "pathcontext 1 0" (no split within 1M yet).
+  - Line names match the cold-read entries. F-P and T-P-Ne train on hybrid6 with G2's flags.
+  - No arena dry run of this cold read: it has step 1's shape, and errdag3 already played the probit DAGs in the dry
+    tournament.
+- CPU, steps 1 and 2: measured, identity 141 s, sweeps 379 s with scoring, dry runs 73 s (about 10 min). Builds and
+  tests not measured, about 10 min by estimate. About 0.35 CPU-h in all.
+- Disk (all mine, on disk; all can go once read): sweep2/ and sweep3/ 20M each, dry2/ 92M, dry3/ 89M, id2/ 91M,
+  id3/ 74M, fastbin/errdag-src/target 88M. The scratch data ($S, 376M in RAM) can go too.
+- Also fixed: wrong clock times in my notes and drafts. error-dag-p1.DRAFT.json said ~11:45; it now says ~10:50.

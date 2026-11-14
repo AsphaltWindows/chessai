@@ -1,0 +1,153 @@
+chessai-hybrid20 (2026-11-12 ~19:05-19:33; the implementation fork for candidate 1 of the ~18:50 perf review)
+= chessai-hybrid19 with compound::MAX_NODES 64 -> 128. Nothing else changes.
+
+Binary   models/from-scratch/bin/chessai-hybrid20, md5 cda3d7c59dd98feb431fea23a29f867c (cp -n 19:09:25).
+Source   fastbin/hybrid20-src, a reflink copy of hybrid19-src. hybrid20.patch is the whole diff: the constant, its doc
+         comment and one unit test. `cargo build --release` there rebuilds the binary byte for byte (checked 19:18).
+         rs/ is untouched.
+
+WHY THE CAP WAS 64, AND WHY 128 IS SAFE
+- No note gives a reason for 64. hybrid5 (11-10, fixed-point play for trees and DAGs) set it without comment
+  (hybrid5/summary.txt). hybrid15's summary and the ledger call it "hybrid5's cap": graphs over 64 nodes play in float,
+  "exact but at hybrid14's speed". The ~01:00 review (item 2) held raising it as "measure first: fixed-point play at
+  64-256 nodes may stop paying". So it was a speed guard, sized when the models had at most 25 nodes. It was never a
+  correctness bound.
+- In the code (hybrid19-src), MAX_NODES appears only in Tables::new's eligibility check (compound.rs:263). Nothing is
+  sized by it, and nothing depends on the node count:
+  - Each node has its own fixed-point table (Table::Linear: rows, with u16 starts into its own rows; Table::Tan: u32
+    offsets, u128 child masks over the 70 features), its own Sums, its own margin and its own error bound.
+  - A sum has at most 71 entries (a bias and 70 features). Each is a weight |w| < 2^20, quantized to units of 2^-32,
+    so under 2^52 units; fixed::quantize refuses anything larger. So |sum| < 71 x 2^52 < 2^59 at any node count, and
+    an i64 can't overflow.
+  - Cell offsets are bounded per route state (|part| < 1e6 in logs). Route states have their own cap (MAX_STATES 4096,
+    u32 ids) and hold usize node ids.
+  - Acc (per-node Sums) and Tables are Vecs. Routes follow usize child indices. Changes is per feature: [(u8,u8);16]
+    and a u128 over the 70 features.
+  - The fallback rule is per decision. A router decides in fixed point only outside its own margin, and in float
+    otherwise; leaves are valued float-exact. Nothing adds up across nodes.
+- So 128 is safe for all inputs, and so would be any count. For cell DAGs the next limit is MAX_STATES. Why 128 and not
+  more: the gain shrinks with size, because child_into updates every node at each interior position, while float
+  evaluates only the route. The review measured x0.58 at 121 nodes. Past 128, measure first.
+- Doc-comment erratum: the MAX_NODES comment says "each under 2^20 units of 2^-32"; read "each under 2^20, i.e. 2^52
+  units of 2^-32". The text stays in the source on purpose. A test-only edit to compound.rs already changed the
+  build's md5 (561f865e... with it; checked), and hybrid20-src must rebuild the installed binary.
+
+UNIT TESTS
+- hybrid20-src: 207 lib + 2 main pass (unit-tests.log). One is new, graphs_up_to_the_cap_value_exactly:
+  - A 121-node tree (40 LR routers; LR and probit leaves, some trained on material) takes the compound path.
+  - Its values equal the float search's bit for bit at depths 1-2 (same_values) and 3-4 (same_values_deep: windows,
+    cuts, root_value_of).
+  - Tables::new takes 127 nodes and refuses 130.
+- Test-only extras, in over64-dag-test.patch (applied to the source in place, run, reverted; log over64-dag-test.log):
+  - dags_with_cells_over_64_nodes_value_exactly: path-context DAGs with CNBP routers and cells, trained on random
+    positions to 70 nodes (LR leaves) and 67 (probit leaves). Both play in fixed point with route states, bit-equal at
+    depths 1-4.
+  - mixed_trees_up_to_the_cap_value_exactly: 121 nodes, with LR, CNBP and TAN routers and LR, probit and CNBP leaves.
+  - Both pass, also under CHESSAI_FX_CHECK=1 CHESSAI_FX_STATS=1.
+
+IDENTITY AGAINST HYBRID19
+(identity/: identity.sh, compare.py, compare.txt; the models reflinked into identity/m with MD5SUMS, the calibration
+sets into identity/cal.)
+- 28 cases. Each ran both binaries with the same arguments (RAYON_NUM_THREADS=2, nice 19, taskset -c 4-7), one after
+  the other. compare.py checks that every output file is byte-identical except game_cpu.csv's CPU column (the same
+  games are listed), that stdout is identical with the times masked, that both halves exit 0, and that neither panics.
+  All 28 are IDENTICAL: 3,467 games and 3,796 files (compare.txt).
+- The players (identity/m, MD5SUMS):
+  - Over 64 nodes:
+    - gd599a (93 nodes) and gd599b (81): grow-dag-p1's finals, D-P #1 and #2 @599;
+    - d1 (76): leagues/starts/grow-dag-p1@395 #1, probit-p4w's start DAG (md5 92bb8563...);
+    - lib84 (84): the library's largest DAG, grow-dag-p1 #1 @550;
+    - TBIG (121): a tree with CNBP routers and CNBP leaves, from hybrid18's field.
+    The D-P DAGs have CNBP routers, probit leaves and path cells.
+  - Under 64 nodes:
+    - d2 (51): @395 #2, probit-p4w's other start DAG;
+    - gd300 (56);
+    - lib40 (40): the library's largest tree, grow-p1c T-P-Ne-grow ...snapshot #2 @354;
+    - DC (25): a cell DAG with LR leaves;
+    - TL (13): a tree with LR leaves.
+  - Flat: rfp300 (F-P) and FL (F-L).
+- Tournaments (--use-probs --no-catch-up --prior-draws 0 --reports-last --sparse-fit --game-cpu):
+  - Ply 1, all 12 players (132 games a round-robin), 1,584 games:
+    - T 0.1, 4 round-robins, games saved;
+    - T 0.02, 3 round-robins;
+    - argmax with 8 random opening plies, 3 round-robins;
+    - T 0.1 with 6 opening plies sampled at opening temperature 1, 2 round-robins.
+  - Ply 2, the same 12 players, 924 games:
+    - T 0.1, 2 round-robins, games saved;
+    - T 0.02, 2;
+    - argmax with openings, 2;
+    - T 0.1 with sampled openings, 1.
+  - Ply 3, 7 players (gd599a, d1, TBIG, d2, lib40, DC, F-P), 126 games: T 0.1 (games saved), T 0.02, and argmax with
+    openings.
+  - Ply 4, 5 players (gd599b, d1, TBIG, d2, F-P), 60 games: T 0.1 (games saved), T 0.02, and argmax with openings.
+  - Ply 5: d1, TBIG and F-P at T 0.1, 6 games.
+- Self-games (replay-games, each entry against its twin, as phase_selfgames plays them):
+  - ply 1: gd599a, gd599b, d1, lib84, TBIG and d2, 4 rounds, 24 games;
+  - ply 2: the same six, 2 rounds at T 0.1 and 2 at T 0.02, 24 games;
+  - ply 3: gd599a, d1 and TBIG, 3 games;
+  - ply 4: d1 and TBIG, 2 games.
+- Own calibration games (arena with A = B, leagues.py's command, T 0.1, seed 5): gd599a, d1 and TBIG at depth 1 (the
+  standard's), 200 games each; gd599b at depth 2, 40 games.
+- Check mode: h20 ran under CHESSAI_FX_CHECK=1 CHESSAI_FX_STATS=1, against plain h19.
+  - The fields: gd599a, d1, TBIG, lib84 and F-P at plies 1-2; gd599b, d1, TBIG and F-P at ply 3; d1 against F-P at ply 4.
+  - 74 games, all identical. No assertion failed.
+  - Fixed-point router decisions (h20's counters): 0.47 M at ply 1, 5.7 M at ply 2, 12.1 M at ply 3 and 24.5 M at
+    ply 4. Float fallbacks: 0, 0, 0 and 2.
+  - The deep search's bounds failed high at 651 k of 695 k nodes above the leaves at ply 3, and at 301 k of 474 k at
+    ply 4.
+- Out of scope: training and Value::Score (wld-score) policies. compound is play-only, and it only takes log-odds
+  values.
+
+SPEEDUPS
+Game CPU of the games with a player over 64 nodes, hybrid19 -> hybrid20. These come from the identity runs: the same
+games, paired, RAYON 2, nice 19, E-cores, on a shared machine. In the same runs, the games without such a player
+measured x0.87-1.14, which is the noise.
+
+| Ply | T 0.1 | T 0.02 | argmax (8 random opening plies) |
+|---|---|---|---|
+| 1 | x0.94 (360 games, ~3 ms a game); x0.80 with sampled openings | x0.79 | x1.07: ~1, noise |
+| 2 | x0.39 (180); x0.35 with sampled openings (90) | x0.41 (180) | **x1.44** (180) |
+| 3 | x0.76 (30) | x0.61 (30) | x0.53 (30) |
+| 4 | x0.39 (18) | x0.41 (18) | x0.58 (18) |
+| 5 | x0.51 (6) | | |
+
+- Self-games (process CPU, calibration fits included): ply 2 x0.69-0.72, ply 3 x0.65, ply 4 x0.34.
+- Own calibration: depth 1 x0.65-1.12 (at most 1.3 s a process, mostly the fits); depth 2 x0.37.
+- The review measured on one pinned thread with its cap-256 build, which takes the same path at these sizes: ply 2
+  x0.37 at 81-93 nodes and x0.58 at 121; ply 4 x0.39-0.50.
+- **Argmax at ply 2 is slower (x1.44).**
+  - Why: compound's depth-2 path values every root move (Search::windowable is false for it). hybrid19 played these
+    DAGs in float with hybrid13's root windows, which at argmax (window next_down(best)) cut most root moves.
+  - Models of 64 nodes or fewer already play argmax at ply 2 this way in hybrid19. On an under-64 field (gd300, d2,
+    lib40, DC, F-P; 3 round-robins, 60 games, identical games) the default fixed point costs x1.22 the CPU of
+    CHESSAI_FX=direct, which is float with windows (identity/extra/).
+  - Nothing queued plays argmax at ply 2. Experiments play T 0.1 and rate at T 0.02 (x0.41). Arenas read at T 0.02.
+  - A candidate for the next review: root windows in compound's (and fastprobit's) depth-2 path at argmax.
+
+DEPLOYMENT
+- For new work only. The four queued drafts now name chessai-hybrid20 as the tournament binary, which plays the games,
+  self-games, own calibration and cold games:
+  - leagues/specs/standard/std-v1-p2-{s1,s2,x3}.DRAFT.json;
+  - leagues/specs/ply4/probit-p4w.DRAFT.json.
+  Backups are *.before-hybrid20. Only "tournament.binary" and one clause of each description changed (checked by
+  parsing).
+- fill_p2_starts.py carries the draft's binary into the filled specs. models/from-scratch/std-v1-p2/prep/make_drafts.py
+  copies the ply-1 rung's binary, so it would write hybrid19 again: re-point the drafts if it regenerates them.
+- Not swapped into std-v1-p1-s1/-s2. They play at ply 1, and their DAGs are under 64 nodes (37-48 at cycle ~400), so
+  nothing changes for them.
+- Expected saving (the review's estimates, confirmed here at x0.39 a ply-4 game at T 0.1):
+  - probit-p4w: ~550-670 CPU-s a cycle (~25%) while @395 #1 is its only DAG over 64. That is ~6-8 CPU-h to the floor
+    (41 cycles) and ~15-19 to the cap (101). The saving grows once #2 passes 64 (51 nodes at v395; the same line had 81
+    at v599 in grow-dag-p1).
+  - The ply-2 rung: ~16 CPU-s a cycle for each DAG line that crosses 64 (the D-L lines may). ~0-1.5 CPU-h.
+  - Arenas and reads with library DAGs over 64 nodes: x0.4 a game at ply 2 (T 0.1, T 0.02) and x0.4-0.6 at ply 4.
+  - Switching an arena to hybrid20 refits each calibration once (the fit cache keys on the binary's bytes) and remakes
+    own games once (arena.py keys on the binary's md5).
+- Play: play1 is hybrid19 plus a serve loop. play2, the deep-mode fork's build, gets the constant from the coordinator.
+  Neither was touched.
+
+COST: identity runs ~650 CPU-s, builds and unit tests ~4 CPU-min. All at nice 19 on the E-cores, apart from the
+first build (nice 10).
+
+SCRATCH: hybrid20/identity/ (runs 64 MB; the models and calibration sets are reflinks), hybrid20/sizes/ and
+hybrid20-src/target are deletable, the user's call. So is review-1112d/ (its own README says the same).

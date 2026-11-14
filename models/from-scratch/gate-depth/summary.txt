@@ -1,0 +1,19 @@
+Ply-1 replay of past own-step gates (2026-11-07 evening; replay.py, results.csv, replay.out; 106 CPU-s).
+
+Question (the user): do ply-2 ratings outgrow ply-1 because the own-step gate tests at ply 2?
+
+Sample: 60 gates from cycles 30-63 (30 kept, 30 reverted; 31 lineages; 38 bdt, 10 lr, 6 probit, 2 each cnbp, moe and fm).
+Each was replayed with the same models, calibration and seed, at ply 1 (both sides depth 1), over 500 games.
+Median 95% half-width: 15 Elo at ply 1, 20 at ply 2 (1000 games).
+
+- Kept steps: ply-2 gate mean 22.7; ply-1 mean 1.7 (SE 2.6).
+- Reverted steps: ply-2 gate mean -15.1; ply-1 mean -1.6 (SE 2.0).
+- Population-weighted (66% kept): ply 1 0.6, ply 2 9.8.
+- corr(ply-2 gate Elo, ply-1 Elo) = 0.51 (bdt 0.60, lr 0.19, probit -0.34; small n).
+- A ply-1 gate at 50% would agree with the ply-2 gate on 32 of 60 steps, which is chance.
+
+Reading:
+- The own-games step barely moves ply-1 strength, whether it was kept or reverted. Its effects are at ply 2.
+- So the gate's depth is not why ply 1 stays flat. There is almost nothing at ply 1 to select.
+- A ply-1 gate would keep a random half of the steps and lose the ply-2 gain. Keep the gate at ply 2.
+- The same model change moves ply-2 strength more than ply-1 strength. Search amplifies evaluation changes, which fits the seams finding.

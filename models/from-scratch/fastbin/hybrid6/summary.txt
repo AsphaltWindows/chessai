@@ -1,0 +1,100 @@
+HYBRID6: EXACT FASTER TRAINING (2026-11-10 ~03:50 to ~05:30, the training-speedup fork)
+
+Task: make the per-cycle training step of the running local experiments cheaper with byte-identical results, and swap
+it into them. The user has said yes to any exact, deterministic speedup.
+
+RESULT
+- Binary: models/from-scratch/bin/chessai-hybrid6 (md5 0bd96e76dcf1da40a10c31f3acdfaf6a).
+  - Source: models/from-scratch/fastbin/hybrid6-src, a copy of hybrid5-src. Same commands, flags and files.
+  - Play is hybrid5's (fixed point for trees and DAGs); only the training path changed.
+- It is the train binary (every line) of single-split, single-split-probit and cluster-error, from cycles 503, 512
+  and 175. The tournament binary is still chessai-hybrid5.
+- Live training CPU per cycle, new / old: 0.60 (single-split), 0.63 (single-split-probit), 0.61 (cluster-error);
+  about 36 CPU-s less per cycle across the three. Cycles finish 11-19% sooner. Details under LIVE.
+
+PROFILE (perf on captured real steps, chessai-hybrid4gfx; share of the step's CPU)
+- TAN-router trees: Tan::add (pair counts) 37-46%, Tan::predict_counts 23-30%; with LR leaves also Logreg::step 12%,
+  parse_position 6%, Logreg::predict_log 6%.
+- LR-router trees (T-L-Le): Logreg::step 35%, Logreg::predict_log 28%, parse_position 11%.
+- Flat LR (F-L): Logreg::step 50%, parse_position 25%, Logreg::predict_log 10%.
+- Training CPU per cycle at the start (totals.csv, 10 cycles to ~04:50): single-split 13.8 s, single-split-probit
+  9.9 s, cluster-error 71.0 s. The 2-4 TAN-router lines are 54-60% of it.
+
+WHAT CHANGED (every float operation in the same order; no reassociation, no FMA, no fast-math)
+1. TAN pair counts (tan.rs, Tan::add). With one-hot labels at weight 1 and integer counts (always so here):
+   - the parent pairs, the only ones predict_counts reads, are added at once, in the same cells, as before;
+   - every other pair is counted in an integer batch over the nonzero values only. A pair's zero-value cells follow
+     from each feature's value counts. The batch is added (one `+= k`) before anything else reads the counts:
+     refresh (Chow-Liu, tables), forget, state and model writes.
+   - Exact: every count is an integer below 2^52 (checked; past it, or with any other label, it falls back to the
+     old loop), so k additions of 1.0 equal one addition of k, bit for bit.
+2. TAN prediction while training (Tan::predict_counts_cached, used by delegation.rs node_output). A training step
+   predicts the same position several times, and only one class's counts change in between. A class's log product
+   depends on its own counts only, so it is reused while they are unchanged; the class prior is recomputed. The
+   logs are added in the same order as before.
+3. LR training at tree nodes (delegation.rs). A leaf or LR router that has just predicted the position in this step
+   (the cache is cleared by any training) takes its gradient step from that prediction instead of predicting again.
+4. Logreg::step with AVX2 (logreg.rs): four features at a time, each with the same operations as the scalar loop.
+   Add, multiply, divide and sqrt are correctly rounded per lane; a blend reproduces "skip if the gradient is 0".
+   Logreg::predict_log for 3 classes keeps three sums side by side, each in its old order.
+5. parse_position (games.rs): a fast path for plain lines of 70 numbers. Anything else goes to the old parser.
+
+IDENTITY (chessai-hybrid4gfx, the binary it replaces, against hybrid6; every check byte-identical)
+- Real inputs: the training sets and start files of 20 live cycles, captured read-only (hard links, one cp -al of
+  the pool), and each line's logged train command replayed on them (capture.py, step.py, compare.py).
+- Chained over consecutive cycles, each binary continuing from its own previous output, so that splits, merges,
+  revisions and windows carry over. Compared: model file, state file, stdout (train time masked) and stderr.
+  - single-split, cycles 407-414, all 7 lines: identical (56 steps).
+  - single-split-probit, cycles 416-423, all 7 lines: identical (56 steps).
+  - cluster-error, cycles 139-142, all 14 lines: identical (56 steps).
+- From scratch (no --start at the first cycle, then chained): single-split 407-414 and single-split-probit 416-423,
+  all lines: identical (112 steps). These trees don't split within 8 cycles, so:
+- Splits and merges (splitcheck.py): every tree line of the three experiments (24), from scratch on one captured
+  cycle, with --split-threshold 20000 --split-limit 5 so that trees split (models of 0.2-2.8 MB, against 0.1 MB
+  unsplit) and may merge within the step: identical.
+- No stale files: all 520 compared outputs of the chains were written by this run of the suite.
+- 155 unit tests pass (154 and 1). The command-line help of train, self-play, tournament and arena is unchanged.
+- Arenas, chessai-hybrid5 against hybrid6, game files equal: F-L against T-L-Tc at depth 2 (200 games, seed 7);
+  T-L-Te at depth 1 against F-L at depth 2 (seed 8).
+
+SPEED (the identity chains, CPU new / old, unpinned at nice 19 on a loaded machine)
+- single-split 0.622: F-L 0.64, T-L-Lc 0.63, T-L-Le 0.71, T-L-Nc 0.76, T-L-Ne 0.75, T-L-Tc 0.54, T-L-Te 0.55.
+- single-split-probit 0.679: F-P 0.59, T-P-Lc 0.81, T-P-Le 0.73, T-P-Nc 0.89, T-P-Ne 0.87, T-P-Tc 0.58, T-P-Te 0.62.
+- cluster-error 0.630: F-L 0.63, F-P 0.84; LR routers 0.58-0.59 (T-L), 0.80-0.83 (T-P); NB routers 0.71-0.77 (T-L),
+  0.90-0.94 (T-P); TAN routers 0.55 (T-L), 0.53-0.57 (T-P).
+- From scratch: 0.671 (single-split) and 0.841 (single-split-probit); single-leaf trees gain less.
+- Pinned P-core, one step: F-L 0.52 -> 0.33 s, T-L-Le 1.74 -> 0.91 s, T-L-Tc 3.35 -> 1.87 s. On an E-core the AVX2
+  step gains less (T-L-Le 1.90 -> 1.35 s); a gather version was slower there and was dropped.
+
+LIVE (totals.csv train_cpu_s, the 10 cycles before each swap against the cycles after, as of 05:26)
+- single-split, cycles 493-502 against 503-510: 13.34 -> 7.99 s a cycle (0.60); cycle wall 43.7 -> 38.8 s.
+- single-split-probit, cycles 502-511 against 512-519: 9.60 -> 6.07 s (0.63); cycle wall 45.4 -> 40.6 s.
+- cluster-error, cycles 165-174 against 175-177: 69.95 -> 42.45 s (0.61); cycle wall 118.9 -> 96.3 s.
+- Every cycle since the swaps finished cleanly (no failed training, no failed cycle). Wall times also depend on
+  the machine's load.
+
+DEPLOYMENT
+- First check: no engine rule reads measured CPU; train CPU is only recorded (totals.csv train_cpu_s). check_binaries
+  only checks that the binaries are executable.
+- For each experiment:
+  1. leagues.py stop, then wait for its repeat.sh to exit after the cycle;
+  2. change only config.json's train_binary on every line (swap6.py: atomic write, the diff checked to be exactly
+     those lines; the old config is kept in config-before/);
+  3. restart repeat.sh, detached.
+- The swaps:
+  - single-split: after cycle 502; restarted 05:19:58, pid 1506075 (was 1404770). Cycle 503 done 05:20:39.
+  - single-split-probit: after cycle 511; restarted 05:19:58, pid 1506083 (was 1406175). Cycle 512 done 05:20:40.
+  - cluster-error: after cycle 174; restarted 05:20:41, pid 1506455 (was 1407148). Cycle 175 done 05:22:12.
+- Not swapped: selfplay-depth (it ends ~07:00, and its self-play binary trains too).
+
+CAVEATS
+- NB routers and probit leaves gain least (0.8-0.94): CNBP training and Probit::update are untouched.
+- The batch applies to one-hot labels at weight 1 with integer counts below 2^52, as in every live recipe. Soft
+  labels, game-weighted TAN (--tan-games) and relative m (--tan-lambda) fall back to the old code: exact, not faster.
+- On E-cores the AVX2 step gains little; the scheduler decides where a training job runs.
+- Self-play training (selfplay-depth and other self-play lines) still runs the old binaries.
+- No new unit tests: the identity runs are the test. They cover the live recipes (LR, NB and TAN routers; LR and
+  probit leaves; error and cluster routes; splits and merges). Mixtures, FM, DAGs and Hoeffding trees share the
+  changed TAN counting, LR step and parser, exact by the same arguments, but were not replayed.
+- CPU used: about 40 CPU min at nice 19 (builds, profiles, A/B timing, the identity suite of ~15 CPU min, the
+  split checks, arenas).

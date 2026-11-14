@@ -1,0 +1,49 @@
+MoE with 8 experts (MoE-8-c, topic 5), smoke only (2026-11-07). Verdict: not broken. It learns, it uses more of its
+experts than MoE-c does at the same version, and it costs 1.6-1.8x MoE-c. It is a league candidate against MoE-c.
+
+Smoke (run.sh): MoE-c's recipe with --moe-experts 8, from scratch, seed 21, depth 0, 1000 games a round, 8 rounds,
+2 threads, chessai-tangate.
+- MoE-c's recipe was run at the same settings for 2 rounds as the cost reference (moe4).
+- The comparator at matching versions is ../moe-s21: MoE-c's recipe from scratch, seed 21, binary chessai.
+
+Self-play:
+- v vs v−1 Elo by round:
+
+| round | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| MoE-8 | 15 | 1 | 11 | 3 | 3 | 15 | −10 |
+| moe-s21 | 22 | −2 | −2 | | | | |
+
+  Round 0 is the same game set: v0 against v0, 77 wins, 79 losses, 844 draws.
+- Decisive games, rounds 0-7: 11.8%, against moe-s21's 13.4%.
+- Plies a game: 297.
+
+Experts used (mix-stats on the LR d2 held-out set, at v8 for both):
+
+| | effective experts | per position exp(entropy) | mean weights | weight over 0.99 |
+|---|---|---|---|---|
+| MoE-8 | 4.36 of 8 | 3.21 | 0.38, 0.34, 0.10, 0.10, 0.05, 0.02, 0.01, 0.01 | 0% of positions |
+| moe-s21 | 1.79 of 4 | 1.65 | | |
+
+For reference, offline MoE-c's recipe used 2.36 of 4.
+
+Cost, at the same binary and load (user CPU over all rounds, including training):
+
+| | per game | per ply |
+|---|---|---|
+| MoE-8 | 20.1 CPU-ms | 67.8 CPU-us |
+| MoE-c's recipe | 12.4 CPU-ms | 38.3 CPU-us (nbmix's measurement: 38.9) |
+| ratio | 1.62 | 1.77 |
+
+- Training is 3.5 s a round against 2.0.
+- MoE-8 files load and predict the same in chessai-cyc5, chessai-tangate and the tournament binary chessai-tanroute2
+  (cal: included).
+
+League:
+  MoE-8-c | MoE | models/from-scratch/bin/chessai-cyc5 | scratch | lr | own | --model moe --moe-experts 8 --use-probs --seed 21 --vs-previous --no-games
+- Comparator: MoE-c, the same line with --moe-experts 4. The binary is MoE-c's, so only the experts differ.
+- No binary changes are needed.
+- Cost signature "moe d0 jitter10 --moe-experts 8": about 1.6x MoE-c's 0.009448 CPU-s a game, so about 0.015 CPU-s a
+  game at d0. MoE-c is already the slowest d0 kind after fm.
+
+CPU: about 3.1 min.

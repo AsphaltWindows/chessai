@@ -1,0 +1,58 @@
+HYBRID14: ERRDAG4'S MODEL CODE IN HYBRID13-SRC
+(2026-11-11 ~14:40 to ~16:20, the hybrid14/15 implementation fork: candidate 3 of the ~12:50 performance review)
+
+RESULT
+- Binary: models/from-scratch/bin/chessai-hybrid14 (md5 3976e92d941fc125fb77ce332edb4f64), a new file. It plays
+  every model hybrid13 plays exactly as hybrid13, and plays and trains every model errdag4 plays or trains exactly as
+  errdag4 (DAGs with path context, router splits, probit leaves and cells included).
+- Play CPU (cpu14.txt: the same arena with each binary in ABBA order, 1 thread, pinned to the E-cores, nice 15;
+  identical games in every row):
+  - trees and flats against hybrid13: x0.93-0.99 (same code; noise and the merge's layout);
+  - DAGs without router splits (no cells) against errdag4: D-P z30 x0.74 (ply 1), x0.44 (ply 2); D-L z160 x0.63,
+    x0.32. They now take hybrid5's fixed-point path and cost what the tree of their recipe costs: self-games 11.9 /
+    137.9 us a position (plies 1/2) against T-P-Ne's 11.9 / 137.5; D-L 82.7 against T-L-Ne's 82.9 at ply 2
+    (errdag4: 336 and 285 us);
+  - DAGs with cells (z 0) against errdag4: D-P x0.89 (ply 1), x0.73 (ply 2); D-L x0.63 (ply 2); D-P self-games
+    x0.85 at ply 2. They still play in float (hybrid15 takes them on);
+  - own calibration (play_id14.txt sums): the errdag4 comparisons 7.1 -> 5.5 s; DAGs without cells 0.9 -> 0.6 s
+    (a tree's cost); DAGs with cells 1.6-1.9 -> 1.4-1.5 s.
+- Training CPU (train_id14.txt; unpinned, 2 jobs at a time, the errdag4 side timed by the errdag4 fork earlier, so
+  indicative only): ctx DAGs x0.43-0.55 of errdag4's (hybrid6's training speedups: fast parser, AVX2 LR step,
+  3-class predict_log, small buffers); trees x0.31-0.46 of errdag4's, x0.91-0.92 of hybrid6's.
+- A finding: a ctx DAG that has made no router split is the T-*-Ne tree of its recipe and seed. D-P z30#1 and
+  T-P-Ne#1 (error-dag-probit-p1 @366), D-L z160#1 and T-L-Ne#1 (error-dag-p1 @361) play identical own games and
+  self-games. The leagues' train seed is the league seed plus cycle plus replicate step, independent of the recipe,
+  so D-P z30 / z20 and D-L z160 / z120 lines begin identical in the global league until a router split.
+
+WHAT CHANGED (fastbin/hybrid14-src = hybrid13-src plus errdag4's model code)
+- errdag4's model sources merged into hybrid13's (path context: pathctx.rs, the BDD's sibling sets and cells,
+  Graph::node_predict_path; router splits with --router-split-z and --router-split-limit; probit leaves and cells;
+  errdag4's per-step base cache in training). The non-DAG kinds keep hybrid5-13's paths (compound, fastprobit, root
+  cut windows, hybrid6's training, the arena's shared loads).
+- compound.rs (hybrid5's fixed-point tree/DAG play at depths 1-2): a DAG with path context plays there while no
+  node's path table has cells (Graph::has_cells, new in delegation.rs); then every node predicts with its classifier
+  alone and routes by its argmax, as without path context. With cells it plays in errdag4's float path.
+- Built with nice -n 15 cargo build --release -j 2; cargo test --release: all pass (unit-tests.log).
+
+IDENTITY (all outputs under fastbin/hybrid14/id unless said)
+- train_id14.txt: errdag4's train_id configs (30 rounds with leaf and router splits on the errdag sweeps' rounds, 100k
+  split threshold; LR and probit; bdt, ctx z0/z5/z30/inf, ctx z0 split limit 8, bdd z0 without context, flat), seeds
+  11 and 12: every model and state file and the stdout (timings masked) SAME as errdag4's (fastbin/errdag4/id/train),
+  and the trees and flats SAME as hybrid6's. 36 comparisons, failures 0. Router sets formed (3-4 sets, 36-66 cells).
+- live_train_id14.txt: one training round from the live states of D-L z0 x2, D-P z0 x2, T-L-Ne, T-P-Ne and two
+  cluster-merge trees: SAME against errdag4 and hybrid6. id/v0: version 0 of D-P and D-L ctx lines SAME.
+- play_id14.txt: 161 comparisons SAME, failures 0: the leagues' own-calibration command for 15 models (the final
+  versions of error-dag-probit-p1 @366, error-dag-p1 @361 and G1-G6; DAGs with and without cells), and arenas for 23
+  pairs at depths 1, 2 and 3 at T 0.1 and 0.02, plus 4 mixed-depth pairs, each with the reference's own-game
+  calibration. The reference: errdag4 for any pairing with a DAG, hybrid13 otherwise.
+- dry14.txt: whole-cycle dry runs of both DAG experiments from errdag4's mid-cycle snapshots (paths rewritten),
+  the live engine (md5 4c4a1194..., unchanged) running 2 cycles with errdag4 and with hybrid14 as the tournament
+  binary and the DAG lines' training binary: error-dag-probit-p1 0 of 3,724 key files differ, error-dag-p1 0 of
+  2,076 (models, states, ratings, Elo history, head-to-head, games.csv, self_games.csv, entries, players, own
+  calibration records); the second cycle's 12,291 game files identical. Only lines.csv (the binary's path),
+  scan-cache and totals.csv (times) differ.
+
+NOT VERIFIED
+- Ply 3 and deeper play the float path (identical at depth 3 in play_id14); outcome search (self-play's wld-score,
+  search labels) was not compared on DAGs (nothing runs it on them).
+- compound's caps: graphs over 64 nodes play in float (as on hybrid13).

@@ -1,0 +1,61 @@
+ARENA OWN-GAMES CACHE: leagues/arena.py SHARES OWN CALIBRATION GAMES ACROSS ARENAS (2026-11-11 ~01:10 to ~01:35, the
+hybrid10 implementation agent, from the 11-11 ~00:50 performance review's item 2)
+
+RESULT
+- leagues/arena.py (backup: leagues/arena.py.before-owncache, md5 b5b842d3...; new md5 6bcd4cef...). Replaced at
+  ~01:30 by a rename of a verified copy (leagues/.arena-owncache.py) after checking that arena.py was still the
+  backup's bytes. No arena.py process ran then. Processes that imported the old module (the dashboard) keep it until
+  they restart; nothing they call changed.
+- What changed:
+  - make_own takes an entry's own games from leagues/arenas/.owncal-cache/<key>/ when they are cached. It copies them
+    with cp --reflink=auto and checks each copy's size and md5 against the entry's key.json. Games it makes go into
+    the cache, read-only, with key.json.
+  - own_cache_key: sha256 over the `arena` command with the paths left out (own_args, own_play), the md5 of the
+    arena's model copy, the md5 of the held-out games (None without) and the md5 of the owncal binary. The game
+    files hold no path (checked: no "/home", "models/" or "owncal" in them).
+  - A store onto a key already cached (two runs at once) compares the bytes. A difference logs a WARNING and drops the
+    cache entry.
+  - cache_trim keeps the cache to 20 GB (apparent sizes; oldest by last use first) and removes .tmp- leftovers older
+    than a day.
+  - prepare() logs "N from the shared cache, M made (X CPU s)". drop_own_games is unchanged; its message now says
+    the next run takes the games from the cache.
+  - Config key "owncal_cache" (default true; arenas made before have none and use the cache). false gives the old
+    behaviour exactly. keep_own_games keeps its meaning: false still removes the arena's own copy when a run ends.
+  - CHESSAI_OWNCAL_CACHE moves the cache, for tests.
+- The cache was seeded with the test's 31 verified entries: ply3-cold, cold-final-probit-widen-p1b, nb-settings and
+  cal2-routing; 362 MB apparent size, reflinked. key.json "arena" names the original arena and "seeded" says how
+  they were made.
+- leagues/ARENA.md: the Calibration section, the defaults and the owncal/ files.
+
+EXACTNESS (cachetest.py, remake.py, cachetest2.py; logs cachetest.log, cachetest2.log; 71 checks, 0 failures)
+- Four finished arenas were rerun from copies with the candidate code and an empty test cache: diag/ply3-cold (lr,
+  probit, fm; hybrid8 and hybrid9 own games), diag/cold-final-probit-widen-p1b (probit, bdt with probit leaves),
+  pairs/nb-settings (cnbp; hybrid4gfx and hybrid9) and diag/cal2-routing (lr and bdt with LR leaves, calibrated at
+  depth 2, hybrid8). Each copy's model paths pointed at copies of its models; nice 19.
+  1. Calibration step with games made fresh: prepare(), then the arena's tournament command with --tournaments = the
+     round-robins played, which only refits the calibrations and rewrites the tables. For every entry the
+     "calibration on" line equals the original run's (one per entry over all its chunks). ratings.csv,
+     head_to_head.csv and games.csv equal the original's. check_calibrations found 19 experiment versions identical
+     to their experiment's record, none different (12 have no record).
+  2. drop_own_games, then the same step from the cache: 31 of 31 entries restored. The restored games are
+     byte-identical to step 1's, the calibration lines and tables are identical again, and each .arena log says
+     "from the cache".
+  3. 16 entries were remade independently (the `arena` command into a fresh dir) and are byte-identical to the
+     cache: lr at depths 1 and 2, probit, fm, bdt with LR leaves (depth 2) and probit leaves, and cnbp; on hybrid4gfx,
+     hybrid8 and hybrid9.
+- Other paths (cachetest2.py):
+  - storing equal games onto a cached key keeps the entry; different games log a WARNING and drop it;
+  - a damaged entry (a byte flipped) or a missing one is refused and leaves no directory;
+  - restored files are mode 0644;
+  - a trim below the cache size removes the oldest entries and a stale .tmp- dir;
+  - with owncal_cache false the games are made and the cache isn't touched.
+- `arena.py status` prints byte-identical output with the old and the new arena.py (ply3-cold).
+
+SAVING
+- Own games cost 1.0-1.1 CPU s an entry at calibration depth 1 (lr, probit, cnbp, probit-leaf trees, fm) and ~9.5 s
+  at depth 2 (cal2-routing: 85.1 s for 9). A cache hit costs about 0.1 s (reflink and md5 of ~12 MB).
+- The review counted ~416 CPU s of remakes in the arenas since 00:00, about 13% of arena CPU and 18-35% in the
+  15-round diag arenas. Every repeat of a cached entry is now free: an extended arena (ply3-cold paused at 40), and
+  an entry in several arenas (lr-settings-new F-L 0.0125@136 was in 5 by 00:50).
+
+FILES: cachetest.py, remake.py, cachetest2.py, cachetest.log, cachetest2.log (st/, the test copies, removed).

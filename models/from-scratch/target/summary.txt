@@ -1,0 +1,225 @@
+TARGET: GAP ERROR TARGETS, ROUTE-BEFORE-TRAIN AND A SPLIT BOOTSTRAP (2026-11-10 ~00:50 to ~02:30, a fork)
+
+Task: build the router-training changes the theory asks for (theory/summary.txt, recommendations 1, 2 and 7) as three
+flags in a new binary, all off by default; show that the binary is identical to chessai-hybrid5 with the flags off; and
+check offline, in bddstudy's setup, whether the mechanisms do what the theory predicts.
+Not touched: the running league, leagues/, rs/ and bin/ (apart from the new file). No commits.
+
+BUILT
+- Binary: models/from-scratch/bin/chessai-target (md5 ff27f7d3d0e0bd875a42d7ae2054fde0). It is a new file.
+  - Source: models/from-scratch/target-src, a copy of fastbin/hybrid5-src.
+  - The change: target/target.patch (diff of src/, 1,122 lines).
+  - Everything else is chessai-hybrid5's: commands, flags, files and play.
+- The flags apply to bdt and bdd training (train and self-play).
+  - Like the other training options, they are not saved in model files. So the models load and play in chessai-hybrid5
+    like any other model.
+  - They are recorded in the state's options (the Debug of DelegationParams), but printed only when used. So a flags-off
+    state is byte-identical to hybrid5's.
+  - A state resumes (--start or --resume) only with the same options. Otherwise it is refused: "the state's options
+    differ from this run's".
+
+1. --error-target gap (a new ErrorTarget), with --target-gap-cap C (default 4)
+   - Per example, with the children's errors l_k: w_k = min(l_max - l_k, C).
+   - If sum(w) = 0 (all the errors tie, as for the identical copies right after a split), the router does not train.
+     The example is still routed and trains a child.
+   - Otherwise the router takes ONE weighted step on the label w/sum(w), with weight sum(w):
+     - CNBP: adds w_k to class k's counts (fractional counts).
+     - LR: one AdaGrad step with gradient sum(w) p - w. Never B separate steps.
+   - TAN routers are refused: "--error-target gap needs LR or CNBP error routers (a TAN router trains on unit counts
+     only)". A TAN's NB part counts every example as 1. Probit routers are refused by the same check.
+   - For B = 2 it is the pairwise (TAO) gap: the better child, weighted by |l_1 - l_2|, and nothing on a tie.
+   - It applies wherever error routers train:
+     - --route error;
+     - the error router of --route cluster --route-switch, both while it is compared and after the switch;
+     - BDD routers and their router-split sub-routers;
+     - BDD delegator trials.
+   - router_error under gap (the window statistic that drives the split triggers): the weighted error of the step.
+     - That is sum(w) times the router's error against w/sum(w). With --error log, it is sum_k w_k (-ln p_k).
+     - It is 0 for a silent step.
+     - It is the loss the weighted step descends.
+     - It is recorded for every scored example, as before, so windows close at the same pace and the counters keep
+       their meaning.
+     - Its scale is not Best's: it is in nats of gap, and near 0 while the children are alike. So router-window settings
+       tuned under Best do not carry over.
+   - Refused: --target-gap-cap without gap, or a cap of 0 or less.
+
+2. --route-before-train
+   - The example trains the child the error router picked before its update (theory 4.1). Prediction is unchanged.
+   - Only for error routers: --route error, or --route cluster with --route-switch (after the switch). Refused otherwise.
+
+3. --split-bootstrap N (default 0)
+   - A router made by a leaf split under --route error sends its first N scored examples (and any unscored ones meanwhile)
+     to the child a hash picks.
+     - The hash is position_hash (the one cluster_pick uses), mixed with the node's index by a splitmix64 finaliser. So
+       different delegators split the same positions differently.
+     - It is deterministic.
+   - The router still trains on its targets as usual.
+   - The count is the node's num_trained_total. That counter is already saved and restarts at 0 at the split, so nothing
+     new is saved and a resume continues the count.
+   - Refused for BDDs: router splits make copies whose counters restart.
+   - Refused for cluster routing: cluster routers have their own hash start (threshold/5).
+   - In the mechanism runs, N = 100,000, one split window (theory 9.2: "route the first window of a new router by a
+     hash"). The presplit precedent used threshold/5.
+
+- Not exercised by real runs: the gap path of BDD delegator trials. Unit tests cover it, but the identity run's only two
+  trials were undone.
+
+IDENTITY (scripts and outputs in target/identity/)
+
+Flags off: byte-identical to chessai-hybrid5, by the methods of hybrid5/summary.txt and bddctx/summary.txt.
+- Training (identity.sh): 8 rounds of bddstudy's training data, threshold 100k, LR leaves. In all 18 runs, every model,
+  state and log is identical (logs with the timings stripped). The runs:
+  - BDT with LR routers, Best (tle) and Soft (tle-soft);
+  - BDT with CNBP routers, Best (tne) and Soft (tne-soft), with --reset-leaves inf;
+  - BDT with cluster routing, --route-switch 3 and an LR error router (tnls);
+  - each of those five from scratch and resumed (4 rounds, then --start on the next 4);
+  - BDD: CNBP Best (dne), the same with a split trial (dne-trial), and LR Soft (dle-soft).
+  - Splits by round 8: tle 2, tle-soft 3, tne 2, tne-soft 2, tnls 3; dne 4, dne-trial 0 (its trials were undone),
+    dle-soft 6. (identity.out's "splits" column counts log lines; see the note at its end.)
+- Self-play (selfplay.sh), on the league's path:
+  - rounds, then --resume, then the own step's train --start;
+  - arms tne, tle (12 saved games) and dne;
+  - all identical.
+- Tournament with the league's flags (play.sh): bddctx's 9 players, 72 games. games.csv and the saved games are
+  identical.
+- The mechanism check's CNBP control (nb-best) is bddstudy's bdt-s1 retrained; bddstudy used chessai-cyc5.
+  - All 60 models, the round-60 state and the log are identical.
+  - The evaluation reproduces bddstudy/cal.csv's bdt-s1 rows exactly at rounds 20, 40 and 60.
+- eval-loss gives the same losses in chessai-bddstudy (which the evaluation uses), chessai-target and chessai-hybrid5. It
+  was checked on flags-off and flags-on models.
+
+Unit tests: all 155 existing tests pass, and 18 new ones do (172 lib tests and 1 main test; target/tests/all.log). The
+new tests cover:
+- gap:
+  - gap equals the pairwise gap for B = 2;
+  - ties make no update: the router is unchanged and the child trains;
+  - an LR gap step is one AdaGrad step with gradient sum(w) p - w. The AdaGrad sums are checked, against the
+    separate-steps alternative, and so is the router error;
+  - a CNBP gap step counts each child's weight;
+  - gap prefers the calibrated child;
+  - gap trains CNBP and LR routers;
+- route-before-train sends the example to the pre-update pick, and the pick moves only without the option;
+- the bootstrap is a deterministic hash start, and the router still learns during it;
+- resume:
+  - state round trips train on identically with 7 BDT and 2 BDD option variants;
+  - a state resumes only with the same options;
+  - the options' Debug strings;
+- 6 refusals;
+- BDD gap: shared children; routing errors stay silent while shared children tie; BDDs refuse the bootstrap.
+
+Flags on (flagson.sh, and play.sh with players-on.txt):
+- Two runs give identical outputs. Five configurations were each trained twice, and every file and log is identical:
+  - LR gap, bootstrap and route-before-train;
+  - CNBP gap and bootstrap;
+  - LR gap;
+  - BDD LR gap with route-before-train;
+  - cluster routing with route switch, an LR error router, gap and route-before-train.
+- train --start runs with the options, and is refused without them.
+- Self-play with gap, the bootstrap and route-before-train: 4 rounds straight equal 3 rounds then --resume to 4.
+- chessai-hybrid5 loads and plays the models. The tournament had 9 players: 7 flags-on models and the 2 random
+  references.
+  - The flags-on players: four mechanism-run trees at rounds 20 and 60 (one CNBP at depth 2), and the BDD,
+    cluster-switch and self-play models above. Three of the seven play calibrated.
+  - The 72 games are identical in chessai-hybrid5 and chessai-target.
+- Note: train --start is not an exact resume, with or without the flags and in both binaries: it does not reproduce a
+  straight run. The exact-resume checks are self-play --resume and the unit tests' state round trips.
+
+MECHANISM CHECK (offline; target/run.sh, evalcal.sh, stats.sh, analyze.py, whose output is analysis.txt)
+
+Setup, as in bddstudy:
+- Data: offline-c15 RRs 80-83 in 60 rounds.
+- Training: BDT, LR leaves, B = 3, threshold 100k, split limit 10, forget 1, error log, use-probs, seed 1.
+- Test: RR 84 in 10 parts. The calibration for each part is fitted on the other fold.
+- Arms, one factor at a time:
+  - lr-best (--router lr): new, because no bddstudy, bddtrig or bddhome run used LR routers;
+  - lr-gap;
+  - lr-gap-boot (N = 100k);
+  - lr-gap-boot-rbt;
+  - nb-best: byte-identical to bdt-s1;
+  - nb-gap-boot.
+- Size: all arms had 21 leaves (the split limit) by round 40. At round 20 they had 11, except lr-gap-boot with 9.
+
+Notes on the table:
+- U = I(leaf; who's winning) / H(leaf), measured on games/heldout-t01. The reference is F-L-c lr5518.
+- Effective leaves = exp(H) of the leaf traffic over the 10 test parts.
+- "Starved" counts delegators that send under 2% of test part p0's decisive positions to some child.
+- "Largest" is the delegators' mean largest share.
+
+                   U at rounds 20/40/60   effective leaves 20/40/60   starved 40/60   largest 40/60
+  lr-best          0.16 0.15 0.14          8.0  8.5  9.9               4  2            75% 74%
+  lr-gap           0.07 0.09 0.10          8.4 12.4 12.6               3  2            58% 53%
+  lr-gap-boot      0.10 0.07 0.09          7.8 13.9 16.0               0  0            48% 49%
+  lr-gap-boot-rbt  0.11 0.09 0.11          9.4 17.5 15.5               0  0            44% 48%
+  nb-best          0.10 0.09 0.08          9.4 16.2 16.9               2  1            51% 47%
+  nb-gap-boot      0.03 0.07 0.09          9.2 18.3 18.1               1  1            44% 47%
+
+Held-out calibrated log-loss, arm minus comparator, paired over the 10 parts, with 95% t intervals (rounds 20 / 40 / 60).
+Negative means the arm's loss is lower.
+  lr-gap vs lr-best                0.0148 [0.0108, 0.0188] / 0.0022 [-0.0025, 0.0070] / 0.0067 [0.0032, 0.0101]
+  lr-gap-boot vs lr-gap            0.0021 [-0.0035, 0.0077] / 0.0125 [0.0072, 0.0177] / 0.0032 [0.0007, 0.0056]
+  lr-gap-boot-rbt vs lr-gap-boot   -0.0075 [-0.0104, -0.0045] / -0.0145 [-0.0189, -0.0100] / -0.0049 [-0.0073, -0.0025]
+  lr-gap-boot-rbt vs lr-best       0.0094 [0.0048, 0.0140] / 0.0002 [-0.0057, 0.0061] / 0.0049 [-0.0001, 0.0100]
+  nb-gap-boot vs nb-best           0.0130 [0.0099, 0.0161] / 0.0056 [0.0025, 0.0086] / -0.0005 [-0.0034, 0.0025]
+  Levels: lr-best 0.6376 / 0.6449 / 0.6316; nb-best 0.6342 / 0.6264 / 0.6249.
+
+Against the predictions:
+1. "Gap lowers U for LR routers": seen.
+   - Under Best, U is 0.14-0.16. That is the bottom of tonight's league range for LR error routers (0.14-0.53).
+   - With gap, U is 0.07-0.11 in all three gap arms at every checkpoint. That is inside the range of NB routers
+     (0.02-0.12) and cluster routers (0.03-0.11).
+   - The leaves carry less information about who is winning: I(leaf; Ebin) falls from 0.28-0.31 to 0.16-0.26, while
+     H(leaf) rises.
+   - CNBP routers are already low under Best (0.08-0.10). With gap and the bootstrap, U is 0.03 and 0.07 at rounds 20
+     and 40, and about the same at 60 (0.09 against 0.08).
+2. "Gap avoids lock-in to one leaf": mostly seen, for LR routers.
+   - Best's LR routers send 93-98% of the test positions to one child at three delegators by round 60.
+   - Gap alone lowers the mean largest share from 74-75% to 53-58%, but 2-3 delegators still starve a child.
+   - With the bootstrap, no delegator starves a child (largest share 44-49%). Effective leaves on the test traffic rise
+     from 8.5-9.9 to 12.4-17.5 of 21.
+   - CNBP under Best was already fairly even (47-51%). One delegator has kept its middle child at 1% since its split at
+     round 7.
+   - CNBP with gap and the bootstrap: 44-47%, with the root's third child at 2%. Theory 3.1 allows a starved leaf to be
+     the correct attractor.
+3. "Without the bootstrap, splits use their children one at a time": not seen under gap; seen under Best. Source:
+   analysis.txt sections 2b and 2c, the children's training counts after each split.
+   - lr-gap (no bootstrap): every one of its 10 splits had all three children training at the first checkpoint after the
+     split. The least-used child had 14-33% of the first 3-42k examples.
+   - Best: 7 of 10 LR-router splits and 8 of 10 CNBP-router splits started with a child at 0-1% of the examples.
+     - That child took 1-8 rounds to reach 10%.
+     - Two CNBP delegators were still under 10% after 8 rounds.
+     - nb-best's delegator 1 kept its middle child at 1% for 53 rounds.
+   - A likely reason (not measured per example):
+     - Gap is silent only until the first child trains. After that, the router routes by its updated pick, and a fresh
+       LR router's pick follows each step (theory 4.2: the leak is total for a fresh router). So the outcome noise in
+       the realised gaps breaks the remaining tie within a few examples.
+     - Under Best, ties go to the first child, so the untrained copy's logit falls on every step until that copy is
+       strictly best.
+     - Gap with route-before-train but without the bootstrap was not an arm. Without the leak, the one-at-a-time
+       pattern may appear there.
+4. Offline loss (a sanity check only: offline loss does not predict play): no new option beats Best.
+   - Gap costs 0.002-0.015 nats with LR routers.
+   - The bootstrap on top of gap costs more at rounds 40 and 60.
+   - Route-before-train wins back 0.005-0.015 nats at all three checkpoints, which fits the leak of 4.1 costing loss.
+     The full combination is level with Best at round 40 and 0.005 behind at 60 (an interval that touches 0).
+   - CNBP with gap and the bootstrap is worse at rounds 20 and 40, and level at 60.
+5. Also seen:
+   - Under gap, the LR trees' leaves disagree more: the mean |log-odds difference| of a pair of leaves is 1.3-2.0, against
+     0.7 under Best. CNBP trees: 0.74-0.97 against 0.78-0.82.
+   - The bootstrap's 100k examples split each new router's data into thirds by hash. Deeper routers took up to 8 rounds
+     to finish it: 3 of lr-gap-boot-rbt's 10 delegators were still inside it at round 40, and none at 60.
+
+CPU USED (all runs at nice 19 with RAYON_NUM_THREADS=1, at most four single-threaded jobs at once)
+- Builds and unit tests: about 5 CPU-min, estimated from the wall times (cargo -j 2).
+- Flags-off identity: training 143 s, self-play 5 s, tournament 1 s.
+- Flags-on checks: 59 s, plus the tournament, 1.4 s.
+- Mechanism runs: 6 runs of 67-79 user s, 449 s in all.
+- Evaluation 75 s; routing and U 82 s; analysis and small checks about 30 s.
+- Total about 19 CPU-min, against a budget of 60.
+
+FILES (target/)
+- run.sh, evalcal.sh, stats.sh, analyze.py, analysis.txt, cal.csv and cal/, ww.out, routing/.
+- m/ARM/: 60 models per arm, the state, train.log and time.
+- who_wins_share.py: adapted from the leafoutcome copy, adding effective leaves and test traffic. The original is in
+  who_wins_share.orig.py.
+- identity/: the identity, self-play, flags-on and tournament scripts with their outputs (players.txt, players-on.txt).
+- target.patch and tests/all.log.

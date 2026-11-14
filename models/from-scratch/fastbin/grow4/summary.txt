@@ -1,0 +1,113 @@
+grow4 (2026-11-11): the LEAF part of the analyst's grow4 (theory-2 6.47 (1) and (b), 6.48), arm B of a later one-factor
+test against grow1. Built on grow3-src as fastbin/grow4-src (grow4.patch = diff against grow3-src/src: bdt.rs tests,
+delegation.rs, main.rs; Cargo.toml unchanged). Release build at nice 10 with 4 jobs, no warnings.
+Binary md5 73239411918fcc179d5b03b458d8024b: cand/chessai-grow4, installed as models/from-scratch/bin/chessai-grow4
+(cp -n, a new file). Routers are grow3's (the router part of 6.47 is not built).
+
+FLAGS (only with --split-rule grow; refused with a --router-split-rule or without the grow rule; defaults = grow3 = grow1)
+  --grow-gate {stall|age}       default stall. age: a leaf is eligible once it has closed --grow-age-windows of its own
+                                windows (default 3, at least 1, refused under stall). No stagnation test. Credits, trial
+                                slots and the doubling back-off are unchanged.
+  --grow-priority {excess|snapshot}  default excess. snapshot: the eligible leaf with the SMALLEST last snapshot gain
+                                goes first. Leaves without a measurement rank after measured ones. Ties and unmeasured
+                                leaves fall back to grow1's order (excess, then n).
+  --grow-min-gain X             default 0 (off). A trial is kept iff gain > the z bar, gain > the MDL bar (the MDL bar is
+                                0 under --grow-mdl 0) and gain > X. X must be finite and at least 0.
+  Paired snapshot gain (on under --grow-gate age or --grow-priority snapshot):
+    - At each window close, the leaf's model is copied.
+    - Through the next window, every example the leaf scores is also scored by the copy, before the online leaf trains.
+    - d = loss(copy) - loss(online), in the --error measure (nats under --error log), the close lines' units.
+    - d is blocked in 20 blocks like the window. At the next close the log gets
+      "grow snapshot of leaf L at N n: gain +m (block se s over 20 blocks, z ...)" and a fresh copy is made.
+    - The first d after a close is exactly 0: the same model and the same predict_training as the leaf's cached output.
+    - A trial start or an undo drops the leaf's copy; its next close makes a new one.
+    - The copy and its blocks are saved in the state, so resume is exact mid-window.
+    - New options enter the state's option string only when set, so grow3's states read and write byte for byte.
+
+CHOICES WHERE THE DIRECTIVE WAS OPEN (the simplest reading)
+  - Age counts all of a leaf's own closes, including those before an undone trial: closes persist across the restart,
+    as grow1's back-off counts them. After an undo, the back-off and one fresh close govern, so a leaf backed off
+    1 window re-enters at its next close (the age-snap smoke's leaf 1 at 21.17M).
+  - Snapshots run under either condition the directive logs them for (gate age or priority snapshot), otherwise off.
+  - Min-gain 0 is off, not a "> 0" bar, so the default verdict is grow1's exactly.
+  - P1 has 112 training rounds (22.4M positions), so the smoke ran to 22.4M, not 25M.
+
+TESTS
+  unit      230 lib + 1 main pass (unit-tests.log): grow3's 224 and 6 new:
+              grow4_age_gate_needs_own_windows_not_stagnation (eligibility cases; in a run, the first start at close
+                3 and each restart exactly at its back-off close)
+              grow4_snapshot_gain_is_the_paired_difference_on_the_same_examples (both losses recomputed independently;
+                blocks and (gain, se) equal exactly; the first difference after each close is 0)
+              grow4_snapshot_priority_picks_the_smallest_learning_gain (5 cases x both priorities)
+              grow4_min_gain_is_a_third_bar (kept at 0.9 x gain, undone at 1.1 x gain, z and MDL bars off)
+              grow4_snapshots_resume_exactly (mid-window states round-trip; refused under other options; saves every
+                997 examples = one process)
+              grow4_options_are_recorded_only_when_set
+  CLI       cli_checks.txt: 14 refusals and 5 acceptances OK. Explicit defaults (--grow-gate stall
+            --grow-priority excess --grow-min-gain 0) are byte-identical to no flags.
+  identity  Without the new flags, grow4 = grow3 = grow1 (models, states and logs with times masked):
+              growth rule on P1, id_p1grow_g4.txt: 8/8 SAME against grow3 AND grow1:
+                tpneg (T-P-Ne-grow, 40 rounds): 1 trial, kept
+                tpneg-fast (W 200k, credit 1M): 4 trials, 1 kept, 2 undone
+                tlneg-fast: 3 trials, 3 undone
+                tpneg-mdl0: 4 trials, 3 kept
+              grow3's suites: train 28/28 SAME, live 8/8, P1 4/4 (tpne, tlne, dpctx, dlctx), play 161/161.
+  resume    resume-age-snap.txt and resume-stall-snap.txt. P1, 30 rounds, W 200k, credit 1M. A chain of 30 one-round
+            processes equals one process in all 30 models, the final state and the rule log lines. All 29 of 29 saves
+            carried a snapshot copy and partial snapshot blocks.
+              age-snap (the directive's 4 flags): 13 saves mid-trial; 5 starts, 4 kept
+              stall-snap: 6 saves mid-trial; 4 starts, 1 kept, 3 undone
+  play      play_rules_g4.txt: the smokes' models (13 nodes) and the resumes' (16 and 4 nodes) load in hybrid15 and
+            hybrid16 and play byte-identical games to grow4 at depths 1 and 2: 16 SAME.
+  grow1     The age-snap smoke's models equal grow1's smoke models (fastbin/grow1/smoke/tpne-grow) byte for byte at
+            rounds 1-105. They part at 106, the first round in which the age gate opened a leaf the stall gate kept
+            shut: leaf 1 at N 21,169,677, where grow1 logged "first window, streak 0 ... no candidate".
+
+SMOKE: T-P-Ne-grow's train args (W 1M, credit 5M, cap 2, trials 2, z 2) on all 112 rounds of P1 (22.4M), seed 7101,
+nice 15, 1 thread. Logs in smoke/TAG.log, summaries in smoke-TAG.txt.
+  age-snap-m0  The directive's run: --grow-gate age --grow-priority snapshot --grow-mdl 0 --grow-min-gain 0.001.
+               starts: leaf 0 at 5.00M, leaf 3 at 10.69M, leaf 1 at 15.32M, leaf 4 at 20.24M (open at the end)
+               kept 0 at 6.00M: gain 0.0592, z 26.7
+               kept 3 at 12.24M: gain 0.0407, z 16.0
+               kept 1 at 18.26M: gain 0.00217, z 3.8 (bars: z 0.00116, min 0.001)
+               3 kept, 0 undone, 1 open; 10 nodes and 7 leaves kept (13 and 9 with the open trial).
+               User CPU 74.5 s (206 s wall at load ~12).
+               Its 12 snapshot lines:
+                 leaf 0 at N 2000001: gain +0.0060652 (se 0.0004928 over 20 blocks, z +12.31)
+                 leaf 0 at N 3000001: gain +0.0037662 (se 0.0003755 over 20 blocks, z +10.03)
+                 leaf 0 at N 4000001: gain +0.0030789 (se 0.0002777 over 20 blocks, z +11.09)
+                 leaf 0 at N 5000001: gain +0.0032103 (se 0.0003018 over 20 blocks, z +10.64)
+                 leaf 3 at N 8253731: gain +0.0045873 (se 0.0004241 over 20 blocks, z +10.82)
+                 leaf 3 at N 9816391: gain +0.0034995 (se 0.0003635 over 20 blocks, z +9.63)
+                 leaf 1 at N 10690397: gain +0.0030629 (se 0.0001810 over 20 blocks, z +16.92)
+                 leaf 1 at N 13592238: gain +0.0036585 (se 0.0003076 over 20 blocks, z +11.89)
+                 leaf 4 at N 15322881: gain +0.0044734 (se 0.0004724 over 20 blocks, z +9.47)
+                 leaf 4 at N 17496730: gain +0.0036141 (se 0.0003448 over 20 blocks, z +10.48)
+                 leaf 4 at N 19663900: gain +0.0017884 (se 0.0001556 over 20 blocks, z +11.49)
+                 leaf 8 at N 22062930: gain +0.0029527 (se 0.0002129 over 20 blocks, z +13.87)
+  age-snap     6.48's arm B: the gate and priority only, MDL 1.
+               The first three starts are the same.
+               Leaf 1's trial undone at 18.26M (gain 0.00217 < MDL 0.00712).
+               Leaf 4 started at 19.66M and was kept at 21.82M (gain 0.0177, z 14.6).
+               Leaf 1 restarted at 21.17M (open; no snapshot gain yet).
+               3 kept, 1 undone, 1 open; user CPU 72.8 s.
+  grow1        The baseline: the same flags, stall gate, MDL 1, 108 rounds (grow1/smoke-run.txt).
+               The same starts on the same leaves at 5.00M, 10.69M, 15.32M and 19.66M, and the same verdicts; 68.5 s.
+  => At W 1M and a credit per 5M on P1, the credits bind. Every schedule had exactly one eligible leaf, and the stall
+     gate was open at each of those closes too, so neither the gate nor the priority changed a choice before 21.17M.
+     The directive's arm differs from grow1 only through min-gain replacing MDL: the third trial (gain 0.00217) is kept.
+  prio-w100k   The directive's flags at W 100k with a credit per 2M, to exercise the priority on real data (not a recipe).
+               14 starts, 12 verdicts (8 kept, 4 undone); 31 nodes, 21 leaves.
+               12 schedules chose among 2+ eligible leaves, each picking the smallest snapshot gain. For example,
+               leaf 1 at +0.00187 went before leaf 2 at +0.00219, though leaf 2 had the larger excess (0.280 vs -0.153).
+               All rule checks pass; user CPU 126 s.
+  Snapshot gains seen: 234 measurements over the smokes and resumes, none negative, from +0.0012 to +0.0182.
+    At W 1M: +0.0018 to +0.0061, median +0.0036, z median 11.
+    The root: +0.0061 at 2M, +0.0038, +0.0031, +0.0032 at 5M.
+  The min-gain bar of 0.001 never decided a verdict: the z bar was above it in every trial (lowest z bar 0.00116).
+  Snapshot cost: user CPU per round 0.650-0.665 s vs grow1's 0.634 s (about 2-5%); RSS 55 MB.
+
+FOR THE ANALYST: on P1 every leaf was still learning at every window close: the copy one window old lost by 0.0012 to
+0.018 nats per example, z about 8-11. A fixed pool can't show the age gate's purpose (stall as drift in league fields).
+Here it differed from stall once: after an undo, age re-admits a leaf at its next close, while stall waits for a fresh
+2-window streak.

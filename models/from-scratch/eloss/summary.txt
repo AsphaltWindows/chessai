@@ -1,0 +1,73 @@
+Topic 2 (2026-11-07/08 night): expected-loss router target in trees (--error-target eloss).
+
+Verdict: as a training target it is clearly harmful, so there are no lines and no smoke.
+- The routers rank the children better: the root's routing regret falls to 0.
+- But because a router's pick also decides which child trains on the example, the regression routes each position to
+  the child that is already best there, and specialization feeds itself.
+- The leaves end up specialists on narrower data, and the tree is 0.0235 worse.
+- The best-child target's noise was keeping the leaves generalists.
+- What errwhy showed still stands: refitting routers with this target on frozen children gains. So the target belongs
+  in a router used only for play, not in the one that assigns training examples (see "Next", below).
+
+Code: ../eloss-src = ../sparsefit-src + eloss.patch (eloss-src/eloss.patch).
+- ErrorTarget::Eloss: each child's error below the children's mean, regressed by the router's logits. Squared error,
+  one AdaGrad step (Logreg::train_regress).
+- Routing goes to the largest logit, i.e. the least predicted error.
+- It trains every error router:
+  - plain error routing (--router lr);
+  - switch trees' error routers, while comparing and after the switch (--error-router lr with --route-switch);
+  - split trials' routers.
+- The router's recorded error is its log-loss on the best child, as with best targets.
+- Graph::new refuses it for routers that are not LR.
+- CLI doc updated. Three new unit tests:
+  - eloss prefers the calibrated child where best prefers the overconfident one, and follows the mean error for
+    absolute error;
+  - it trains LR routers;
+  - it refuses CNBP routers.
+- 138 tests pass.
+
+Binary: ../bin/chessai-eloss (md5 63408b9c33841b992d8276c3ee57f570), a superset of chessai-sparsefit (the tournament
+binary).
+- Identity, chessai-eloss against chessai-sparsefit, 0 non-log diff lines on each (identity.sh -> identity.out):
+  - probit/identity/run2.sh, 80 files;
+  - tanroute/identity/run.sh, 26 files;
+  - lrshare/identity/extra.sh, 25 files;
+  - identity/lrrouters.sh, 24 files: LR-router trees (train, self-play fresh and resumed, with and without sharing)
+    and a switch tree with an LR error router.
+- chessai-sparsefit against chessai-lrshare on run2.sh: 0.
+
+Offline (offline.sh, offline2.sh): offline-c15, 100k split threshold, as leshare/run.sh. Calibrated, with 95% paired
+intervals over the 10 parts:
+
+| model | log-loss (full test) | winner | leaf-pair diff | against comparator | winner |
+|---|---|---|---|---|---|
+| le-eloss, comparator le-100k (best target) | 0.6493 | 0.3422 | 1.22 (0.50) | 0.0235 [0.0196, 0.0274] | 0.0078 [0.0040, 0.0116] |
+| le-s01-eloss, comparator le-s01 (share 0.1) | 0.6387 | 0.3411 | 0.55 (0.29) | 0.0177 [0.0141, 0.0213] | 0.0112 [0.0087, 0.0138] |
+| nls-eloss (T-L-NLs's recipe), comparator nls-100k | 0.6189 | 0.3299 | 0.52 | 0.0000, identical | |
+| nls0-eloss (--route-switch 0), comparator nls0-best | 0.6189 | 0.3299 | 0.52 | 0.0000, identical | |
+
+Routing on the test round (bin/chessai-eloss routing), le-eloss against le-100k:
+- Root regret (against each group's best child): 0.0000, against 0.0028.
+- Against each position's best child: 0.142, against 0.071.
+- The children differ much more, e.g. on the positions it routes to child 1:
+  - le-eloss's children score 0.40, 0.51 and 0.43;
+  - le-100k's score 0.44, 0.43 and 0.43.
+- The deeper delegators' regrets are larger, 0.002-0.013 against 0.0003-0.0016.
+- The leaves are worse at the root level in total: 0.342 against 0.334, error weighted by routed share.
+
+Switch trees: no delegator of T-L-NLs's recipe ever switched to its LR error router in this benchmark, even at
+--route-switch 0. The error router's mean gain over the cluster router was never positive. So the target had no
+effect: the model files are identical. This doesn't test eloss in switch trees; it says their error routers lose.
+
+T-L-Ne's recipe: CNBP routers can't regress, so eloss on that recipe would mean LR routers, i.e. le-eloss.
+
+Next (idea, not built): an eloss play router.
+- Each delegator would train a second LR router on every scored example with this target, and predict with it.
+- The training routers would still assign the training examples, so the leaves stay generalists.
+- Model files would carry the play routers in the routers' place, so the tournament binary is unchanged. State files
+  keep both.
+- errwhy B is the evidence: an LR regress router refitted on frozen children gained 0.013 on T-L-Ne-c and 0.0026 on
+  T-L-Le-c.
+- Offline, it is exactly paired: training is identical, only the test-time routing differs.
+
+CPU: identity 0.7 min, offline 1.6, offline2 0.9; about 3.2 CPU-min, builds excluded.

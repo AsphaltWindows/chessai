@@ -38,7 +38,7 @@ The summary report ("chessai: final report") and a catalogue of every avenue exp
 | `rs/` | The Rust engine (crate `chessai`), one command-line program covering the steps below. |
 | `leagues/` | The experiment system used from 9 November 2026, with docs in BUILD.md, FORMATS.md, ARENA.md and DASHBOARD.md. |
 | `cycles/` | The earlier league drivers, the cycle system and the champion run: code, configs, lineages and cycle reports. |
-| `models/` | The research notes (`*.md`) and their archive. Models, binaries and study folders on disk are not tracked. |
+| `models/` | The research notes (`*.md`) and their archive; under `models/from-scratch/`, each study's write-up and engine source copy. Models, binaries and data stay on disk only. |
 | `c_src/`, `py_src/` | The original C and Python implementation. |
 | `games/`, `selfplay/` | Data folders. They are not tracked. |
 
@@ -58,9 +58,9 @@ The experiment system (`leagues/`) has these parts:
 | `dashboard.py` | The dashboard and the Play page |
 | `library/` | An index of plateaued final models |
 
-## Code that is not in git
+## Engine versions after 9 November
 
-`rs/` holds the engine as committed on 9 November 2026. Later versions were built as source copies under `models/from-scratch/<study>/`, and their binaries sit in `models/from-scratch/bin/`. Those later versions add:
+`rs/` holds the engine as committed on 9 November 2026. After that, each study built its own copy of the crate under `models/from-scratch/`, as `<study>/src` or `<name>-src`, next to its write-up (`summary.txt`). The copies' source and the write-ups are in git. Their binaries (`models/from-scratch/bin/`), models and data are not. The later versions add:
 - probit leaves;
 - growth rules;
 - DAG path context and router splits;
@@ -68,17 +68,21 @@ The experiment system (`leagues/`) has these parts:
 - the exact fixed-point speedups;
 - the Leela converter.
 
-The newest copy is `models/from-scratch/leela/src`. `.gitignore` excludes `models/**` to keep data and models out of the repository, so these copies and each study's write-up (`models/from-scratch/<study>/summary.txt`) exist only on the local disk.
+The engine split into two lines on 13 November, so the newest code sits in two copies:
+- `models/from-scratch/leela/src`: search labels for trees, the shared label cache and the Leela converter;
+- `models/from-scratch/pairs3g/src`: the final pairwise features and the calibration-fit cache.
+
+`.gitignore` still excludes `models/**`. These files were added with `git add -f`; add new ones the same way.
 
 ## Running
 
 ```
-cd rs && cargo build --release          # builds target/release/chessai
-./target/release/chessai --help         # self-play, train, arena, tournament, calibration, eval-loss, ...
-python3 leagues/dashboard.py            # the dashboard on 127.0.0.1:8766 (needs the local league files)
+cargo build --release --manifest-path rs/Cargo.toml   # builds rs/target/release/chessai
+rs/target/release/chessai --help                      # self-play, train, arena, tournament, calibration, eval-loss, ...
+python3 leagues/dashboard.py                          # the dashboard on 127.0.0.1:8766 (needs the local league files)
 ```
 
-The experiment system calls the binaries named in `leagues/recipes.txt` from `models/from-scratch/bin/`, which is not tracked.
+The newer engine copies build the same way from their own folders, for example `cargo build --release --manifest-path models/from-scratch/leela/src/Cargo.toml`. The experiment system calls the binaries named in `leagues/recipes.txt` from `models/from-scratch/bin/`, which is not tracked, so on another machine those binaries have to be rebuilt first.
 
 ## Data on disk
 

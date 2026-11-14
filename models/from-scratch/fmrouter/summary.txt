@@ -1,0 +1,143 @@
+FM ROUTERS: chessai-fmrouter (2026-11-09 ~21:55-22:30, a fork of the coordinator)
+
+Task: a binary in which a factorization machine (FM) can be a BDT router, kept for the future. The user took FM out of
+the error-routers experiment (which runs on chessai-hybrid4gfx) and took probit out of routing altogether, so no spec
+was written. Branch factor: the user chose 3 children. FM routers are tested at 3 and at 2.
+
+BINARY
+- models/from-scratch/bin/chessai-fmrouter, md5 0b410730fd825800372d25dccedb43da. A new file, installed with cp -n.
+- Source: models/from-scratch/fmrouter-src, a copy of models/from-scratch/fastbin/hybrid4gfx-src (the source of
+  chessai-hybrid4gfx). The unmodified copy rebuilt byte-identical to chessai-hybrid4gfx (md5 a3e6d4e6...).
+- Build: cargo build --release -j 2 at nice 19, 51.6 s CPU, 0 warnings. Log: fmrouter/build.log.
+- The full diff against hybrid4gfx-src: fmrouter/fmrouter.diff.
+
+CHANGES (lines added/removed)
+- delegation.rs (+102 -10):
+  - NodeKind::Fm (clap value "fm") and NodeModel::Fm(Fm). Every match covers it: kind, class_num, train, predict,
+    predict_log, prediction during training, refresh (none), forget (divides the AdaGrad sums of the vectors and the
+    linear part), save, the tree text format, options, and state files (tag 4).
+  - DelegationParams gets `fm: FmOptions {factors, scale, seed}` (defaults 8, 0.01, 1, as --fm-*). Its Debug (the
+    options a state file records) shows it only when a router or error router is FM, so every other tree's state
+    files are unchanged.
+  - DelegationParams::new_router_classifier(kind, categories, node, seed_offset) makes a router over branch_factor
+    children. An FM router's vectors start from fm.seed plus the node's index; an error router beside a cluster router
+    adds a fixed offset. Its step size is --lr-rate. Graph::new_router and new_error_router now take the node index.
+    new_classifier refuses FM, so leaves can't be FMs; Graph::new asserts it too.
+  - Model files: an FM router is written in FM's own text format. The parser accepts "fm" nodes only as routers whose
+    class count is the branch factor. Loading takes the FM routers' factors, and the step size from the LR leaves (or
+    from an FM if there are none).
+- fm.rs (+52 -2): Fm::from_tokens (from_text now calls it), rate(), factors(), and write_state/read_state for exact
+  resume.
+- main.rs (+22 -6):
+  - delegation_params passes --fm-factors/--fm-scale/--fm-seed.
+  - Checks (train and self-play): --leaf fm is refused for every tree, FM routers are refused outside --model bdt, and
+    --fm-factors must be 1..32 for FM routers.
+  - A tree root of --leaf fm is refused. The bench's params get the defaults. Help text mentions FM routers.
+- bdd.rs (+2 -2): passes the node index to new_router/new_error_router.
+- ht.rs (+1): a Hoeffding tree refuses an FM root.
+- Cluster routing needed no new code, so it is allowed (see below).
+
+IDENTITY (new binary against chessai-hybrid4gfx; everything at nice 19, RAYON_NUM_THREADS 2)
+- (a) train: F-L, T-L-Le, T-L-Ne and T-L-Te (recipe args with --split-limit 1 --split-threshold 100000), 2 rounds of
+  held-out games, then a --start continuation (the model for F-L, the state for trees). 18 of 18 files identical (models
+  and states). The logs are identical once timings are masked.
+- (b) tournament with the engine's flags (--use-probs --anchor random --seed 1 --no-catch-up --retired --prior-draws 0
+  --reports-last --sparse-fit --save-games --game-cpu): 7 players (references, F-L at ply 1 and 2, three trees at ply
+  2), 6 double round-robins, 252 games. Every file is identical (games.csv, ratings, head-to-head, elo history, 1,008
+  saved game files) except game_cpu.csv and the log, which are timings.
+- (c) calibration arena exactly as leagues.py builds it (cal: on heldout-lr-d2-s555, 600 games, log-odds-softmax
+  T0.1, depth 1, seed 5) for the 4 models of (a): 16 of 16 game files identical. The logs differ only in timings.
+- (d) self-play, F-L and F-N at depth 0 and 2 (--seed 21 --vs-previous --no-games, 2 rounds of 40 or 16 games):
+  models, ladder.csv and results.txt identical. The logs differ only in plies/s.
+- Scripts: scratchpad fmrouter/id_train.sh, id_cal.sh, id_tour.sh, id_sp.sh (the session scratchpad, RAM).
+
+FM ROUTER CHECKS (T-L-Fe = T-L-Le's args with --router fm, plus --split-limit 1 --split-threshold 100000)
+- Splits once, on the 6-round held-out set: 1 leaf after round 0, then 3 leaves from round 1 to the end (branch factor
+  3); with branch factor 2, 1 leaf and then 2. The `leaves` command counted them after every round.
+- Routing on unseen games (heldout-t01, 13,848 decisive positions; the 6-round tree, branch factor 3):
+    delegator 0 (children 1 2 3): regret 0.0002 per position (0.1640 against each position's best child)
+      to 1 (29.9%): [0.5693] 0.8903 0.6013
+      to 2 (57.2%): 0.4199 [0.2851] 0.2848
+      to 3 (12.9%): 0.5856 0.5153 [0.3844]
+    3 leaves, mean |log-odds difference| of a pair 1.467
+- Exact resume, with the seed of the continued round chosen so that its shuffle is the one-go run's (derive_seed):
+  - 2 rounds in one go against 1 round then --start: identical models and states (the state is from before the
+    split, so the split happens in the continued round);
+  - 3 rounds in one go against 2 rounds then --start, from a state that holds the FM router: identical models and
+    states;
+  - T-L-Le on chessai-hybrid4gfx, as a control: identical in both.
+- Play:
+  - calibration arena (the engine's flags): 600 games, A-B +9;
+  - against rand with the calibration flags at depth 1: +590 Elo (200 games);
+  - a 13-player tournament loading it at ply 1 and 2: fine.
+- Through the engine: a 3-cycle scratch experiment (F-L plus T-L-Fe with --split-threshold 10000, tournament binary
+  chessai-fmrouter, nice 19). v0 and v1 had 1 leaf; v2, trained from v1's state, has 3 leaves and played its cycle-3
+  tournament and own calibration (7.5 s). There were no errors. The scratch root was deleted.
+- Cluster routing (--route cluster --router fm) runs with no new code and splits once, but it routes 100% of the
+  held-out positions to one child after 3 rounds. An LR cluster router (chessai-hybrid4gfx, same settings) does the
+  same, so this is the discriminative cluster routers' behaviour, not FM's.
+- An FM error router beside a CNBP cluster router (--route-switch 3 --error-router fm) runs. Its picks were worse
+  than the cluster router's in every window (-0.0005 to -0.0041 per example), so it never switched.
+
+CPU (measured under load ~21 on 8 cores, so ±20%)
+- Per move against `random`, from a 13-player timing tournament (624 games; the models trained on 3 rounds of d2
+  games):
+
+    | entry | ply 1 us/move | vs F-L | ply 2 us/move | vs F-L |
+    |---|---|---|---|---|
+    | F-L | 9.7 | 1 | 84.8 | 1 |
+    | T-L-Le | 25.1 | 2.6x | 488 | 5.8x |
+    | T-L-Ne | 28.0 | 2.9x | 417 | 4.9x |
+    | T-L-Te | 22.4 | 2.3x | 365 | 4.3x |
+    | T-L-Fe | 79.3 | 8.2x | 2027 | 23.9x |
+
+  - The ply-2 gap is larger because flat LR uses the fixed-point incremental fast path; trees evaluate each position
+    from scratch.
+  - In lr-settings-2's last cycle, measured the same way: F-L 8.9 (ply 1) and 79.5 (ply 2) us/move; references
+    random-1 7.6, random-2 61, random-3 355; 114 plies a game.
+- Each entry's own share of a game in a typical field (52-57 moves) is about:
+
+    | entry | ply 1 | ply 2 |
+    |---|---|---|
+    | F-L | 0.5 ms | 4.5 ms |
+    | T-L-Le | 1.2 ms | 26 ms |
+    | T-L-Ne | 1.3 ms | 22 ms |
+    | T-L-Te | 1.1 ms | 20 ms |
+    | T-L-Fe | 3.8 ms | 108 ms |
+
+- Training CPU per 100k positions, after the split, one thread: F-L 0.19 s, T-L-Le 0.77, T-L-Ne 0.68, T-L-Te 1.70,
+  T-L-Fe 2.31.
+- Own calibration (600 games, depth 1) per new version: F-L ~1.2 s, LR/NB/TAN trees ~2 s, FM tree 5.9-7.5 s.
+- Estimate for 500 cycles of F-L plus T-L-Le/Ne/Te/Fe, local only:
+  - Shape: 19 players and 1,710 games a cycle; ~154k training positions.
+  - Model check: the model predicts 10.3 s for lr-settings-2's 8.74 s of measured game CPU, so the estimate is scaled
+    by 0.85.
+  - Per cycle:
+
+      | line | games | calibration | training | total |
+      |---|---|---|---|---|
+      | F-L | 1.5 s | 1.2 s | 0.3 s | ~3 s |
+      | T-L-Le | 8.2 s | 2.2 s | 1.2 s | ~12 s |
+      | T-L-Ne | 7.0 s | 2.3 s | 1.0 s | ~10 s |
+      | T-L-Te | 6.2 s | 2.0 s | 2.6 s | ~11 s |
+      | T-L-Fe | 34 s | 6 s | 3.6 s | ~43 s |
+      | references | 4.6 s | | | 4.6 s |
+
+  - Total ~84 s a cycle, ~11.6 CPU-h. Without T-L-Fe (4 lines, 16 players): ~34 s a cycle, ~4.7 CPU-h.
+  - An FM-routed line costs about 4x an LR/NB/TAN-routed one. Most of that is ply-2 play: FM's pairwise term is
+    ~70 x 8 multiply-adds per class. --fm-factors 4 would roughly halve that part.
+
+RECIPES
+- Experiments read recipes.txt only in `create` (make_config), `add` and `selftest`, never in a cycle, so editing it
+  leaves running experiments alone.
+- T-L-Fe was added to make_recipes.py's HAND list (the coordinator's mechanism, with a comment) and appended to
+  recipes.txt as the same line. A regeneration (OUT redirected to the scratchpad) reproduced recipes.txt exactly.
+  No other row was changed. The coordinator then added six T-P rows after it and regenerated; T-L-Fe is intact.
+- T-L-Fe | T-L-Fe | T-L-Fe | bdt | 21 | chessai-fmrouter (train and self-play) | T-L-Le's args with --router fm |
+  sources - | heldout lr.
+- FORMATS.md's recipes section notes the HAND rows, and that an experiment with T-L-Fe needs
+  "tournament": {"binary": "/home/iv/dev/chessai/models/from-scratch/bin/chessai-fmrouter"} in its spec.
+  chessai-hybrid4gfx can't load FM routers. The calibration games use the tournament binary too.
+
+CPU USED: about 7 CPU-min. Builds 77 s; identity checks 47 s; FM checks, exactness and cluster tests ~150 s; timing
+tournament and training costs 25 s; scratch engine run 55 s; arenas and routing ~10 s.

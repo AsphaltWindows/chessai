@@ -1,0 +1,340 @@
+MODEL OPTIMIZATION STUDY (2026-11-09, 16:28-17:30; a fork of the main session)
+Nothing was deployed or switched. The only files written outside models/from-scratch/modelopt/ are two binaries:
+models/from-scratch/bin/chessai-fxlr (v1) and models/from-scratch/bin/chessai-fxlr2 (v2). rs/, the live league and
+leagues/ were only read.
+
+Question: where do the base models spend CPU in play (d0 self-play, d1, d2) and in training, what can be cut, and does
+a fixed-point incremental evaluation keep games repeatable?
+
+Versions. Every result below says which binary it comes from:
+- hybrid4: the current binary, the baseline (a copy is modelopt/bin/chessai-hybrid4, md5 1e050a863fb44b060592ed5b935bc2df).
+- v1: models/from-scratch/bin/chessai-fxlr, md5 0c7159d054146efdf88c0ead0df3eeb4. The first fixed-point version.
+- v2: models/from-scratch/bin/chessai-fxlr2, md5 93e370d678d9a5c4db5b6603bf0f0326. v1 with a cheaper incremental
+  update. THIS IS THE ONE TO ADOPT: faster than v1 and it passed every test v1 did, plus more.
+- modelopt/bin/ holds the same two binaries under the same names.
+
+=====================================================================================================================
+0. HEADLINES
+=====================================================================================================================
+- Profiles of hybrid4. Flat models (LR, probit, NB) at d2: summing the model is ~47% of a game, and the calibrated
+  value's softmax, exp and ln are another ~26%. Trees: routing 46-65% plus the leaf 18-26%, so the model is 72-83% of
+  a game. Mixtures: 69-85%. FM: 90%.
+- Built: fixed-point incremental sums for LR, probit and NB, and direct log-odds values for every calibrated model.
+  v2's CPU against hybrid4, in the same runs (section 3):
+  - LR: d2 -66% (3.0x), d1 -53%, d0 -51%, d0 self-play with its training -31%.
+  - NB: d2 -67% (3.0x), d1 -49%.
+  - Probit: d2 -32%, d0 self-play -10%. The normal CDF math stays.
+  - Search-label training (train --label-depth 2): -69%, and the trained model is byte-identical.
+  - Trees, DAGs, mixtures, FM and HT, which get direct values only: d2 -2 to -14%, mean -8%.
+- v1 against v2, interleaved on the same machine load: v2 is 16% faster at LR d2, 5% at probit d0 self-play and 1.5%
+  at LR d0 self-play. Under a lighter load v1 measured LR d2 -73% (3.75x) against hybrid4; the ratios shrink when the
+  machine is busy, so compare versions only within one table.
+- Exactness (v2): every game and every trained model in every test is identical to hybrid4's:
+  - 4,300 flat arena games at d0, d1 and d2;
+  - self-play with training at d0, d1 and d2, search labels included, and search-label training;
+  - 3,080 games at d1 and d2 covering all 13 non-flat lineages (trees, the DAG, mixtures, FM, HT).
+  The flat tests compared every incremental step with a full recomputation. Two runs of the same 1,000-game arena
+  gave identical files. The sums are exact integers, so they are deterministic and path-independent.
+- The largest remaining levers, estimated and not built (section 2):
+  - the same fixed point for trees, mixtures and FM: about half the global league's tournament CPU;
+  - exact vectorized LR training (the AdaGrad step and the prediction): about a quarter of global training;
+  - parsing the games once for all models: about 12% of global training.
+
+=====================================================================================================================
+1. PROFILES (hybrid4)
+=====================================================================================================================
+Method:
+- perf: task-clock, user call chains (--user-callchains is needed now; plain -g is refused).
+- The binary is src-perf/, a copy of hybrid4 with line tables, frame pointers and the eval functions kept out of
+  line. Attribution is by tools/attr.py.
+- Runs are single thread at nice 19.
+- Models are the live league's current versions, copied with their own-cal games into models/: 18 lineages.
+- Arenas: each model against itself with the league's policy (cal: spec, log-odds softmax T 0.1, --use-probs).
+- d0: self-play with the recipe's options, including its training pass. Tree and mixture runs were resumed from
+  copies of their last two versions.
+- Training: train --start on 2,983 league games, 256k positions (cycle 70's pool, every 16th pairing, in games/).
+- Shares exclude loading models and fitting their own calibration.
+- Columns:
+  - ms/g: CPU per game in that self-match;
+  - movegen: movegen plus make-move and the rules;
+  - routing: tree routers;
+  - cal+val: the calibrated value's softmax, exp and ln;
+  - rest: search bookkeeping, policy and candidates.
+
+  run                 ms/g  movegen encode  model routing cal+val  train  rest
+  d2 F-L (LR)         22.6    12.7    7.0   46.8      -    26.4      -    7.1
+  d2 F-P (probit)     22.5    10.1    6.7   49.0      -    26.9      -    7.4   (model: 38 sums + 11 CDF math)
+  d2 F-N (NB)         18.4    13.1    6.5   47.3      -    26.6      -    6.4
+  d2 T-L-Ne           74.9     4.5    2.8   20.4   59.0    10.3      -    2.9   NB-error routers, LR leaves
+  d2 T-L-Nc           95.4     6.1    1.8   21.1   58.4    10.2      -    2.4   NB-cluster routers
+  d2 T-L-Le           57.2     5.9    2.5   19.6   59.9     9.8      -    2.2   LR-error routers
+  d2 T-L-Te           63.0     5.1    4.3   26.3   46.2    14.7      -    3.4   TAN-error routers
+  d2 T-N-Ne-merge     47.5     7.6    3.2   23.7   50.5    11.9      -    3.1   NB leaves
+  d2 T-L-Ne-share     98.6     3.8    3.6   18.7   61.1    10.1      -    2.7   leaf share
+  d2 D-L-Ne (BDD)    108.9     3.6    2.8   17.9   65.2     8.3      -    2.3
+  d2 T-L-H (HT)       29.5    10.0    6.1   53.4      -    24.3      -    6.2   (its feature tests not split out)
+  d2 M-L4-L          121.7     2.4    2.4   84.2      -     9.3      -    1.7   LR gate + 4 LR experts, all evaluated
+  d2 M-L4-N          139.5     2.3    2.2   81.6      -    12.2      -    1.7   NB gate
+  d2 M-N4-L          101.8     2.9    1.8   84.9      -     8.6      -    1.9   NB experts
+  d2 M-LP-L           76.5     3.6    3.0   68.8      -    21.6      -    3.0   LR + probit experts
+  d2 FM              172.8     1.8    1.6   90.1      -     5.2      -    1.4
+  d1 F-L               0.9    19.5    7.2   40.0      -    21.8      -   11.6
+  d1 F-P               0.9    16.1    6.9   38.2      -    27.9      -   10.9
+  d1 T-L-Ne            2.7     8.2    3.8   18.1   57.3     8.1      -    4.5
+  d1 M-L4-L            4.7     6.4    2.0   78.5      -     9.3      -    3.7
+  d1 M-LP-L            2.3     9.3    3.4   63.0      -    18.9      -    5.3
+  d0 self-play F-L       -    13.0    6.5   49.0      -       -   16.3   15.2   (model: 37 sums + 12 softmax)
+  d0 self-play F-P       -    19.1    9.3   43.3      -       -    6.6   21.7
+  d0 self-play T-L-Ne    -     3.1    1.8   14.4   38.1       -   38.6    4.0
+  d0 self-play M-L4-L    -     2.6    1.5   74.3      -       -   17.4    4.3
+
+Notes on play:
+- Trees evaluate about 3 routers and a leaf per position (16 nodes: 5 routers, 11 leaves). An NB router's predict
+  multiplies 70 probabilities per child.
+- Mixtures evaluate the gate and every expert.
+- At d2 nothing is pruned (every root move gets a full window), so a decision evaluates ~650 leaves.
+
+Training (train command, CPU per position including reading the games):
+
+  F-L      1.9 us: AdaGrad step 55%, reading games 29%, predict 13%
+  F-P      0.8 us: reading games 62%, update 32%
+  T-L-Ne  12.1 us: LR step 27%, LR predict 24%, NB-router predictions from raw counts 22% (70 divisions per class),
+                   NB train 4%, reading 4%
+  M-L4-L   8.3 us: LR step 72% (gate and 4 experts), predict 17%, reading 7%
+  F-L-d2mix label search (train --label-depth 2): 108 us a position; model 60%, cal+value 15%, movegen 11%,
+                   encode 7%
+
+Reading the games costs 0.50-0.59 us a position for every model.
+
+=====================================================================================================================
+2. OPTIONS, RANKED BY CPU SAVED IN THE NEW SYSTEM
+=====================================================================================================================
+Reference loads are NEW-DESIGN.md's estimates at 54 models:
+- the global tournament: ~163,000 games a cycle, ~4,900 CPU s a cycle;
+- global training: ~7,700 CPU s a cycle, or ~9,400 with the search-label recipe;
+- the stage-1 experiments: ~80 CPU-h, all flat models.
+
+The 54 recipes are 39 trees or DAGs, 8 mixtures, 4 flat, 2 HT and 1 FM. Weighting the d2 costs above by their entries,
+trees are ~74% of the tournament's CPU, mixtures ~19%, FM ~4%, HT ~1% and flat ~2%.
+
+Exactness labels:
+- IDENTICAL: same games and models as hybrid4 in every test;
+- DET: deterministic and path-independent, but values can differ from hybrid4's at the rounding level, so a rare
+  near-tie may play differently (games change once, then repeat);
+- EXACT: bit-identical by construction.
+
+Each option below gives its saving, its exactness and its effort.
+
+A. Fixed point for flat LR, probit and NB, with direct values. BUILT (v1 and v2; adopt v2).
+   - Saving (v2 against hybrid4, same runs): LR d2 -66%, d1 -53%, d0 -51%, d0 self-play -31%; NB d2 -67%, d1 -49%;
+     probit d2 -32%, d0 self-play -10%. v1 also measured LR d4 -65% (lighter load).
+   - Global league: little, since flat models are ~2% of its tournament.
+   - Stage-1 experiments: their LR and NB tournaments run 2-3x faster and probit ones ~1.5x at d2. LR self-play is
+     ~1.45x faster at d0 and ~3x at d2 and d4. Estimate: ~25-38 of the ~80 CPU-h (the range is machine load), most of
+     it from experiment 3 (self-play depth 2 and 4).
+   - Exactness: IDENTICAL in all tests (DET by construction).
+   - Effort: done; merging into the tournament and self-play binaries is small.
+
+B. Search-label training on the fixed-point search. BUILT (v1 and v2).
+   - The leaf outcome is computed once per search, from the float model at the principal variation's leaf,
+     instead of at every leaf.
+   - Saving: train --label-depth 2 -69% on 256k positions (v1 run: 25.4 to 7.9 CPU s; v2 run: 26.8 to 8.4). That is
+     ~1,200 of ~1,700 CPU s a cycle in the global league, or over 4,000 in today's league.
+   - Exactness: IDENTICAL; the trained model is byte-identical (v1 and v2).
+
+C. Direct log-odds values for every calibrated model. BUILT (v1 and v2).
+   - In the search (d1 and deeper), the leaf value is z_win - z_loss from the calibrated logits, so the softmax,
+     3 exp and 2 ln are skipped. d0 play is unchanged.
+   - Saving (v2, 7 pairings covering all 13 non-flat lineages, single runs): d2 -2 to -14%, mean -8%; d1 about -2%,
+     within the noise. v1's first runs on T-L-Ne alone gave -12 to -14%. About -8% of the global tournament,
+     ~400 CPU s a cycle. Without the fixed point, LR d2 gains -17% from it (v2).
+   - Exactness: IDENTICAL in 3,080 v2 games (and 80 v1 games), DET by construction.
+
+D. Fixed point for trees, BDD, mixtures, FM and HT. NOT BUILT; the largest lever for the global league.
+   - How: keep every node's sums incrementally (16 nodes x 3 outputs at split limit 5). A router picks the argmax of
+     its exact sums. A mixture keeps its gate and experts' sums. FM keeps per-factor sums and squares, whose
+     interaction term comes from the exact sums.
+   - Estimate: -60 to -75% of model time, about -50 to -60% of a tree or mixture game and -80% for FM. That is about
+     -50% of the global tournament (~2,400 CPU s a cycle).
+   - Exactness: DET. A routing near-tie can go another way than in float; the flat models showed no flips in 4,300
+     games (v1 and v2 each).
+   - Effort: high, about 1-2 agent days.
+     - TAN routers need their pairwise terms (a changed feature also changes its children's terms).
+     - HT's tests are not linear, but its leaves are.
+
+E. Parse the games once for all models (global training). NOT BUILT.
+   - What: one binary cache of the batch's positions and labels (72 bytes a position), or one process training
+     every recipe.
+   - Saving: 0.5-0.6 us a position per model, ~12% of global training (~900 CPU s a cycle). F-L training -29%,
+     F-P -62%.
+   - Exactness: EXACT (same positions, same order).
+   - Effort: low to moderate.
+
+F. Vectorized LR training and prediction. NOT BUILT; needs a prototype to confirm.
+   - What: store LR weights value-major (the 3 classes side by side in 4 lanes), so the AdaGrad step's sqrt and divide
+     and the prediction's sums run 4 lanes at a time. Each lane does the same IEEE operations in the same order, so the
+     results are bit-identical. The sums must start from -0.0 as Rust's f64 sum does, and nothing may be fused into
+     FMA.
+   - Saving (estimate): LR step about 2x and predict about 1.5x faster. That is LR training ~-30%, mixtures ~-35% and
+     LR-leaf trees ~-20%; about -25% of global training, ~1,900 CPU s a cycle.
+   - Exactness: EXACT if done as described (to be verified against hybrid4's models byte for byte).
+   - Effort: moderate. The text and state formats need not change.
+
+G. Smaller items:
+   - Remaining exact fast paths from the movegen study: skipping the move text with --no-games (d0 ~-5%) and one
+     legal-move list per ply at d0 (~-1.5%). Their shares grow once the model is cheap.
+   - Building the fixed-point table once per round instead of once per game: ~0.5% at d0.
+   - Inside the fixed-point path, the incremental update was still 36% of an LR d2 game in v1's profile. v2 trims it
+     (castling only when the rights change, sums-only leaves and candidates, a linear value formula); more is
+     possible.
+
+H. Not worth it, or not exact:
+   - Cheaper probit CDF math: up to ~11% of probit games; changes values.
+   - NB routers' predictions from counts during training (22% of NB-router tree training): no exact shortcut,
+     because every training step changes a class's denominators.
+   - Eval caches: they did not pay at d<=2 (movegen study), and the fixed point makes evaluations cheaper still.
+   - Skipping experts with a small gate weight: changes values; D covers mixtures exactly.
+
+=====================================================================================================================
+3. THE PROTOTYPE: v1 (chessai-fxlr) AND v2 (chessai-fxlr2)
+=====================================================================================================================
+Where things are:
+- v2's source: fxlr-src/, a copy of hybrid4-src. The new module is src/fixed.rs; play_game, select, the search and the
+  label search are changed; Classifier gains fixed_linear and log_odds_direct. v1's source survives only as
+  fxlr-perf-src/ (v1 plus line tables and out-of-line functions for profiling).
+- Binaries: see "Versions" at the top. Name history of models/from-scratch/bin/chessai-fxlr: an early v1 build was
+  copied there during development, then removed; at 17:18 v2 was installed under that name; at 17:26 it was restored
+  to v1 (the final v1 build, md5 0c7159d0...) and v2 was installed as chessai-fxlr2. The early build's md5 was not
+  recorded, so it cannot be compared with the restored file.
+- Scripts in tools/ use the same names: bin/chessai-fxlr is v1, bin/chessai-fxlr2 is v2. Logs made with v1:
+  bench-fl.log, bench2.log, identity.log, identity-sp.log, identity-labels.log, arena-fx.log. Logs made with v2:
+  v2.log, determinism.log, identity-kinds.log. bench3.log has both.
+
+How it works (both versions):
+- Each weight is rounded once to a multiple of 2^-32 and kept as an i64.
+- A position's per-class sums are exact integers.
+- A child's sums are its parent's plus the changes of the features its move changed. These are found by diffing the
+  two boards' bitboards, plus the side to move, the en passant file and castling.
+- Values:
+  - LR and NB: v = slope_winner * (l_w - l_b) + (off_w - off_b), from the exact difference.
+  - Probit: the sums are the latent's mean and variance; the CDF math is unchanged.
+- The search carries the sums down the tree.
+- d0 scores the candidates from their sums and encodes only the chosen move's position.
+- Search outcomes (d1jit and d2jit players, search labels) come from the float model at each principal variation's
+  leaf, once per search.
+- v2 over v1: castling is updated only when the rights change, leaves and d0 candidates keep sums only (no encoding),
+  and the LR/NB value is the linear formula above.
+
+Controls (both versions):
+- CHESSAI_FX=on (default), direct (direct values only) or off (hybrid4's arithmetic).
+- CHESSAI_FX_CHECK=1 checks every incremental step against encode() and a full sum.
+- A float:SPEC player plays hybrid4's arithmetic inside the same arena.
+
+Tests: 149 unit tests pass on v2's source. That is hybrid4's 146 plus 3 new ones: random games with every child
+checked, and LR, probit and NB fixed against float.
+
+Exactness, against hybrid4 with the same seeds:
+- v2, flat models (logs/v2.log), with CHESSAI_FX_CHECK=1, so every incremental step was compared with a full
+  recomputation:
+  - arenas, league policy: d0 LR vs probit and LR vs NB with the jitter policy, 1,000 games each; d1 LR vs probit and
+    probit vs NB, 1,000 each; d2 LR vs probit and NB vs LR, 150 each. All 4,300 games and the files are identical.
+  - self-play, 2 rounds, with training: LR d0, probit d0, LR d1jit, LR d2mix (search labels); and the label runs
+    LR d1jit, LR d2jit, LR d2mix. Games and trained models are identical byte for byte.
+  - train --label-depth 2 on 256k league positions: the model is byte-identical.
+- v2, every non-flat kind (logs/identity-kinds.log, 17:23), direct values only, league policy, seed 43: 7 pairings,
+  each 400 games at d1 and 40 at d2, 3,080 games in all. All files identical. The pairings cover all 13 non-flat
+  lineages: T-L-Ne vs M-L4-L, M-LP-L vs T-L-Ne, FM vs T-L-H (HT), D-L-Ne (DAG) vs T-L-Te, T-L-Nc vs M-N4-L,
+  M-L4-N vs T-N-Ne-merge, T-L-Le vs T-L-Ne-share.
+- v2, determinism (logs/determinism.log, 17:20): the LR d2 strength arena (1,000 games, fixed point against float)
+  was run twice. The two runs' files are identical, both score 447 wins, 440 losses and 113 draws, and that is v1's
+  result too. The same arena with both players in float and the same seed gives the same score and identical game
+  files: the fixed-point player plays exactly the float player's games.
+- v1: the same flat arenas, self-play and label checks (identity.log, identity-labels.log). In identity-sp.log the
+  d2mix models differ because that run predates the lazy-outcome fix; identity-labels.log then verified it. Also
+  d2 direct values on T-L-Ne vs M-L4-L and M-LP-L vs T-L-Ne, 40 games each, identical (bench2.log), and CHESSAI_FX=off
+  identical to hybrid4 at d0, d1 and d2 (an ad hoc check, not logged).
+
+Speed: single thread, nice 19, on a machine loaded ~10-16 by the live league. Arena runs have ~0.15 s of setup
+subtracted unless noted. Each figure is the median of 2-3 runs; on this machine, runs differ by up to ~15%, and the
+ratios shrink as the load grows. "direct" is direct values only; at d0 it is the same code as hybrid4.
+
+  v1 (bench-fl.log and bench2.log; a lighter load):
+  run                               hybrid4   direct          fixed point
+  LR d2 (200 games)                  3.83 s   2.60 (-32%)     1.02 (-73%, 3.75x)
+  LR d1 (2,000 games)                1.63     1.25 (-23%)     0.68 (-58%, 2.4x)
+  LR d0 arena (3,000 games)          2.14     (same code)     1.14 (-47%)
+  LR d0 self-play (2 x 1,500)        4.70     (same code)     2.92 (-38%)
+  LR d4 (6 games)                   10.63     8.38 (-21%)     3.69 (-65%, 2.9x)
+  probit d2 (150)                    3.05     2.64 (-13%)     2.10 (-31%)
+  probit d1 (2,000)                  1.80     1.51 (-16%)     1.37 (-24%)
+  probit d0 self-play (2 x 1,500)    3.17     (same code)     3.24 (2% slower; see note)
+  NB d2 (150)                        2.76     2.28 (-17%)     1.04 (-62%, 2.7x)
+  NB d1 (2,000)                      1.88     1.60 (-15%)     1.02 (-46%)
+  T-L-Ne d2 (40), direct only        3.26     2.80 (-14%)     2.88 (-12%)
+  train --label-depth 2 (256k pos.) 25.4                      7.9 (-69%)
+
+  v2 (v2.log; load ~10-16):
+  run                               hybrid4   direct          fixed point
+  LR d2 (200 games)                  4.82 s   4.01 (-17%)     1.63 (-66%, 3.0x)
+  LR d1 (2,000 games)                2.00     1.54 (-23%)     0.94 (-53%, 2.1x)
+  LR d0 arena (3,000 games)          2.50     (same code)     1.22 (-51%, 2.0x)
+  LR d0 self-play (2 x 1,500)        5.69     (same code)     3.94 (-31%)
+  probit d2 (150)                    3.18     2.66 (-16%)     2.15 (-32%)
+  probit d0 self-play (2 x 1,500)    3.46     (same code)     3.12 (-10%)
+  NB d2 (150)                        2.69     2.09 (-22%)     0.89 (-67%, 3.0x)
+  NB d1 (2,000)                      1.93     1.70 (-12%)     0.99 (-49%)
+  train --label-depth 2 (256k pos.) 26.8                      8.4 (-69%)
+
+  hybrid4, v1 and v2 interleaved, same load (bench3.log; 3 runs each, medians, setup included):
+  run                               hybrid4   v1              v2
+  LR d2 (200 games)                  4.76 s   1.98 (-58%)     1.68 (-65%; 15% faster than v1)
+  probit d0 self-play (2 x 1,500)    3.38     3.33 (-1.5%)    3.17 (-6%; 5% faster than v1)
+  LR d0 self-play (2 x 1,500)        5.68     4.06 (-29%)     4.00 (-30%; 1.5% faster than v1)
+  With the setup subtracted, LR d2 is -67% for v2 against hybrid4 and v2 is 16% faster than v1.
+
+  v2 on the non-flat kinds, direct values only (identity-kinds.log; single runs, setup included):
+  d2: -6% (T-L-Ne vs M-L4-L), -14% (M-LP-L vs T-L-Ne), -4% (FM vs HT), -10% (DAG vs T-L-Te), -7% (T-L-Nc vs M-N4-L),
+  -2% (M-L4-N vs T-N-Ne-merge), -12% (T-L-Le vs T-L-Ne-share); mean -8%. d1: -10% to 3% slower, mean -2%.
+
+  Note:
+  - Probit at d0 gained nothing in v1. Its sums are only 2 x 71 additions, so they were as cheap as v1's
+    incremental update, and the CDF math stays. v2's cheaper update gives -6 to -10%.
+
+After the fixed point (profile of v1 at d2, LR):
+- the incremental update 36%, search bookkeeping 21%, movegen 20%, the value 12.5%, make-move 9%;
+- the model's sums are gone.
+- At d0 self-play: training 24%, the update 19%, probabilities for the jitter policy 17%, movegen 11%,
+  candidates 10%.
+
+Strength: each model in fixed point (A) against its float self (B, float:), paired colours, v1 (arena-fx.log).
+- LR d2: 1,000 games, 447 wins, 440 losses, 113 draws: Elo 2 (95% -18 to 23). v2 replays the same games
+  (determinism above).
+- LR d1: 2,000 games, Elo -3 (-12 to 6).
+- Probit d2: 400 games, Elo 10 (-22 to 43).
+- NB d2: 400 games, Elo 26 (-6 to 59).
+- The games were identical to float ones in every identity test, so these are float self-matches by construction.
+
+=====================================================================================================================
+4. WHAT THE USER COULD DECIDE
+=====================================================================================================================
+1. Adopt A + B + C, as v2 (models/from-scratch/bin/chessai-fxlr2), in the binaries before the new system launches.
+   They changed no game or model in any test, so the switch would not be a break in conditions. The extra identity
+   check on the field's other kinds is DONE: 3,080 games at d1 and d2 over all 13 non-flat lineages (trees, the DAG,
+   mixtures, FM, HT) are identical to hybrid4's, and the determinism check passed. The fast binaries being rebuilt
+   in fastbin/ do not have these changes; merging them is a separate step.
+2. Whether to build D (fixed point for trees, mixtures and FM) next. It is about half the global tournament's CPU. It
+   is DET: it may play differently from float in a rare near-tie. The same identity tests would measure how rare.
+3. Whether to build E (parse once) and F (exact vectorized LR training). Together they are ~35% of global training
+   and EXACT; F needs a short prototype to confirm its speed.
+4. For experiment 3 (self-play depth 0/1/2/4), v2 roughly halves its cost now.
+
+=====================================================================================================================
+5. CPU USED
+=====================================================================================================================
+- Measured: 786 CPU s (~13 min) in timed runs: profiles 189 s, benchmarks 458 s, strength arenas and label training
+  65 s, the identity check on the non-flat kinds 74 s.
+- Estimated, not timed: identity runs with every step checked (v1 and v2) and the determinism runs, ~8-10 min;
+  builds and unit tests (4 release builds and test builds at -j 2), ~25-30 min.
+- Total: about 45-55 CPU minutes, everything at nice 19, one thread per run.
+- Disk: modelopt/ holds ~0.7 GB: tmp/ 488 MB of test outputs and perf/ 265 MB of samples. Both can be deleted; the
+  logs and perf/*.txt keep the results.

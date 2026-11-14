@@ -1,0 +1,45 @@
+F-P's dynamics tau (2026-11-07). Verdict: a longer memory wins. tau 0 beats the baseline (tau 1e-5) by 85 Elo at equal
+CPU at v300, and tau 1e-6 by 63; both clear 40 on both seeds. A larger tau loses 400-560.
+
+Setup: F-P's recipe from scratch (seed 21, 1000 games a round, --vs-previous, --no-games, nice 19, 2 threads) with
+--probit-tau, by chessai-probit. The baseline (tau 1e-5) is ../fpfix/FP-base, by chessai-probit4, which reproduced
+chessai-probit's F-P-s21 v1-v30 byte for byte; extended to v300 with --resume (run2.sh). The variants run to the
+baseline's CPU (cumulative self-play CPU shared out by plies; match.py, extend.sh).
+Arenas (arena.sh): d2, both sides calibrated on heldout-lr-d2-s555/round0, the default jitter10 policy, 2 x 1000 games
+(seeds 3000+A, 4000+A), the variant as A.
+
+Why tau matters: each position adds tau^2 to the variance of every weight it uses, so the weights' variance settles at
+s2 ~ 2 tau. That sets the filter's memory to about 1/(s2 w) positions: ~200k (about a round) at tau 1e-5 and ~20k at
+1e-4. At tau 0 the variance keeps shrinking like 1/n, so the model averages over all its data, as a Bayesian should.
+
+Smaller tau (run2.sh, extend.sh, arenas2.sh):
+                         base tau 1e-5   tau 1e-6        tau 0
+  CPU to v300            469.5 s         v318 469.4 s    v328 469.0 s
+  draws, rounds 200-299  88.6%           87.7%           87.1%
+  plies a game, 200-299  238             228             224
+  at v300 / v318 / v328: eps 1.914 / 1.999 / 1.932; used-weight variance (820 of 852 weights; the other 32 are never
+  used and stay at the prior 0.09) mean 4.28e-5 / 3.10e-5 / 3.25e-5, median 1.85e-5 / 6.92e-6 / 6.09e-6
+  equal-CPU arenas, Elo (95% range) [seed 1, seed 2]:
+    vs base v100   tau 1e-6 v106: 48 (34 to 62) [52, 45]     tau 0 v108: 73 (59 to 87) [74, 72]
+    vs base v200   tau 1e-6 v212: 47 (33 to 61) [49, 45]     tau 0 v218: 48 (35 to 63) [41, 56]
+    vs base v300   tau 1e-6 v318: 63 (49 to 77) [69, 56]     tau 0 v328: 85 (71 to 99) [94, 76]
+  W/L/D at v300: tau 1e-6 987/630/383, tau 0 1052/573/375.
+
+Larger tau (run.sh, arenas.sh), 100 rounds:
+  CPU 173.4 s (tau 1e-4), 204.6 s (tau 1e-3), longer games. Used-weight variance median at v100 1.95e-4 / 2.47e-3
+  against 2.5e-5; eps 2.185 / 2.654 against 1.955.
+  Equal-CPU arenas: tau 1e-4 v29 vs base v30 -415 (-440 to -393), v94 vs v100 -421 (-448 to -397);
+  tau 1e-3 v26 vs v30 -512 (-547 to -483), v80 vs v100 -561 (-606 to -526).
+  Control (control.sh, 1000 games): base v30 vs itself 51.4%, Elo 10 (-9 to 29); base v30 vs tau 1e-4 v29 with the
+  sides swapped, Elo 389 (359 to 423), mirroring -415.
+  No larger-prior run: the prior is forgotten within a round (used-weight variance 1.1e-3 at v1, from 0.09).
+
+Proposal (not deployed), F-P's line plus the tau flag:
+  F-P-tau0-c | F-P | models/from-scratch/bin/chessai-probit | scratch | lr | own | --model probit --use-probs --seed 21 --vs-previous --no-games --probit-tau 0
+  Its own step needs own_games.binary_by_lineage -> models/from-scratch/bin/chessai-probit, as for F-P-c. The model
+  files keep tau, so the own step's train --start trains with it too. The tournament binary is unchanged. The new flag
+  gives a new costs signature.
+  tau 1e-6 is the hedge if the user worries that tau 0 grows too stiff over the league's 1000+ rounds: it puts a
+  floor at s2 ~ 2e-6 (a memory of about 8 rounds), which v300 has not reached yet.
+
+CPU: this check 30.1 min (self-play 1250 s, arenas 557 s). The larger-tau check took about 13.5 min.

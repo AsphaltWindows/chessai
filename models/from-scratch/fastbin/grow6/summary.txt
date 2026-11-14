@@ -1,0 +1,245 @@
+chessai-grow6 (2026-11-12; analyst theory-2 6.80 item 5, "encourage then prune"; built by the coordinator's build fork)
+=================================================================================================================
+
+WHAT
+  grow5 plus two things, in one binary:
+  1. grow4's leaf growth rule inside bdd, the DAG code (grow1-5 refused --split-rule grow for --model bdd). A DAG with
+     --path-context may now take --split-rule grow and every grow4/grow5 leaf option (credits, trials, --grow-gate
+     age, --grow-priority snapshot, --grow-mdl, --grow-min-gain, --grow-shadow-forget). The leaf trial's shadow keeps
+     the leaf's path table (forgotten as the shadow is), the snapshot keeps a frozen copy of it, and an undone trial
+     gives the leaf the shadow's table back with the cells upstream now. The MDL k counts path-table parameters too
+     (zero without cells, so a tree's k is unchanged).
+  2. --router-split-rule encourage (needs --split-rule grow and --path-context), with:
+       --router-credit D_r          one router split credit per D_r positions through the root (default 10,000,000;
+                                    banked up to --grow-credit-cap, 2; 0 = no allowance, no router splits)
+       --router-trial-windows K     the long trial's length, K windows of --split-threshold examples through the
+                                    split's region (default 5)
+       --router-trial-z z           undo only if the trial's G_real - G_null is below -z block-SE (default 2)
+       --router-chain N             a router may split only while its chain is below N (default 1: a copy, or a
+                                    router that split, splits no more)
+       --log-router-stats           (grow2's flag) the router-split, leaf-trial and path-cell logs below
+     The split: at the end of a training step (no example in flight), if a router closed a window this step and a
+     credit is banked, the eligible router with the highest last-window G_real - G_null splits, ties to the higher H,
+     then the lower index. Eligible: a router, not removed, no leaf trial at it, outside every split on trial (its
+     router, copies, their children and parents), chain below --router-chain, its own windows closed at least
+     --grow-age-windows (3) times, out of back-off, children ready by the 90% share guard. No bar. The kind is 6.36's:
+     by arrival path where the router has several parents, else by cluster; the copies are its shadows where they
+     fit (grow2's cluster_split / unshare), else forgotten copies.
+     The long trial: the router's NULL shadows (copies of the unsplit router over a hash partition of the split's
+     shape, stall-hg's; carried over from before the split, fresh copies if it had none) run on as the unsplit
+     alternative, each trained on its part of the region's examples. Per scored example: d = the loss of the
+     split's pick minus the loss of the null shadow's pick among the old children, both before training; G_real -
+     G_null = -mean(d), so both arms lag alike (each copy and each null shadow learns from a part of the examples:
+     6.46 (iii) 2's drift). Beside them a copy of the router as it was trains on every example: the router an undo
+     restores, and the plain G_real (split against the unsplit router, logged only). After K windows: undone iff
+     G_real - G_null < -z block-SE; otherwise kept, whatever its gain.
+     The undo: a cluster split's central router routes among its old children again, an unsharing's parents point
+     to the router again; the copies go (removed at the next step); a cluster split's sibling set leaves the
+     registry with its cells (later sets renumbered in every table); the router takes the unsplit router and its
+     table, conformed to the cells upstream, leaves the chain, and backs off (age again, then 2x the back-off).
+  Source: fastbin/grow6-src (a copy of grow5-src; diff grow6.patch, 4 files: delegation.rs, bdd.rs, pathctx.rs,
+  main.rs). rs/ untouched. Model files keep their format (the new state is in state files only, and only under the
+  new options), so hybrid17 loads and plays grow6's DAGs.
+  Binary: cand/chessai-grow6, installed with cp -n as models/from-scratch/bin/chessai-grow6 (md5 below). Built like
+  grow5 (cargo release); the build embeds its paths, so identity is tested on behaviour.
+
+TESTS
+  1. cargo test (unit-tests.log): 241 lib and 1 main test pass (grow5: 233 + 1). The 8 new tests, in bdd.rs, on
+     xor3 (three results by the XOR of two features, a draw one example in five, two noise features), windows of
+     1000, a leaf credit per 3000:
+     - grow6_dag_without_router_splits_is_the_grow_tree: rule z at --router-split-z inf, and encourage with
+       --router-credit 0, against the grow tree (path context off), MDL bar off and on, 100k examples: the growth
+       state equal after every example (trials, verdicts, credits, snapshots), the same node count, then the same
+       split count and bit-identical predictions; no sibling sets, no router splits. 2+ kept and 2+ undone leaf
+       trials across the two bars.
+     - grow6_router_credits_accrue_at_the_interval_up_to_the_cap: a credit every D_r root positions, banked up to the
+       cap (2; 3 when the cap is 3); a spent credit comes back at the next interval, not at once; none at D_r 0.
+     - grow6_priority_orders_by_g_then_h_then_index: a measured G_real - G_null before none and the higher first,
+       then H likewise, then the index; a full tie is not "before".
+     - grow6_the_allowance_picks_the_best_eligible_router: three routers, all eligible; the pick by G, the tie to H,
+       the index with no statistics; each exclusion alone: in a chain at the cap (allowed under a cap of 2), two
+       own closes, back-off, children not ready (10% of the examples unready passes the 90% guard, 11% fails), a
+       leaf trial at the router, a split on trial (its router, children and parents busy). Also which nodes count
+       as "under a router split" for the kept-rate table.
+     - grow6_router_trials_keep_or_undo_after_k_windows: 40k examples, D_r 5000, K 5, at z +inf (every split kept)
+       and z -1e9 (every split with a spread of pairs undone), followed step by step: splits only on banked
+       credits, at most one per D_r; every verdict exactly K x W region examples after its split; no router in a
+       chain at the cap splits (the chain cap); the copies and the router enter the chain; the null shadows number
+       the split's parts (arrival paths, or 3 for a cluster split); a cluster split adds its sibling set and its
+       cells (the cell count rises) and an undo drops them (no sets, no cells); an undone split's router routes
+       among its old children again, an unsharing's parents point to it again, the router leaves the chain and
+       backs off (age + 1 closes at least), its copies go at the next step; the structure (pathctx::check) holds
+       every 2500 steps and after every undo; the kept-rate table counts every leaf verdict once, under a router
+       split or elsewhere, and its undone column equals the refunded credits.
+     - grow6_an_undone_unsharing_restores_the_shared_router: an unsharing on trial undone by hand: the parents point
+       to the router again, the routers it made are removed, the router is the unsplit router of the trial (state
+       bytes) with every arrival path's cells, out of the chain, the undo counted; the structure holds and training
+       goes on 5000 steps.
+     - grow6_options_print_only_under_encourage: the new options are absent from the options' record (the state
+       files' header) unless the rule is encourage, so every other configuration's files are as before.
+     - grow6_states_resume_exactly: saved and read back every 997 steps (mid router trial 3+ times, mid leaf trial
+       with a path table 1+ times; splits kept and undone) trains on exactly as one process, state bytes equal;
+       a state is refused under other encourage options.
+     A binary-level resume test is not possible on P1 (train refuses an empty round and the per-round seed is
+     derived from the round), so the unit test stands for it, as in grow3-5.
+  2. CLI (cli_checks.sh -> cli_checks.txt, 20 cases, all as wanted): accepted (exit 0): the recipe, credit 0, rule z
+     at z inf, encourage with --grow-router-guard-share, the tree with grow4's rule (bar on), D-P-Ne-ctx-z20.
+     Refused (exit 1, each with its message): the four new flags without encourage (on a tree, with stall-h);
+     encourage without --split-rule grow, with --router-split-limit, with --router-split-z, on a tree; a growing
+     DAG without path context, or with neither encourage nor z inf (z 20, no rule); stall-h with --split-rule grow;
+     --router-trial-windows 0; --router-chain 0; --grow-subtree-share under encourage. A bad rule name: exit 2.
+  3. Identity with the new flags absent (id_p1_g6.py -> id_p1_g6.txt; failures 0). The offline pool P1
+     (offline-ply/pools/P1/train, 112 rounds of ~200k positions, about one league cycle's training batch per line
+     each), seed 7101, 1 thread, nice 15. Every model and state file (112-113 per run) byte for byte, and the
+     training log with the timings masked:
+     - against grow5 (T-P-Ne-grow trains on grow4 in grow-p1c; grow5 = grow4 on these, grow5's own identity; and
+       see 3b): tpneg-fast (grow4 rule, bar off, W 200k, credit per 1M: 21 trials, 16 kept, 3 undone), tpneg-bar-fast
+       (bar on, the spec's tree rule: 21 trials, 2 kept, 18 undone), tpneg-bar (bar on, W 1M, the spec's tree
+       exactly: 5 trials, 3 kept, 1 undone), tlne-capped (T-L-Ne limit 4), fl (F-L): all SAME.
+     - against hybrid6 (F-P's training binary in probit-f10-p1 and treeonly-p1): fp, SAME.
+     - against errdag4 (the newest DAG binary, itself = errdag3, the D-P-Ne-ctx recipe's): dpctx-z20 (D-P-Ne-ctx-z20,
+       W 1M), dpctx-z20-fast (W 200k, router splits by z), dlctx-z120-fast (D-L-Ne-ctx-z120): all SAME.
+     - against grow5 (grow3's router rules, router-p1's): dr4-stallh-fast (4 router splits), dr4-stallhg-fast: SAME.
+  3b. Against chessai-grow4 itself, grow-p1c's binary and the T-P-Ne-grow recipe row's (id_p1_grow4.py ->
+     id_p1_grow4.txt): tpneg-bar-fast and tpneg-bar, SAME.
+  4. The DAG with the allowance off is the tree (id_p1_g6.txt, second part): the growth log (every grow, round and
+     node-count line) identical, and the hybrid17 games identical, file for file (200 games at ply 1 against one
+     F-P, seed 9; the four game files, 3.9 MB):
+     - dag-off (D-P-Ne-ctx-grow, --router-credit 0) against tpneg-bar: 182 lines same, games SAME;
+     - dag-off-fast against tpneg-bar-fast: 475 lines same, games SAME;
+     - dag-zinf-fast (rule z at --router-split-z inf) against tpneg-bar-fast: 475 lines same, games SAME.
+     The encourage DAG before its first router split is the tree too: dag-enc-fast's round-11 model scores the
+     tree's held-out log-loss exactly (0.7055).
+  5. The allowance on (P1 smoke; the read is the league's):
+     - dag-enc (the recipe: W 1M, D_r 10M, K 5, z 2, chain 1; P1's 22.4M positions give 2 credits): the root split
+       by cluster at N 10.0M (the only eligible router; its last-window G-Gnull -0.0069), kept at N 15.0M
+       (G-Gnull +0.00054, block se 0.00019, z +2.84; G against the unsplit router +0.00075); router 3 unshared by
+       arrival path (parents = the root's copies) at N 20.0M, on trial at the end. Leaf trials 4: 3 kept, 1 in
+       flight. 18 nodes (9 leaves, 9 routers) against the tree's 13 (9 leaves); 1 set, 14 cells, 96 cell
+       parameters; leaf cells mean |w| 0.022, max 0.061, moved 0.010 over the last root window.
+     - dag-enc-fast (W 200k, leaf credit per 1M, D_r 2M): root cluster split at N 2.6M UNDONE at N 3.6M (G-Gnull
+       -0.0073, z -14.8: windows -0.004 to -0.012), the root backed off 1 window; split again at N 4.4M, kept at
+       N 5.4M (+0.00058, z +2.61); router 2 unshared at N 6.4M, kept at N 7.96M (+0.0030, z +15.1). Then no
+       eligible router for the last 14M positions, the 2 banked credits waiting: all 7 routers (the root, its 3
+       copies, router 2 and its 2 copies) were in chains at the cap, and no leaf split was kept after N 8M to make
+       a new router. Leaf trials 20: 2 kept, 18 undone; the kept-rate table at the end: under router splits 1 of 17,
+       elsewhere 1 of 3. So under --router-chain 1 each router splits at most once while kept, and router splits
+       are bounded by the routers the leaf rule makes (with the bar on, few).
+     - hybrid17 loads and plays both, and reads the model files exactly as grow6 does: held-out log-loss on
+       offline-ply/merged/P1/part0 (250k positions; evalloss.sh -> evalloss.txt) identical to 4 decimals in both
+       binaries for every arm. Final models (raw / calibrated): tree 0.6647 / 0.6595, dag-off the same, dag-enc
+       0.6651 / 0.6614; tree-fast 0.6742 / 0.6683, dag-enc-fast 0.7013 / 0.6924. Against one F-P (200 games,
+       ply 1, seed 9): tree -2, dag-enc -40 (95% -70 to -11), tree-fast +9, dag-enc-fast -45 (-72 to -19).
+       The fast pair's held-out loss by round (evalloss-fast-rounds.txt) swings both ways: the DAG 0.022-0.025
+       better at rounds 31 and 39, 0.027 worse at 112, the tree itself moving 0.02 between rounds; one round
+       and one opponent are not a verdict, and nothing points to a reading error (identical in both binaries).
+
+COST (grow-dag-p1: 6 lines, ply 1, 1,584 games per cycle, floor 600, cap 900)
+  Training, P1 user seconds over 112 rounds (one league cycle's per-line batch each; 3 jobs at a time, nice 15):
+    F-P 17.6; T-P-Ne-grow bar on (the spec's tree) 72.9; D-P-Ne-ctx-grow (the recipe) 154.8, 2.1x the tree;
+    the same DAG with the allowance off 119.4. The DAG's overhead is mostly its shadows: under encourage every
+    router that may still split runs its real and null shadows from its first close, so the allowance-off DAG
+    costs 1.64x the tree (fast windows 1.72x), while path context without shadows costs nothing measurable
+    (dag-zinf-fast 91.8 against the tree's 90.4); the router splits and cells add the rest (154.8 against 119.4).
+  League scale: F-P trains 0.20 s per cycle in grow-p1c and probit-f10-p1 against 0.157 s per P1 round (x1.27).
+    So per line and cycle: F-P 0.20 s; the tree ~0.8 s early, rising as it grows (grow-p1c's bar-off trees
+    0.6 -> 1.8 s by v355; the bar on grows slower): ~0.8 -> 1.5 s; the DAG ~2.1x the tree: ~1.7 -> 3.5 s.
+    Training ~5.5 s per cycle early, ~10 s late.
+  Tournament, calibration and self-games (cost.py -> cost.txt, the measured totals): 11.2 s per cycle in
+    probit-f10-p1, 12.0 in grow-p1c (15.1 over its last 50 cycles); per game the same with DAGs in the field
+    (router-p1 2.54 ms per tournament game, grow-p1c 2.54, calibration 1.26-1.33 s per version), so ~12-15 s.
+  Total: ~17 s per cycle early, ~25 s late, ~20 s on average: ~3.3-3.6 CPU-h at the 600-cycle floor and
+    ~5.0-5.5 CPU-h at the 900 cap (6.80 said 3-4 CPU-h; the DAG lines' shadows add the difference at the cap).
+    Scaled from probit-f10-p1 instead (16.7 s per cycle, its four capped trees at 1.29 s replaced by two grow
+    trees and two DAGs): ~19-21 s per cycle, the same range. Wall: grow-p1c ran ~11 s per cycle at v300; with
+    the DAG lines ~13-16 s, ~2.2-2.7 h to the floor and ~3.3-4 h to the cap on a quiet machine.
+
+AGAINST 6.80 (what the build had to decide or change)
+  1. The trial's paired statistic is G_real - G_null against the null shadows, not the split against the unsplit
+     router. 6.80: "the shadow pair runs K = 5 own windows; undone only if its paired statistic is below -2
+     block-SE". After the split the real shadows are the copies, so the pair is the split and the null shadows (the
+     hash partition of the same shape, stall-hg's), which run on as the unsplit alternative. A router trained on
+     every example as the only comparator would make every split look worse by lag alone (each copy and each null
+     shadow learns from a part of the examples: 6.46 (iii) 2, 6.54), so the undo would prune by lag. The plain
+     G_real against the unsplit router is still computed (that router is what an undo restores) and logged per
+     window and at the verdict, for the read; it decides nothing.
+  2. The trial's length: K windows of --split-threshold examples through the split's region (the router and its
+     copies together), K x W = 5M at the recipe's W 1M. After an unsharing the router alone sees only its own
+     arrival path, so "own windows" of the router alone would lengthen the trial by the number of paths.
+  3. The allowance's bank: router credits are banked up to --grow-credit-cap (2), a bank of their own beside the
+     leaves'; an undone router split refunds nothing (the allowance stays one split per D_r, whatever is pruned).
+  4. The chain: --router-chain 1 counts the router that split and its copies alike (6.80: "a copy can't
+     router-split"), so a router that split once, kept, splits no more; an undo puts the router's chain back.
+  5. After an undo the router backs off: --grow-age-windows own closes again, then a back-off that doubles with
+     each undo (1, 2, 4 ... closes), as the leaves' trials do. 6.80 has no rule for re-splitting a pruned router.
+  6. When: a router split happens at the end of a training step (no example in flight), at a step in which some
+     router closed a window, if a credit is banked. 6.80 gives the rate, not the moment.
+  7. Eligibility adds: no leaf trial at the router (a leaf trial's delegator is not a router yet and its closes do
+     not count as router closes), and nothing inside a split on trial (its router, copies, their children and
+     parents), so trials never overlap.
+  8. The MDL bar's k for a leaf split counts the path-table parameters too (cells x values; about 4 per cell for
+     probit against ~800 per probit leaf, so ~1% of k), zero without cells: the tree's bar and the allowance-off
+     DAG's are unchanged.
+  9. Collapsed routing: a path split whose copies, null shadows and unsplit router always pick the same child gives
+     a statistic of exactly 0 (se 0); the bar is then 0 rather than -z x 0, and a split that is not behind is kept
+     (the xor3 smoke kept such splits at N 16970 and 17059). 6.80 prunes only on harm, so this follows it.
+  10. Options: --router-split-rule encourage needs --split-rule grow and --path-context, and refuses
+     --router-split-limit (the allowance replaces it), --router-split-z and --grow-subtree-share; the four new
+     flags are refused without encourage. A growing DAG without encourage must say --router-split-z inf.
+  11. No binary-level resume test (P1 cannot give an empty round); the unit test resumes every 997 steps instead.
+
+FILES (fastbin/grow6): grow6.patch (against grow5-src), unit-tests.log, tests_block.rs, cli_checks.sh/.txt,
+  id_p1_g6.py/.txt, id_p1_grow4.py/.txt, cmp_arm.py, evalloss.sh/.txt, evalloss-fast-rounds.txt, cost.py/.txt,
+  regen_recipes.py, spec_check.py/.txt, smoke/ (the xor3 smoke), id/p1 (the P1 runs and arenas).
+
+DEPLOYED (2026-11-12 ~12:40; nothing launched)
+  - models/from-scratch/bin/chessai-grow6 (cp -n from cand/), md5 a14361e63158243ed624d0a31331146c.
+  - leagues/make_recipes.py HAND and leagues/recipes.txt (backups leagues/{make_recipes.py,recipes.txt}.before-grow6):
+    one new row, D-P-Ne-ctx-grow: T-P-Ne-grow's train arguments, --path-context, grow4's rule with the bar on
+    (--grow-mdl 1 --grow-gate age --grow-priority snapshot) and the encourage rule at 6.80's numbers
+    (--router-split-rule encourage --router-credit 10000000 --router-trial-windows 5 --router-trial-z 2
+    --router-chain 1 --log-router-stats); trains on chessai-grow6; self-play arguments D-P-Ne-ctx-r4's (unused by
+    local experiments). make_recipes.py reproduces recipes.txt exactly (regen_recipes.py); the only difference
+    from the backup is the new row.
+  - leagues/specs/batch6/grow-dag-p1.DRAFT.json: F-P x2; T-P-Ne-grow + {--grow-mdl 1, --grow-gate age,
+    --grow-priority snapshot} x2; D-P-Ne-ctx-grow x2; seed 62 (61 is probit-p3's; 62 unused on 11-12 12:40);
+    ply 1; self-games; plateau scaled, min 600; cap 900; 1,584 games per cycle; prices P2; hybrid17. Line names
+    9, 65 and 21 characters (spec_check.py -> spec_check.txt: make_config, read only, against the current
+    leagues.py). Not created. After create, before cycle 1:
+    python3 leagues/specs/ply1/train_binary.py leagues/experiments/grow-dag-p1 chessai-grow6
+  - Not touched: leagues/leagues.py (8f5cb2168340b6bec49ae68dfee8e582 when this build started,
+    6f801ac355d43d38f63bf1b0853e27b3 at 12:50 after the observers fork's edit; imported read-only for the
+    expansion check, both versions), leagues/arena.py (6db0ecad0564c3fd35ec2301e7c58751),
+    leagues/specs/arenas/make_split_read.py (0e7f16f96152dd8227bbc784b31e8d5a), leagues/dashboard.py; rs/.
+
+6.88 (2026-11-12 13:15; no code change to the binary, no grow7)
+  The keep rule as built (bdd.rs router_verdict): after K windows a router split is undone iff its G_real - G_null
+    is below -router_trial_z block SE (bar 0 when se = 0); otherwise kept, whatever its gain. No MDL bar on the
+    router trial: the only MDL bar, with path-table parameters in k, is the leaf trials'. So 6.88's rule is
+    --router-trial-z 2, already in the recipe row. grow3's post-split check (spec 2.5) also runs under encourage: it
+    never undoes; a worse first window backs the made nodes off one close, inside the age gate.
+  Draft: D-P-Ne-ctx-grow + {--router-chain 2, --router-credit 5000000} x2 (replaced in place, no duplicate flags;
+    line names 58 characters); the description has 6.88's rule and predictions and the new cost.
+  Tests (test-only addition in grow6-src; target/release/chessai, cand/ and bin/chessai-grow6 all still
+    a14361e63158243ed624d0a31331146c): grow6_router_keep_rule_undoes_only_below_minus_z_se (a real split on
+    trial, its blocks set to G = -2.1, -1.9, -0.5, 0, +0.1, +1.9, +5 SE with --grow-mdl 1e6: only -2.1 undone;
+    se 0 kept) and grow6_router_chain_2_lets_a_split_router_split_once_more (second-level splits happen, none at
+    chain 2; an undone second-level split puts its router back at chain 1, its copies go, the structure holds
+    and training goes on). 243 lib + 1 main pass (unit-tests-688-full.log). grow6.patch regenerated (the old one
+    is grow6.patch.before-688).
+  P1 smoke (id_p1_chain2.py -> id_p1_chain2.txt):
+    - the draft's DAG args: 3 router splits: the root by cluster at 9.0M (kept at 14.0M, z +6.7), then two of its
+      copies at 14.1M and 18.2M, still on trial at the end (a copy's region sees about a third of the traffic,
+      so its K x W takes ~15M root positions). 22 nodes (9 leaves, 13 routers), 3 sets, 42 cells; each leaf
+      has 9 cells (81 weights, mean |w| 0.033, max 0.26). hybrid17 and grow6 read it identically (held-out
+      0.6647, the tree's 0.6647); -30 against one F-P (-59 to -1).
+    - fast twin (W 200k, leaf credit per 1M, router credit 1M; at W 200k it runs about 5x faster than W 1M, so its
+      end is roughly the draft at v500-600): 12 router splits, 10 verdicts, 2 undone (z -14.8, -6.2), kept at
+      z -0.20 and -0.76 (no margin needed); 48 nodes (11 leaves, 37 routers), 8 sets, 181 cells, under the
+      55-node warning; read identically by both binaries; -30 against F-P.
+  Cost with chain 2 and 5M (cost-688.txt: CPU per P1 round = user time spread by the logged round times):
+    at P1's end (about v115) the tree trains 0.89 s per round and the DAG 3.83 s (4.3x; chain 1 at 10M 2.09 s).
+    The fast twin's end, the v500-600 proxy, 5.1 s. Per cycle on average: F-P 0.2, tree ~1.2, DAG ~5.3 (x1.27
+    league scale), training ~13.4 s, plus ~13-15 s tournament, calibration and self-games: ~27 s per cycle,
+    ~4.5 CPU-h to the 600 floor and ~7-7.5 CPU-h to the 900 cap (the chain-1 estimate was 3.3-3.6 / 5.0-5.5).
+    Wall ~2.5-3.3 h to the floor and ~4-5 h to the cap on a quiet machine.

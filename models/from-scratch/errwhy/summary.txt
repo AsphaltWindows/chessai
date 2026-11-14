@@ -1,0 +1,211 @@
+errwhy (2026-11-07): why error routers predict better but play worse, and how to turn the prediction into play.
+Diagnostics only: the judges and the outside reference never label anything a lineage trains on. No new chessai
+binary (tool/ is a diagnostic crate on lrshare-src, md5 of its build below). League models copied from cycles/runs
+(read only) into models/. Everything ran at nice 19 with at most 2 threads.
+CPU: A 0.5 min, C 1.5, B 11.1 (with two trials), C2 1.6, D 7.0: about 21.7 CPU-min in all.
+
+SHORT ANSWERS
+1. Too weak, or the target? Both, in that order, but routers are not where the trees lose.
+   - The best-child target is biased towards the result. Routers retrained on held-out league positions with it never
+     beat the trees' own routers (any kind: CNBP, LR, TAN, FM). Their picks share more information with the game's
+     result than an expected-loss rule's (mutual information at the root up to 0.10 nats, against 0.05).
+   - The same LR router regressing each child's expected loss recovers 51% of the reachable gain on T-L-Ne-c and 20%
+     on T-L-Le-c.
+   - CNBP and TAN routers can't use even a clean target (21% at most on LR-leaf trees). FM with a clean target gets
+     50-74%. So capacity binds for naive-Bayes-type routers.
+   - Even reference-quality routing at every router would only bring T-L-Ne-c up to flat LR on league positions. The
+     leaves bind.
+2. Where does the prediction gain go?
+   - CNBP error routers' gains are measured on their own training stream, and don't reach league positions. There
+     T-L-Ne-c and T-N-Ne-c predict worse than their cluster twins (0.014 and 0.039 nats).
+   - LR error routers do predict better than their cluster twins. That shows at ply 2: both judges rate their moves
+     better, and the league agrees.
+   - At ply 1 the gain is lost, mostly at seams. The 1-ply argmax over hard-routed siblings takes moves whose
+     position falls in another leaf that rates them 0.5-0.7 nats above the parent's leaf. In the 20% of positions
+     where T-L-Le-c's top move crosses, it gives up 0.011-0.013 of decisive win probability per move against
+     T-L-Nc-c.
+3. What should go in the league?
+   - Soft routing at play time (blend), for LR-router error trees, at ply 1. Blending a tree's leaves by its routers'
+     probabilities, against the same tree routed hard, gains 95 Elo (85 to 106) for T-L-Le-c and 75 (64 to 85) for
+     T-L-Le-fresh-c at ply 1 (2000 games each).
+     Re-judged in E against the right comparator, the same tree calibrated on its own games (cal-own): 58 and 45.
+   - Blending carries that, not the leaves' recalibration: recalibration alone against hard is 1, -8, 12 and 1 Elo.
+   - The ply-2 gains (55 and 35 Elo) are a separate effect: recalibrating the whole tree alone gives the same 56.
+     That is the league's fixed 0.1-nat softmax acting on underconfident log-odds, not routing.
+   - Cost: about 4-5x CPU per game.
+
+A. ONE COMMON HELD-OUT SET (a_eval.py -> a_parts.csv, a_table.txt)
+League round-robin 84 of cycle 15 (offline-c15/test, 575k positions). No lineage trains on league games. Each entry
+is scored with its own fitted calibration on each of the 10 parts of tanroute/parts, with paired 95% t intervals.
+Log-loss is over all positions; winner log-loss is over decisive positions. Elo is league Elo of that entry at
+ply 2 / ply 1.
+  entry                   nodes  log-loss  winner   Elo p2 / p1
+  F-L-c-v2860                 1  0.6193   0.3300   1686 / 952
+  F-L-d2jit-c-v1651           1  0.6431   0.3410   1790 / 790   (best ply-2 player, predicts worse than F-L-c)
+  T-L-Nc-c-v516              16  0.6294   0.3383   1638 / 973
+  T-L-Ne-c-v556              16  0.6430   0.3430   1599 / 983
+  T-L-Le-c-v1081             16  0.6245   0.3318   1650 / 889
+  T-N-Nc-c-v472              16  0.7464   0.4070   1383 / 706
+  T-N-Ne-c-v574              16  0.7850   0.4381   1363 / 702
+  T-L-Nc-fresh-c-v2061       16  0.6359   0.3451   1604 / 958
+  T-L-Le-fresh-c-v682        10  0.6251   0.3327   1630 / 930
+  T-L-Le-fresh-c-v742        13  0.6189   0.3294   1610 / 893   (latest; T-L-Nc-fresh-c-v2097 0.6363, 1582 / 992)
+Error twin minus cluster twin, log-loss (negative: error twin predicts better):
+- T-L-Ne-c: 0.0136 [0.0075, 0.0196] at peak, 0.0156 [0.0064, 0.0248] at latest.
+- T-N-Ne-c: 0.0386 [0.0294, 0.0478] and 0.0460 [0.0386, 0.0534].
+- T-L-NNs-c: 0.0097 [0.0045, 0.0150].
+- T-L-Le-c: -0.0049 [-0.0194, 0.0097] and -0.0047 [-0.0113, 0.0019].
+- T-L-Le-fresh-c: -0.0108 [-0.0243, 0.0028] and -0.0174 [-0.0307, -0.0041].
+- T-L-Ne-fresh-c: -0.0011 [-0.0116, 0.0095].
+Against flat F-L-c, every tree predicts worse: T-L-Nc-c by 0.0100 [0.0030, 0.0170], T-L-Ne-c by 0.0236, T-L-Le-c by
+0.0052 [-0.0043, 0.0146]. Log-loss on game positions doesn't order play across families: F-L-d2jit-c predicts worse
+than F-L-c but is the strongest ply-2 player.
+b0_struct.txt and b0_seq.txt: the merge lineages' best LR-leaf entries are often single-leaf (merged) versions. The
+counterexample T-L-Le-merge-d2jit-c peaks at 1762 with v1404, a flat LR (1 node). Its split versions rate
+1503-1699.
+
+C. DOES THE GAIN CHOOSE MOVES? (errwhy moves -> c_moves/, c_summary.txt, c_cross.txt)
+6000 positions of round-robin 84 (seed 11). Every legal move is valued by each model as league players value it
+(log-odds, uncalibrated, at ply 1 and ply 2), and by two judges searching 2 plies: J1 F-L-d2jit-c-v1651 and J2
+F-P-tau0-d2jit-c-v2036 (a probit). Regret is the judge's loss of decisive win probability for the model's top move,
+x1000. Differences are paired, model minus comparator, with a 95% interval.
+- T-L-Le-c minus T-L-Nc-c: at ply 1, 7.0 [4.5, 9.6] (J1) and 4.9 [2.9, 6.9] (J2), so worse. At ply 2, -1.8 [-2.9,
+  -0.7] and -2.4 [-3.4, -1.4], so better.
+- T-L-Le-fresh-c minus T-L-Nc-fresh-c: at ply 1, 3.0 [0.6, 5.5] and -0.7 [-2.6, 1.2]. At ply 2, -5.7 [-6.7, -4.7]
+  and -7.7 [-8.7, -6.7].
+- T-L-Ne-c minus T-L-Nc-c: worse at both plies (ply 1: 3.9, 5.4; ply 2: 2.3, 2.1), as in A.
+- T-N-Ne-c minus T-N-Nc-c: worse at ply 1 (4.1, 5.2); at ply 2 about level.
+The league agrees: T-L-Le-fresh-c rates 1630/1610 at ply 2 against 1604/1582, and 930/893 at ply 1 against
+958/992. T-L-Le-c rates 889 at ply 1 against 973.
+Crossings at ply 1. A crossing is a move whose position goes to another leaf than the position before it.
+- How often top moves cross (actual against chance): T-L-Nc-c 12.8% against 9.3%, T-L-Ne-c 16.4% against 11.0%,
+  T-L-Le-c 20.2% against 12.8%, T-L-Le-fresh-c 9.8% against 6.8%.
+- Chosen crossings' leaf offset for the mover: about 0.5-0.7 nats, against about 0 over all crossings.
+- Split by the tree's own crossings, T-L-Le-c minus T-L-Nc-c:
+    no crossing child (59% of positions): 5.8 and 4.7
+    top move stays in the parent's leaf (21%): 4.9 and -0.5
+    top move crosses (20%): 13.0 [7.2, 18.8] and 11.2 [6.5, 15.8]
+  So 37-45% of the ply-1 deficit sits in that 20%.
+- Every tree minus flat, where its top move crosses: 7-13. For cluster trees elsewhere: about 0.
+
+B. TOO WEAK, OR THE TARGET? (errwhy routers -> b_TREE/, b_TREE/summary.txt, b_overview.txt)
+Setup. Each delegator's children are frozen. Its router is retrained on the positions of league round-robins 80-83
+that reach it (every 4th position, 577k at the root; 2 passes for LR and FM). Every rule is scored on round-robin
+84's parts with a calibration fitted per rule and part.
+Targets:
+- best: the child of least 3-class log-loss on the result, as --route error --error log.
+- soft: responsibilities.
+- clean: the child closest to an outside LR (offline-c15's LR trained on rounds 80-83). Diagnostic only.
+- costsens and regress (LR form, expected loss): a softmax gate minimising the expected loss, and a regression of
+  each child's loss minus the children's mean.
+- ref plug-in (no training): picks the child closest to the outside LR's prediction at test time. It stands for the
+  reachable gain.
+Gain over the tree's own routers, summed over delegators weighted by their share of positions, calibrated, x1000
+(share of the ref plug-in's gain):
+  rule          T-L-Ne-c        T-L-Le-c        T-L-Nc-c        T-N-Ne-c
+  ref plug-in   -25.9 (100%)    -13.4 (100%)    -17.1 (100%)    -75.0 (100%)
+  best  CNBP     3.2 (-12%)      31.8           19.0            -57.3 (76%)
+        LR       5.3 (-21%)       6.2            21.4            -61.4 (82%)
+        TAN      2.1 (-8%)       15.4            13.3            -58.7 (78%)
+        FM       5.0 (-19%)       6.7            21.1            -68.2 (91%)
+  LR regress   -13.1 (51%)      -2.6 (20%)       0.4 (-2%)     -65.8 (88%)
+  LR costsens   -6.8 (26%)      -1.3 (10%)       0.6           -43.3 (58%)
+  clean CNBP    -1.3 (5%)        21.7             0.6           -63.9 (85%)
+        LR     -10.0 (39%)      -1.9 (14%)        1.3           -64.2 (85%)
+        TAN     -5.5 (21%)       10.8            -2.4 (14%)     -61.6 (82%)
+        FM     -19.3 (74%)      -6.6 (50%)       -8.9 (52%)     -70.5 (94%)
+Mutual information of the root's pick and the result (nats):
+- the trees' own routers: 0.073-0.082
+- best targets: 0.025-0.100
+- regress: 0.011-0.058
+- ref plug-in: 0.006-0.050
+Reading the table:
+- The trees' own routers (trained in self-play on far more positions) already match anything trained on the best
+  target, except T-N-Ne-c.
+- T-N-Ne-c's self-play routers are badly off on league positions: retrained on league positions with any target,
+  they recover 58-95% of a large gain.
+- For T-L-Ne-c the reachable gain (26) would take it from 0.643 to about 0.617: flat LR's level (0.619), not past it.
+
+C2. PLAY-TIME VARIANTS, offline (errwhy moves -> c2_moves/, c2_summary.txt)
+4000 of C's positions, the same judges.
+- leafcal (each leaf recalibrated on round-robin 80, routing hard): no change at either ply (within 1 x1000).
+- blend1 (leaves blended by the routers' probabilities at tau 1, leaves recalibrated), minus hard:
+    T-L-Le-c        ply 1 -2.1 (J1) and -1.5 (J2), not significant; ply 2 -3.1 and -2.3, significant
+    T-L-Le-fresh-c  ply 1 -2.5 and -1.7, significant; ply 2 -0.5 and -0.6
+    T-L-Ne-c        ply 1 -1.4 and -1.7; ply 2 -2.6 and -1.5
+    T-L-Nc-c        ply 1 -0.2 and -0.4; ply 2 -0.8 and -0.8
+  Spearman rho with the judges rises 0.02-0.06 for the error trees.
+- blendraw (not recalibrated) is about the same as blend1 for T-L-Le-c.
+
+D. SMOKE: blend against hard, same tree (d_run.sh, d2_run.sh, d3_run.sh -> d_run.out, d2_run.out, d3_run.out, d_pool.py)
+Setup. blend:1:GAMES:bdt:PATH, the main binary's kind. GAMES is the tree's own games: 600 games of itself at ply 1
+with the league policy (d_games/, about 1 s CPU). Arenas use the league policy (log-odds softmax, T 0.1) on
+chessai-lrshare.
+Blend minus hard:
+  T-L-Le-c        ply 1: 95 Elo (85 to 106), 2000 games; ply 2: 55 (29 to 82), 600 games
+  T-L-Le-fresh-c  ply 1: 75 (64 to 85), 2000 games;     ply 2: 35 (9 to 62), 600 games
+Separating the two parts of blend (500 games a run at ply 1, 200 at ply 2):
+- ply 1, leafcal minus hard (recalibration only): 1, -8 (T-L-Le-c); 12, 1 (T-L-Le-fresh-c).
+- ply 1, blend minus leafcal (blending only): 78, 70; 64, 54.
+- ply 2, T-L-Le-c: leafcal minus hard 58 (13 to 105); blend minus leafcal -23 (-68 to 22).
+- ply 2, T-L-Le-c, whole-tree recalibration (cal:GAMES): cal minus hard 56 (11 to 103); blend minus cal 30 (-16 to
+  76). At ply 1, cal minus hard 26 (6 to 46).
+So at ply 1 blending carries the gain. At ply 2 the gain is recalibration sharpening the league's fixed 0.1-nat
+softmax for a tree whose own-game calibration slope is about 1.35. That would help any underconfident entry; it is
+a league-policy effect, not routing.
+Cost: blend plays a game in about 4-5x the CPU of hard routing at ply 1 and ply 2 (T-L-Le-c, one thread). It
+evaluates every leaf whose blend weight is over 0.001. A larger cut-off would be cheaper (untested).
+The league's tournament binary chessai-tanroute2 loads blend specs (checked).
+
+PROPOSED LEAGUE LINE (sent to main, not to the cycle agent)
+A play variant, not a new lineage: the latest entries of T-L-Le-fresh-c (and T-L-Le-c if it is still active) also
+played as blend:1:GAMES:bdt:PATH.
+- GAMES: 600 games of that version against itself at ply 1 with the league policy. Self-play, about 1 s CPU.
+- Binary: chessai-tanroute2.
+- Comparator: the same versions' hard entries.
+- Ply 1 is the clean comparison. At ply 2 add a cal:GAMES entry of the same version if the comparison should
+  exclude the softmax-sharpness effect.
+
+FILES
+a_select.py (peaks, versions), a_eval.py, a_parts.csv, a_table.txt; b0_struct.py/.txt, b0_seq.py/.txt;
+tool/ (diagnostic crate on lrshare-src; build md5 6eb3d91195febc8ec5c364462acdc127): `errwhy moves`, `errwhy routers`;
+c_models.txt, c_moves/ (moves.csv, cross.csv), c_summary.py/.txt, c_cross.py/.txt;
+b_run.sh, b_summary.py, b_overview.py/.txt, b_T-*/ (routers.csv, tracks.csv, summary.txt), b_*.log/.time;
+c2_models.txt, c2_run.sh, c2_moves/, c2_summary.txt; d_games/, d_run.sh/.out, d2_run.sh/.out, d3_run.sh/.out,
+d_pool.py; models/ (copies of the entries used).
+
+E. BLEND RE-JUDGED AGAINST CAL-OWN (added after leaguecal; e_run.sh -> e_run.out, e_pool.py -> e_pool.txt)
+Why. D compared blend with the same tree routed hard and uncalibrated. The league plays each tree's league spec
+(cal:heldout-lr-d2-s555, calibrated on held-out d2 games). leaguecal showed that calibrating a tree on its own games
+(cal-own) sharpens it under the league's 0.1-nat softmax, routing unchanged. So D's gains mix routing and sharpening.
+Setup. As D: the same trees (T-L-Le-c-bdt1081, T-L-Le-fresh-c-bdt682), the same own games (d_games/),
+chessai-lrshare (md5 e9ae9c6528edb207399a6e1b293278d5), league policy, alternating colours, two threads, nice 19.
+Three specs per tree:
+  league spec  cal:heldout-lr-d2-s555/round0:bdt:PATH
+  cal-own      cal:d_games/TREE:bdt:PATH (the whole tree calibrated on its own games, routing hard)
+  blend        blend:1:d_games/TREE:bdt:PATH (as in D)
+Ply 1: 2000 games per pairing (direct blend - league spec: 1000). Ply 2: 600 games per pairing.
+
+On one scale, league spec 0 (blend chained through cal-own):
+                         ply 1                        ply 2
+                         cal-own       blend          cal-own       blend
+  T-L-Le-c-bdt1081       23 (13-33)    81 (67-96)     45 (19-72)    87 (49-124)
+  T-L-Le-fresh-c-bdt682  30 (21-40)    75 (61-89)     55 (28-81)    56 (19-94)
+Blend minus cal-own, the right comparator:
+  T-L-Le-c        ply 1: 58 (48 to 68); ply 2: 41 (15 to 68)
+  T-L-Le-fresh-c  ply 1: 45 (35 to 55); ply 2: 1 (-25 to 28)
+Direct check at ply 1, blend minus league spec: 73 (58 to 87) and 74 (59 to 88), against 81 and 75 chained.
+
+Reading.
+- At ply 1, blending is worth 45-58 Elo over the same tree on cal-own: about 60% of the 95 and 75 it gained over
+  hard routing in D. The other 30-37 of D's gain was calibration, which cal-own gets without blending.
+- At ply 2, the gain over the league spec is mostly cal-own (45-55). Blend adds 41 for T-L-Le-c and nothing for
+  T-L-Le-fresh-c, so blend's ply-2 routing gain is uncertain.
+- Against what the league plays now (the league spec), blend is 73-81 at ply 1 and 56-87 at ply 2.
+- Cost: blend still takes 4-5x the CPU per game. cal-own costs nothing at play time; making its own games costs
+  1-3 CPU-s per version (leaguecal).
+- For a blend entry, the comparator should be the same version on cal-own. If the league adopts cal-own, blend's own
+  contribution is 45-58 at ply 1 and 0-41 at ply 2.
+- Note: T-L-Le-fresh-c here is v682, the version behind D's 75. leaguecal measured the later v742 on
+  chessai-tanroute2: cal-own minus league spec 29 at ply 1 and 69 at ply 2, in line with v682's 30 and 55.
+CPU: 297 s (e_run.time). Files: e_run.sh, e_run.out, e_run.time, e_pool.py, e_pool.txt.

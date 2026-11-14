@@ -1,0 +1,35 @@
+F-L-d4jit-c (the user, 2026-11-08: "Can we add a F-L-d4jit-c ?"; staged by the coordinator's fork for the cycle
+29->30 boundary, cycles/champ/staged-c29).
+
+The line: F-L-c's line plus --depth 4, that is F-L-d2jit-c's line with --depth 4 instead of 2. It runs on
+chessai-cyc5 from scratch and self-plays by depth-4 search with the default jitter moves (wld-score-jitter10) and
+result labels.
+- Its one factor is depth 4 against F-L-d2jit-c.
+- F-L-d4mix-c also self-plays at depth 4, but it differs in two factors: softmax 0.3 moves, and the 50/50 label mix
+  (--label-depth 2 --label-result 0.5).
+
+Own-step labels (check_line.py, which loads the live driver module by path and prints what it derives from a line):
+- The driver's model_args keeps a line's label flags for the own step's train (the user's 2026-11-06 rule). So
+  F-L-d4mix-c's own step trains with --label-depth 2 --label-result 0.5.
+- F-L-d4jit-c's line has no label flags, so its own step's train args are ['--use-probs'], as F-L-d2jit-c's: result
+  labels. chessai-cyc5-labels has no default label depth.
+- Signature: "lr d4 jitter10". No other active lineage has it.
+
+Smoke (smoke.sh -> smoke.out; 4 threads, nice 19):
+- chessai-cyc5 self-play from scratch, 2 rounds of 10 games at depth 4: exit 0. A resume to 6 rounds: exit 0.
+- The own step's train on chessai-cyc5-labels from the newest model (LR keeps no state; the driver starts it from
+  lrN.model): exit 0, result labels.
+- League-policy arenas on chessai-sparsefit at ply 1 and ply 2: both play.
+
+CPU per game at depth 4 (load 5-8):
+- from scratch, rounds 0-1: 3.715 CPU-s, about 360 plies a game;
+- after a few rounds, rounds 2-5: 3.532 CPU-s;
+- mature F-L-s21 v999-v1000 (the driver's measure recipe): 3.203 CPU-s, about 145 plies a game. costs.csv's
+  2026-11-06 row for the signature (chessai-cyc, load 5.9) was 2.045.
+- costs.csv gets the from-scratch figure (3.715). The table only plans a lineage's first cycle; after that the driver
+  uses its own measurement.
+
+Expected data: the staged status plans about 2 x 10 games a cycle at 55 CPU-s, so its self-play adds about 20 games
+(about 5,000 positions) a cycle. Its own step adds the cycle's ~3,700 league games (~280,000 positions). Most of what
+it learns will be league positions labelled by result, like F-L-d4mix-c, which plays about 1 x 10 games a cycle at its
+measured 4.3 CPU-s a game.

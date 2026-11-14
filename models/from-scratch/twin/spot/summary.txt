@@ -1,0 +1,7 @@
+T-L-Ne-c round 300 (chessai-cyc2): identical (got +56 -43 =901, 249453 plies; log +56 -43 =901, 249453 plies), wall 4.00 s, cpu 5.61 s
+T-L-Ne-c round 1800 (chessai-cyc5): identical (got +51 -38 =911, 242962 plies; log +51 -38 =911, 242962 plies), wall 3.95 s, cpu 6.28 s
+T-L-Nc-c round 300 (chessai-cyc2): identical (got +44 -60 =896, 246368 plies; log +44 -60 =896, 246368 plies), wall 3.12 s, cpu 5.07 s
+T-L-Nc-c round 1100 (chessai-cyc5): identical (got +38 -38 =924, 253864 plies; log +38 -38 =924, 253864 plies), wall 4.61 s, cpu 6.43 s
+T-L-Nc-share-c round 500 (chessai-lrshare): identical (got +53 -35 =912, 248174 plies; log +53 -35 =912, 248174 plies), wall 4.64 s, cpu 5.83 s
+D-L-Nc-c round 2000 (chessai-dag): identical (got +18 -112 =870, 205937 plies; log +18 -112 =870, 205937 plies), wall 5.03 s, cpu 5.19 s
+done

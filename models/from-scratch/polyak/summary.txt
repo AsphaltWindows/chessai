@@ -1,0 +1,166 @@
+Topic 4d (2026-11-07/08 night, own idea from topic 3): Polyak averaging of a lineage's versions, against version
+noise. Training is unchanged.
+
+UPDATE (batch 2, 2026-11-08 day; "Window check" at the end): the league result below for T-L-Le-c was mostly a phase
+artifact. Three of 4d's five windows ended on an own-step version and averaged it with self-play versions. Inside one
+cycle's self-play versions, avg5 is level with the single version in today's league (ply 1 -6 (-15 to 4), ply 2 8 (-13
+to 29), five windows). The proposal for league entries is withdrawn for T-L-Le-c; T-L-Ne-c's windows are unchecked.
+b-hard (blendsp, pure self-play, no own steps) is unaffected.
+
+Verdict: it helps mature lineages and costs young ones. Proposed as driver-side entries for existing lineages; no
+new training lineage.
+- Mature lineages, averaged entries against single versions:
+  - T-L-Le-c (league): 40 at ply 1, every window positive; -11 at ply 2 (not significant).
+  - T-L-Ne-c (league): 7 at ply 1; 28 at ply 2.
+  - b-hard v40-v60: 21 at ply 1, 45 at ply 2. Held-out loss -0.005, with round-to-round swings a fifth as large.
+- Young run (the binary's smoke, v22-v26 of a fresh run): -15 at ply 1, -1 at ply 2. The average lags a model that
+  is still improving fast.
+- Cost: nothing in training. Averaging the files takes about a second a version.
+
+Why:
+- Topic 3 found adjacent versions far apart. Head to head, b-hard v42 beats v43 by 74 at ply 1 and 177 at ply 2, and
+  by 65 and 171 with the same held-out calibration for both.
+- v43's held-out log-loss spikes by 0.024 and recovers at v44.
+- From one version to the next, the LR routers move up to a third of the positions between subtrees.
+- Averaging the weights of the last few iterates (Polyak-Ruppert) is the textbook cure for noisy SGD iterates.
+
+Method (avg.py; bdtparse.py is splice.py's parser):
+- For files of the same structure, every logistic-regression node (leaves and routers) gets the mean of its weights.
+  AdaGrad sums, CNBP counts and the node headers come from the last file.
+- Flat LR files are averaged the same way.
+- avg5(N) is the mean of versions N-4..N. A window that crosses a split is skipped; none did here.
+
+Held-out LR d2 set, calibrated log-loss (series.sh -> series.out; league.sh -> league.out):
+
+| lineage | versions | single | avg5 | avg5 - single (se) | version sd, single -> avg5 |
+|---|---|---|---|---|---|
+| b-hard (blendsp, scaled-down T-L-Le) | v26-v60 (35) | 0.8157 | 0.8105 | -0.0052 (0.0015) | round-to-round 0.0127 -> 0.0026 |
+| F-L-c (league) | 10 windows, v3164-v3209 | 0.6805 | 0.6798 | -0.0007 (0.0005) | 0.0010 -> 0.0013 |
+| T-L-Le-c (league) | v1147-v1192 | 0.6852 | 0.6852 | 0.0000 (0.0017) | 0.0066 -> 0.0020 |
+| T-L-Ne-c (league) | v1397-v1442 | 0.6763 | 0.6749 | -0.0014 (0.0004) | 0.0021 -> 0.0019 |
+| T-L-Nc-c (league) | v691-v736 | 0.6789 | 0.6769 | -0.0021 (0.0016) | 0.0043 -> 0.0030 |
+
+- The league files were copied out of cycles/runs (read-only), five back from the newest.
+- b-hard's worst version goes from 0.8402 to 0.8233 averaged.
+- In the league's T-L-Le-c, single versions range from 0.6687 (v1177) to 0.6904. avg5 stays within 0.6801-0.6873.
+
+In play, b-hard (arena.sh -> arena.out): avg5(v) against v, v = 40-44 and 56-60, cal-own specs, 400 games a pair at
+ply 1 and 120 at ply 2:
+- ply 1: 21 (13 to 29) over 4000 games. Per pair, the mean is 22, with a standard error across pairs of 20.
+- ply 2: 45 (27 to 63) over 1200 games. Per pair, the mean is 46, with a standard error of 23.
+- Single pairs range from -71 to 119 at ply 1 (from -76 to 154 at ply 2). The single versions' own swings dominate.
+
+League lineages in play (arena2.sh -> arena2.out): T-L-Le-c and T-L-Ne-c, avg5 against single over the last five
+windows, cal-own, 400 games a pair at ply 1 and 120 at ply 2:
+
+| lineage | ply 1 (2000 games) | per pair (se) | ply 2 (600 games) | per pair (se) |
+|---|---|---|---|---|
+| T-L-Le-c | 40 (30 to 51) | 40 (6): 51, 47, 39, 46, 17 | -11 (-38 to 16) | -12 (24) |
+| T-L-Ne-c | 7 (-4 to 18) | 7 (6) | 28 (2 to 55) | 29 (23) |
+
+- T-L-Le-c's averaged entries are consistently stronger at ply 1, even though its held-out loss doesn't change on
+  average. Its single versions' swings show more in play than in the mean loss.
+
+EMA instead of a window (ema.py, emaseries.sh -> emaseries.out): the in-training form, ema(v) = d ema(v-1) + (1 - d)
+w(v), started at b-hard's last split (v18). Held-out loss over v40-v60:
+
+| form | mean | round-to-round sd | worst | against single (se) |
+|---|---|---|---|---|
+| single | 0.8097 | 0.0137 | 0.8326 | |
+| avg5 | 0.8053 | 0.0027 | 0.8215 | -0.0044 |
+| ema 0.67 | 0.8043 | 0.0035 | 0.8163 | -0.0054 (0.0016) |
+| ema 0.8 | 0.8033 | 0.0018 | 0.8142 | -0.0064 (0.0018) |
+
+- EMA 0.8 (mean age 4 rounds) is the best and steadiest, so it is the default for the binary.
+
+In training (chain.sh -> chain.out; smoke/run.sh -> smoke/run.out): bin/chessai-polyak, md5
+cf7f528efc3735a71699ca1951950891.
+- ../polyak-src = ../playrouter-src + polyak.patch.
+- What --polyak DECAY does, BDT self-play only:
+  - each LR node (leaves, routers, play and switch routers) keeps an exponential moving average of its weights,
+    moved once a round, after training;
+  - model files carry the averages in the weights' place;
+  - prediction, training, self-play and the state's weights are unchanged, and the state keeps the averages;
+  - a resumed run without the flag drops them.
+- Children of a split inherit their parent's average. New routers start theirs at their first round.
+- State: an LR node with an average is written under a new tag (4). Old states, and states without averages, are
+  unchanged.
+- Two new unit tests (averages move by the decay, fill the files, and survive the state; training is unchanged).
+  144 tests pass.
+- Identity against chessai-playrouter without the flag: 0 non-log diff lines on all four identity scripts.
+- Smoke, scaled-down T-L-Le, seed 21: plain ran 26 rounds; avg ran 20 rounds with --polyak 0.8, then was resumed to
+  26.
+  - The ladders are identical. The v1 files are identical, since the first average is the weights. The v26 files
+    differ, with the same 16 nodes.
+  - chessai-sparsefit scores the averaged file exactly as chessai-polyak does.
+  - Held-out loss, v18-v26: level on average (avg 0.8244, plain 0.8212 at v26).
+  - Cal-own arenas over v22-v26: -15 (-27 to -4) at ply 1, -1 (-25 to 23) at ply 2.
+- Reading: in a young run the EMA's lag (mean age 4 rounds) costs more than the noise it removes, and the averages
+  that children inherit at splits are stale.
+- Restarting the averages at splits would be cleaner, but it doesn't matter for mature lineages, whose trees have
+  stopped splitting.
+
+Proposal (for the driver, no new binary):
+- For a mature lineage, enter averaged versions beside, or instead of, the raw ones.
+  - Command: python3 models/from-scratch/polyak/avg.py OUT bdt{N-4}.model ... bdtN.model (oldest first).
+  - It averages the LR weights and leaves out files from before a split.
+  - Its output is an ordinary BDT file, so the tournament binary is unchanged.
+- One factor from the lineage's own entries, at no training cost.
+- First candidates:
+  - T-L-Le-c: 40 (30 to 51) at ply 1, positive in all five windows;
+  - T-L-Ne-c: 28 (2 to 55) at ply 2.
+- Not proposed: from-scratch lineages with --polyak (the smoke's lag cost).
+
+CPU: series and league held-out evaluations about 4 CPU-min; arenas (b-hard, league) about 10; EMA series 2; build,
+identity and smoke about 8. About 24 CPU-min.
+
+Not run (stopped for topic spdrop): avg.py has a diagnostic mode, `avg.py --only leaves|routers OUT FILE...`.
+- It averages only the leaves' or only the routers' LR weights; every other node comes from the last file.
+- It is meant to split the Polyak gain between leaves and routers ("leaves bind").
+- The default mode is unchanged: on b-hard v39-v43 the output is byte-identical to avg/b43.model.
+- No arenas or held-out runs used it.
+- Caveat: avg.py writes weights with 6 significant digits. A full-precision round trip would need repr(), as
+  spdrop/interp.py does.
+
+
+Window check (batch 2, the coordinator's fork, 2026-11-08 day; window/run.sh -> window/run.out, window/pool.py ->
+window/pool.out). Did 4d's T-L-Le-c windows straddle own-step versions? Yes, three of five.
+
+A run's versions alternate: each cycle's self-play versions, then its own-step version (E+1, when the gate keeps it),
+from which the next cycle's self-play starts. spdrop found the two phases far apart at ply 2 and ply 1 for T-L-Le.
+
+4d's windows, classified from the runs' records (avg5(N) = mean of N-4..N, against N):
+- 1172: v1168-1171, first-run self-play (cycle 30), plus v1172, an own step in dormancy. Single: own-step version.
+- 1177: v1173-1176, own steps in dormancy, plus v1177, the new run's copy of the old peak v1081 (itself an own-step
+  version). Single: own-step version.
+- 1182: v1178-1182, self-play of the new run's cycle 2. Inside one cycle.
+- 1187: v1183-1186, self-play of cycle 2, plus v1187, cycle 2's own step. Single: own-step version.
+- 1192: v1188-1192, self-play of cycle 3. Inside one cycle.
+- Re-pooled: windows ending on an own-step version 48 (35 to 61) at ply 1 and -30 (-66 to 5) at ply 2 (three
+  windows); inside windows 28 (11 to 45) and 17 (-25 to 61) (two windows, 800 and 240 games).
+
+Redone in the new run's cycles 23-27 (T-L-Le-c, self-play v1418-1427, v1429-1439, v1441-1450, v1452-1462, v1464-1474;
+own-step versions v1428, v1440, v1451, v1463, v1475, all kept). cal-own specs (600 own games each), arenas in the
+league policy, 200 games a pair at ply 2 and 400 at ply 1, seed N mod 1000:
+
+| windows | ply 2 | per pair (se) | ply 1 | per pair (se) |
+|---|---|---|---|---|
+| inside: N = each cycle's last self-play version, the one its tournament rated | 8 (-13 to 29), 1000 games | 8 (11): 31, -26, 30, 14, -9 | -6 (-15 to 4), 2000 games | -6 (5): -8, 8, -12, 3, -19 |
+| straddling: N = the own-step version, averaged with the four self-play versions before it | -102 (-124 to -80) | -104 (24): -76, -147, -89, -171, -37 | 96 (85 to 107) | 97 (22): 164, 119, 72, 31, 99 |
+
+- Inside one cycle's self-play, averaging gains nothing for today's T-L-Le-c at either ply. Its adjacent self-play
+  versions don't differ enough for the average to help.
+- A window that ends on the own-step version is a phase mixture: four self-play versions pull the average to the
+  self-play phase, which is 96 stronger at ply 1 and 102 weaker at ply 2 than the own-step version. That is the spdrop
+  swing again, measured on weights.
+- So 4d's "40 at ply 1, -11 at ply 2" for T-L-Le-c was mostly phase, not noise reduction.
+
+For the decision held for the user (Polyak entries):
+- No case for T-L-Le-c. Any averaged entry must keep its window inside one cycle's self-play versions, or it measures
+  the phase swing.
+- T-L-Ne-c's 28 at ply 2 (4d) needs the same check before it counts; its windows were in the same version era.
+- The champion-stabiliser argument rested on version noise between adjacent versions. In today's mature T-L-Le-c,
+  that noise doesn't show within a cycle; the big swings are between the phases.
+
+CPU: 10 averaged files (seconds), 20 own-game sets (600 games at ply 1), 10 ply-2 arenas of 200 games and 10 ply-1
+arenas of 400 games, on 2 threads: about 6 minutes wall (12:37-12:43), so at most 12 CPU-min.

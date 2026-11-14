@@ -1,0 +1,284 @@
+Topic spdrop (2026-11-07/08 night, the coordinator's diagnostic for a design question): after one cycle of self-play
+(about 60 CPU s), several lineages' new versions are 140-220 below their champion in the new league (cycles/champ),
+and the own step on league games wins it back in its gate (0.63-0.81). Own-step versions never play in the
+tournament.
+
+Verdict (all three questions answered; about 12 CPU-min):
+1. The drop is real, at ply 2 only, and kind-specific. Over cycles 2-4 at ply 2: FM -147, T-L-Le* -105, MoE -91,
+   T-L-LLs* -70, T-N-Le -60, flat LR -21; the rest (CNBP-routed trees, NB-leaf trees, TAN, D-L-Nc) within about
+   30, except T-N-LLs at 42. At ply 1 the same versions hold or gain
+   (FM 71, T-L-Le 44). The first run's history shows the same, pooled over 132 switches between self-play and own steps.
+   Within each lineage it is steady from cycle to cycle, not noise. It is not bigger for d2jit; T-L-NLs-d2jit-c's
+   drop is a different case (version noise, a lucky old-peak champion, a lower slope).
+2. Depth-0 self-play moves the model's skill from ply-2 positions to ply-1 positions, all of it in the first round
+   of 1000 games. The own step, half of whose games are the ply-2 entry's, moves it back.
+   - The kinds that swing most have learned local parts: FM factors, MoE gates, LR routers over LR leaves. Flat LR
+     barely swings. LR routers over NB leaves mostly don't swing (T-N-Lc 12, T-N-LLs 42); T-N-Le (-60) does.
+   - It is forgetting ply-2-relevant positions, not draw drift (universal, and the policy ignores draws) and not the
+     cal-own slope (wrong direction, except T-L-NLs-d2jit-c).
+3. The own step wins the whole drop back: own-step versions are level with their champions (mean 5, se 15).
+   - The champions are own-step versions, so the champion test compares the bottom of each lineage's swing with a
+     top.
+   - (a) Rating the own-step version through its gate: right on average (152 against the panel's 134), off by up to
+     100 for one lineage, and the gate plays the wrong policy (WldScoreJitter10, not the league's).
+   - (b) The own step before the tournament, on last cycle's games: it recovers as much as this cycle's games
+     (O'5 - E5 119 against O3 - E3 124, three lineages). The entering version would be level with its champion
+     (mean -5). This is the fix that works.
+   - (c) A smaller self-play rate: not cheap. One round already makes the whole shift, and a quarter of a cycle's
+     step in weight space costs 85.
+
+Questions:
+1. Is the drop real once pooled over cycles and versions? Which kinds?
+2. What does self-play change: held-out loss, draw prediction, the cal-own slope?
+3. What would the cheap fixes do (rate the own-step version through its gate; own step before the tournament on last
+   cycle's games; a smaller self-play rate)? Estimated offline or in arenas only.
+
+Everything here reads the live dirs only (cycles/champ, cycles/runs, selfplay/league-champ, selfplay/league-cycles);
+copies are in this directory.
+
+== 1. The drop is real, at ply 2 only, and kind-specific (q1.py -> q1.out, q1b.py -> q1b.out; no CPU)
+
+New league, latest fit (cycle 4's), current version minus the seeding champion C, cycles 2-4 (n = lineage-cycles):
+
+| kind | ply 1 | ply 2 |
+|---|---|---|
+| FM (FM-c) | 71 (n 3) | -147 (se 14, n 3) |
+| T-L-Le* (5 lineages) | 44 (n 9) | -105 (se 14, n 15) |
+| MoE (MoE-c, MoE-d2jit-c) | -38 (n 6) | -91 (se 35, n 6) |
+| T-L-LLs* (2) | -70 (n 6) | -70 (se 42, n 6) |
+| F-L (8) | -10 (n 21) | -21 (se 6, n 24) |
+| T-N-Le (T-N-Le-merge-c: NB leaves, LR routers) | . | -60 (n 3) |
+| TAN, D-L-Nc, T-N-LNs, T-L-NLs (4), T-L-H, F-P (3) | -51 to 26 | -32 to -17 |
+| T-L-Ne (4), T-L-Nc (3), T-L-NNs (2), T-N-NNs (3), T-N-Nc (4), T-N-Ne (2), T-N-H, F-N (2) | -41 to 10 | -13 to 11 |
+| T-N-Lc, T-N-NLs, T-N-LLs (NB leaves; LR routers for Lc and LLs) | . | 12, 7, 42 |
+
+- Per lineage, cycles 2, 3 and 4 at ply 2: MoE-c -221, -118, -143; FM-c -169, -122, -152; T-L-Le-fresh-c -143,
+  -112, -112; T-L-Le-pre-c -127, -151, -137. That is a steady state, not a recovery: cycle 3's smaller drops were
+  noise.
+- T-L-LLs-merge-c went -169, -77, then 66 at cycle 4. T-L-NLs-d2jit-c went -154, -147, then -7 (see section 2: no
+  ply shift for d2jit).
+- Ply 1 is only available where C was the seeding's latest version (it entered at both plies).
+- At ply 1 the post-self-play versions are level with C or better: FM-c 54, 105, 56; T-L-Le-fresh-c 61, 75, 62.
+  MoE-c (-31, -29, -35) and T-L-LLs (mixed) lose a little at ply 1.
+- The d2jit lineages (self-play at depth 2) mostly drop little: F-L-d2jit-c, F-N-d2jit-c, T-N-*-d2jit-c within 25;
+  MoE-d2jit-c -11, -40.
+  - The two large ones, T-L-NLs-d2jit-c and T-L-Le-merge-d2jit-c, have old-peak champions (picked from many
+    versions, so lucky ones).
+  - So the drop is not bigger for d2jit.
+
+First run, final fit (selfplay/league-cycles): every version that entered was made either by that cycle's
+self-play ("sp") or, while the lineage was dormant, by an own step alone ("own"). At each change of mode, the mean of
+the first 3 versions of the new mode minus the last 3 of the old (cycle-2 starts excluded):
+
+| switch | group | ply 1 | ply 2 |
+|---|---|---|---|
+| own -> sp (waking) | all (n 41) | -9 (se 5) | -74 (se 11) |
+| | MoE, FM, T-L-Le*, T-L-LLs* (n 10) | -1 (se 17) | -148 (se 30) |
+| | MoE, FM (n 5) | -22 (se 31) | -215 (se 26) |
+| | the rest (n 31) | -11 (se 4) | -50 (se 6) |
+| sp -> own (going dormant) | all (n 91) | -3 (se 4) | 37 (se 8) |
+| | MoE, FM, T-L-Le*, T-L-LLs* (n 20) | 2 (se 11) | 108 (se 23) |
+| | MoE, FM (n 8) | 35 (se 22) | 203 (se 33) |
+| | the rest (n 71) | -4 (se 4) | 17 (se 6) |
+
+- Caveat: in the first run both switches were triggered by ratings (strikes, re-qualifying), which biases both
+  directions the same way. For "the rest" that bias may be much of the 17-50. It can't make 150-215.
+- The new league's cycle 2 was a forced switch for every lineage (no rating decided it). It shows the same sizes:
+  MoE-c -220, FM-c -176, T-L-LLs-merge-c -165, T-L-Le-fresh-c -142, T-L-Le-pre-c -133.
+- So: self-play costs ply-2 strength, not ply-1 strength, every cycle. For MoE, FM and the LR-routed trees it is
+  150-220; for the rest about 20-50.
+
+== 2. What self-play changes
+
+Own-game calibration (q2cal.py -> q2cal.out; from tournament.log and the gates' lines in cycles/runs/<lineage>.log):
+- Every lineage, drop or not, flips its draw calibration with each step.
+  - Champions and own-step versions (O): offsets -1.5 to -2.9, slope_decisive 0.5-0.7. On their own games they
+    predict too few draws.
+  - Post-self-play versions (E): offsets 1 to 4.9, slope_decisive 0.8-1.7. They predict far too many draws.
+  - Self-play games are 85-93% draws (results.txt), own games 55-68%, league games 3% at ply 2 and 15-19% at ply 1
+    (ratings.csv).
+  - So the draw drift is universal, and by itself it isn't the drop, because the controls flip just as much (T-L-Ne-c,
+    F-L-d0soft-c, T-L-NNs-c, T-L-Ne-merge-c).
+- The league's policy (log-odds softmax, ln P(win) - ln P(loss)) ignores the draw probability. The offsets cancel
+  between moves, so only slope_winner (sw) moves play.
+- sw, E against C/O:
+  - FM-c 0.93-1.36 against 0.72-0.74;
+  - T-L-Le-fresh-c 1.53-1.69 against 1.21-1.42;
+  - T-L-Le-c 1.52-1.79 against 1.23-1.37;
+  - T-L-NLs-d2jit-c 0.60-0.85 against 0.76-1.02.
+  - The controls barely move (T-L-Ne-c 1.59-1.69 against 1.55-1.76).
+  - A larger sw is greedier play, which leaguecal found helps (about 130 per unit ln slope). So it doesn't explain the
+    ply-2 drop, except perhaps T-L-NLs-d2jit-c's: ln(0.65/0.93) is about -0.36, or about -45.
+
+The gate doesn't play the league's policy:
+- cycle.py's gate_match calls `arena` without policy flags, and arena's default policy is WldScoreJitter10: expected
+  score with jitter, the self-play policy. The tournament's default is log-odds softmax at T 0.1. The arena log shows
+  it: "(WldScoreJitter10, depth 2)".
+- The gate's own games and calibration do follow the league's recipe. So every gate in both runs measured the own step
+  in the self-play policy at depth 2, not in the league's.
+- MoE-c, cycle 3 (own.sh, then arenas by hand, both deterministic):
+  - The regenerated own games of v389 and v390 give the logged calibrations exactly. The gate replays exactly:
+    +73 -25 =2, 182.
+  - In the league's policy over 200 games, v390 (O3) against v389 (E3) is +129 -61 =10, 123 (75 to 176).
+  - The own step's gain is real head to head, and somewhat smaller in the league's policy.
+
+Held-out scores (evalrun.sh -> evals.out, evaltab.py -> evals-table.out; 32 CPU s):
+- The positions come from cycle 4's league games, copied out of the live pool while the own steps ran (grab.py).
+  - The league sample is 2% of all pairings, references out; ply 2 (both sides at ply 2) is 1420 games and 125k
+    positions, ply 1 is 385 games and 43k positions.
+  - The other two sets are the lineage's ply-2 entry's games and E3's own games.
+  - The pool copy also let ownstep.py replay MoE-c's cycle-4 own step byte for byte (md5 942c3d40... = moe398.model).
+- Fitted winner log-loss is the log-loss of who won, among decisive positions, with a calibration fitted on the set.
+  So it measures the log-odds that the league's policy reads; lower is better. "Raw" is the uncalibrated full
+  log-loss.
+
+| lineage | version | league ply 2 | league ply 1 | E3's own games | raw, league ply 2 |
+|---|---|---|---|---|---|
+| MoE-c | C v373 | 0.4273 | 0.3260 | 0.3412 | 0.66 |
+| | E3 v389 | 0.4409 | 0.3222 | 0.3293 | 2.29 |
+| | O3 v390 | 0.4217 | 0.3403 | 0.3426 | 0.64 |
+| | E4 v397 | 0.4340 | 0.3271 | 0.3293 | 2.29 |
+| FM-c | C v669 | 0.4249 | 0.3467 | 0.3312 | 0.68 |
+| | E3 v682 | 0.4567 | 0.3333 | 0.3050 | 2.40 |
+| | O3 v683 | 0.4159 | 0.3460 | 0.3245 | 0.64 |
+| | E4 v688 | 0.4585 | 0.3248 | 0.3066 | 2.35 |
+| T-L-Le-fresh-c | C v742 | 0.4295 | 0.3301 | 0.3655 | 0.66 |
+| | E3 v758 | 0.4523 | 0.3079 | 0.3572 | 2.34 |
+| | O3 v759 | 0.4262 | 0.3425 | 0.3710 | 0.64 |
+| | E4 v767 | 0.4504 | 0.3069 | 0.3598 | 2.60 |
+| T-L-NLs-d2jit-c | C v1462 | 0.4197 | 0.3446 | 0.4377 | 0.67 |
+| | E3 v1713 | 0.4370 | 0.3729 | 0.4567 | 0.71 |
+| | O3 v1714 | 0.4226 | 0.3418 | 0.4456 | 0.65 |
+| | E4 v1728 | 0.4209 | 0.3444 | 0.4373 | 0.72 |
+| F-L-d0soft-c (control) | C v2367 | 0.4384 | 0.3138 | 0.2894 | 0.66 |
+| | E3 v2456 | 0.4467 | 0.3080 | 0.2852 | 2.66 |
+| | O3 v2457 | 0.4379 | 0.3134 | 0.2907 | 0.66 |
+| | E4 v2499 | 0.4452 | 0.3031 | 0.2866 | 2.84 |
+
+- Depth-0 self-play moves the model's skill from ply-2 positions to ply-1 positions, and the own step moves it back.
+  E minus O3, on ply-2 positions and on ply-1 positions:
+  - FM-c: 0.041 and -0.013;
+  - T-L-Le-fresh-c: 0.026 and -0.035;
+  - MoE-c: 0.019 and -0.018 (E4: 0.012 and -0.013);
+  - F-L-d0soft-c: 0.009 and -0.005.
+- The sizes rank like the Elo drops: FM and T-L-Le large, MoE next, flat LR small. That matches the league data: the
+  ply-2 entries lose and the ply-1 entries hold or gain.
+- Self-play's own games (85-93% draws) and 1-ply play are a different distribution from ply-2 league play (97%
+  decisive). The own step's games are half the ply-2 entry's.
+- Models with learned local capacity track whichever distribution they were trained on last: FM's factors, MoE's gate
+  and experts, LR routers' partitions over LR leaves. Flat LR and count-routed trees (CNBP routers) move much less.
+  - NB-leaf trees under LR routers mostly don't swing: T-N-Lc 12 and T-N-LLs 42, but T-N-Le -60. So it isn't the
+    LR router alone.
+- The same direction as depth-train's equal-data result (IDEAS.md, look-ahead training by classifier): LR trained on
+  ply-2 league games against ply-1 games was 201 at ply 2 and -34 at ply 1.
+  - Not shown directly here, but topic 4d found LR routers re-route up to a third of positions per version.
+- Draws: every post-self-play version, the control's too, has raw log-loss 2.3-2.8 on ply-2 league positions (O
+  and C: 0.64-0.68). Self-play's 90% draws make the raw model predict draws in a 97%-decisive league. The cal-own
+  calibration repairs the draw level (positive offsets), and the league's policy ignores it anyway. So the draw drift is
+  a symptom of the same shift, not the cause of the drop.
+- T-L-NLs-d2jit-c is the exception, and a different case:
+  - Its self-play is at depth 2, with about 25% draws (results.txt). So its E versions don't over-predict draws (raw
+    0.71) and don't shift between plies.
+  - Its E3 (v1713) is worse on every set, a bad single version. Its E4 (v1728) is level with C on all of them.
+  - Its champion is an old peak (a lucky version). Its E versions also calibrate to a lower sw (0.60-0.85 against
+    0.76-1.02), which is hotter play, worth about -40.
+  - So its drop is version noise plus peak selection plus the slope, not the ply shift.
+
+== 3. Fixes
+
+(a) Rating the own-step version through its gate: first-run evidence (q3gate.py -> q3gate.out, no CPU).
+- While a lineage was dormant, each kept own step's version entered the field after the version it started from.
+  So the final fit rates both: 348 such pairs.
+- The gates (1000 games at depth 2, WldScoreJitter10): mean 15 (se 0.7), after selection (kept only at 50% or more).
+- The league, the same pairs: 10 (se 1.8) at ply 2 and 0.0 (se 1.2) at ply 1.
+- The slope of the league's ply-2 difference on the gate's Elo is 0.47 (correlation 0.19). The gate overstates the
+  league gain by about half, from the keep rule's selection plus the policy mismatch.
+- Own steps add strength at ply 2 only, even in a chain of own steps with no self-play between.
+
+(a), continued. Panel arenas in the league's policy (panel.sh -> panel.out, panel.py -> panel-fit.out):
+- Each version plays 5 fixed champions of other lineages (F-L-c v2860, T-L-NNs-merge-c v1070, F-L-d0soft-c v2367,
+  F-L-d1play-c v3595, F-N-c v1756), 60 games each, ply 2, log-odds softmax T 0.1, cal-own, the same seeds for every
+  version.
+- Each version is rated by maximum likelihood against the panel's ratings in the league's latest fit (cycle 4's).
+  Standard errors are about 21 per version and 30 per difference.
+- The panel reproduces the league: C and E3 come within 0-25 of their league ratings, and E3 - C within 8-20.
+
+| lineage | E3 - C, panel (league) | O3 - E3, panel | gate (WldScoreJitter10, 100 games) | head to head, league policy (200 games) | O3 - C, panel |
+|---|---|---|---|---|---|
+| MoE-c (v373, v389, v390) | -105 (-118) | 82 | 182 | 123 | -23 |
+| FM-c (v669, v682, v683) | -135 (-122) | 162 | 151 | 164 | 27 |
+| T-L-Le-fresh-c (v742, v758, v759) | -132 (-112) | 129 | 92 | 76 | -3 |
+| T-L-NLs-d2jit-c (v1462, v1713, v1714) | -139 (-147) | 161 | 182 | 228 | 21 |
+| mean | -128 | 134 (se 15) | 152 | 148 | 5 (se 15) |
+
+- The own step wins back the whole drop. Each own-step version O3 is level with its lineage's champion in the
+  league's terms (-23 to 27).
+- These four lineages oscillate about their champions' level: self-play takes them about 130 down at ply 2 and the own
+  step brings them back. They made no net progress at ply 2 over cycles 2-3.
+- The champions themselves are own-step versions (the first run's dormant chains), so the champion test compares the
+  bottom of each oscillation with a top.
+- Rating O3 as E3's league rating plus its gate's Elo would be right on average here (152 against 134). It would
+  have been wrong by up to 100 for a single lineage: MoE-c would have scored 1747, a false new champion 63 above C,
+  where the panel puts it at 1662.
+- A gate of 100 games has a standard error of about 40 Elo, 3 times the fit's 14. The first run's gates overstated
+  their league gains by about 2 (slope 0.47).
+
+(c) A smaller self-play rate. T-L-Le-fresh-c's cycle-4 self-play, O3 (v759) to E4 (v767), 8 rounds of 1000 games.
+- The real trajectory (traj.sh -> traj.out):
+  - The fitted winner log-loss on league ply-2 positions goes from 0.4262 (v759) to 0.4502 after one round (v760),
+    then stays at 0.448-0.454 through v767.
+  - On ply-1 positions it goes from 0.3425 to 0.3073 at once, then stays at 0.307-0.314.
+  - In the panel: v759 1695, v760 (one round) 1555, v761 (two rounds) 1543, v767 1602 (league 1564).
+  - So the whole shift happens in the first round. One round of self-play (1000 games) undoes the own step, and one
+    own step (3650 league games, 285k positions) undoes 8 rounds.
+- Weight interpolation as a proxy for a smaller rate (interp.py, interprun.sh -> interp.out):
+  - interp/le-aA.model = O3 + A (E4 - O3) in every LR node (leaves and routers).
+  - Ply-2 loss: 0.4262, 0.4306, 0.4433, 0.4492, 0.4504 at A = 0, 0.25, 0.5, 0.75, 1. Ply 1: 0.3425, 0.3244,
+    0.3079, 0.3056, 0.3069.
+  - In the panel: 1695 at A = 0, 1610 at 0.25, 1538 at 0.5, and E4 1602.
+  - A quarter of the cycle's step already costs 85 at ply 2. The midpoint is worse than either end, probably because
+    mixed LR routers send positions to leaves fitted under the other routing.
+- Estimate: a smaller self-play rate does not remove the drop unless it is cut far below one round's worth, which
+  would stall self-play's learning too. Not a cheap fix.
+- Caveat: interpolation is only a first-order proxy for a smaller rate. The trajectory is the stronger evidence.
+
+(b) The own step before the tournament, on last cycle's games (bfix.sh -> bfix.out, bfix.py -> bfix-fit.out):
+- O'5 = own(E5; cycle 4's games of E4's entries).
+  - It is trained by ownstep.py from the pool copy, exactly as the driver trains its own step (byte-identical
+    replays of cycle 4's O4 for MoE-c, FM-c and T-L-Le-fresh-c).
+  - E5 is cycle 5's post-self-play version. O'5 and E5 play the same panel as above.
+
+| lineage | E5 (panel) | O'5 (panel) | O'5 - E5 (se 30) | cycle 3's O3 - E3 (this cycle's games) | O'5 - C |
+|---|---|---|---|---|---|
+| MoE-c | v405 1558 | 1651 | 93 | 82 | -33 |
+| FM-c | v694 1429 | 1588 | 159 | 162 | 5 |
+| T-L-Le-fresh-c | v776 1605 | 1711 | 106 | 129 | 13 |
+| mean | | | 119 | 124 | -5 |
+
+- Games one cycle old work as well as this cycle's games. The step learns ply-2 league positions, not this
+  version's own games.
+- The order would then be: self-play, the own step on last cycle's games and its gate (against the post-self-play
+  version), then the field gets the kept version and the tournament. It costs nothing extra.
+  - The league would rate versions in the same phase as the champions, and new champions would become possible.
+  - The pool of the previous cycle would have to be kept until the next cycle's own step (keep_pools), about 1 GB of
+    games for the 11 lineages copied here and more for the whole field.
+- The gate's comparison (O' against E) is unchanged, and so is its policy issue.
+
+Gate policy: cycle.py's gate_match should pass --a-policy log-odds-softmax --b-policy log-odds-softmax
+--temperature 0.1, as the tournament plays (a driver change; not made).
+- MoE-c's cycle-3 gate replays exactly in the default policy: 182. In the league's policy over 200 games it is 123,
+  and in the panel 82.
+- With 100 games a gate's standard error is about 40.
+
+== Files and CPU
+
+- q1.py, q1b.py, q2cal.py, q3gate.py: records only, no games (q1.out, q1b.out, q2cal.out, q3gate.out).
+- grab.py: the cycle-4 pool copy (pool4/, 1.0 GB: every pairing of 11 lineages plus a 2% sample).
+- merge.py: the scoring sets (sets/, 0.5 GB).
+- ownstep.py: replays the driver's own step.
+- own.sh: own games by the league's recipe (owncal/). The regenerated ones match the driver's logs exactly.
+- panel.sh/panel.py: 371 CPU s. bfix.sh/bfix.py: 147. interprun.sh: 61. traj.sh: 44. evalrun.sh: 35. The
+  gate replay and head to head: 38. Identity replays and checks: about 25.
+- In all, about 730 CPU s (12 CPU-min), at nice 19 with 2 threads.
+- Everything is under models/from-scratch/spdrop (2.0 GB). The live dirs were only read: state.json, cycles.csv,
+  logs, model files, the pool (copied while the own steps ran), and owncal (copied).

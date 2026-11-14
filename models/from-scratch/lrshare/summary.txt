@@ -1,0 +1,79 @@
+Leaf sharing (--leaf-share) for LR-leaf trees (2026-11-07). This was the extra idea; the ledger has sharing for
+CNBP leaves only.
+
+Verdict: it works, and it is a league candidate as T-L-Ne-share-c against T-L-Ne-c (no merges).
+- Every leaf also takes a gradient step on 0.1 times the log-loss of the examples routed to the other leaves.
+- Without merges this makes LR error trees clearly better offline, and in self-play it shrinks the split's loss to
+  its shadow and halves the seams.
+- With merges it changes nothing: splits are still merged back. So no share-merge lineage.
+
+Code: ../lrshare-src = ../tangate-src + lrshare.patch.
+- In Graph::train_leaf, sharing now also covers LR leaves, with an AdaGrad step on share x log-loss from the leaf's own
+  prediction. CNBP leaves are unchanged.
+- The CLI doc is updated, and there is a new unit test: sharing keeps LR leaves closer (133 tests pass).
+
+Binary: ../bin/chessai-lrshare (md5 e9ae9c6528edb207399a6e1b293278d5), a superset of chessai-tangate.
+- Identity against chessai-tangate, 0 non-log diff lines on all three:
+  - ../probit/identity/run2.sh (out2-lrshare against out2-tangate);
+  - ../tanroute/identity/run.sh (TAN routers; out-lrshare against out-tangate);
+  - identity/extra.sh (tangate train, self-play and resume; CNBP-leaf sharing with merges; out-lrshare against
+    out-tangate).
+- Share-tree model files load and predict the same in chessai-tanroute2 (the tournament binary), chessai-cyc5 and
+  chessai-lrshare.
+
+Offline (run.sh, as ../tanroute/offline.sh: offline-c15, 100k split threshold, CNBP routers). Calibrated log-loss,
+with 95% paired intervals over the 10 test parts against the same recipe without sharing:
+
+| model | log-loss | winner log-loss | leaves | merges | against no sharing | winner |
+|---|---|---|---|---|---|---|
+| ne-s01 (error, share 0.1) | 0.6189 | 0.3288 | 9 | 0 | −0.0058 [−0.0079, −0.0037] | −0.0031 [−0.0040, −0.0022] |
+| nc-s01 (cluster, share 0.1) | 0.6169 | 0.3281 | 7 | 0 | −0.0010 [−0.0023, 0.0003] | −0.0013 [−0.0021, −0.0004] |
+| ne-s01-merge | 0.6200 | 0.3282 | 3 | 2 | −0.0002 [−0.0015, 0.0011] | −0.0007 [−0.0014, 0.0000] |
+| ne-s03-merge | 0.6208 | 0.3284 | 3 | 2 | 0.0006 [−0.0007, 0.0019] | |
+| nc-s01-merge, nc-s03-merge | 0.6220 | | 1 | 3 | exactly flat LR, as without sharing | |
+
+- Without sharing: ne-100k 0.6242, nc-100k 0.6178, ne-100k-merge 0.6199 (5 leaves), flat LR 0.6220.
+- ne-s01 is now better than flat LR: −0.0049 [−0.0063, −0.0034] for nc-s01 and −0.0018 for ne-100k-merge, on the same
+  parts.
+- nc-s01 is the best tree on this benchmark so far.
+- The leaves agree more: the mean |log-odds difference| of a leaf pair is 0.30, against 0.47-0.50 without sharing.
+
+Self-play smoke (smoke/run.sh): tanroute/smoke's scaled-down league recipes (500 games a round, 150k threshold, 20
+rounds, seed 21).
+- --revise inf logs each window's gain of the branch over its unsplit shadow without merging, so the no-merge recipes
+  show it.
+
+| run | revisions | mean gain per example | positive windows | seams |
+|---|---|---|---|---|
+| ne-log (T-L-Ne-c) | 31 | −0.00094 | 2 | 0.03-0.12 |
+| ne-s0.1-log | 29 | −0.00057 | 7 | 0.003-0.09 |
+| nc-log (T-L-Nc-c) | 29 | −0.00081 | 6 | 0.02-0.16 |
+| nc-s0.1-log | 25 | −0.00033 | 9 | 0.01-0.06 |
+| ne-s0.1-merge | 5 | −0.00103 | 0 (5 merges) | |
+| tanroute/smoke/ne (no sharing, merges) | 5 | −0.00075 | 0 (5 merges) | |
+
+- At v20 both no-merge Ne trees have 11 leaves. The leaf-pair log-odds difference is 0.35 with sharing against
+  0.84 without.
+- Early in training the split still loses to the shadow on average, with or without sharing. Sharing cuts that loss
+  by 40-60%, so with merges everything still merges.
+- CPU, user-s for 20 rounds:
+  - ne: 68.4 with sharing against 50.6, 35% more;
+  - nc: 58.0 against 52.1, 11% more;
+  - all of the extra is training, since every example trains every leaf (11 leaves at the end). Play is unchanged.
+
+League:
+  T-L-Ne-share-c | T-L-Ne | models/from-scratch/bin/chessai-lrshare | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route error --error log --leaf-share 0.1 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+- Comparator: T-L-Ne-c, the same line without --leaf-share, on chessai-cyc5. The binaries of existing kinds are
+  identical.
+- Second, optional (smaller offline gain):
+  T-L-Nc-share-c | T-L-Nc | models/from-scratch/bin/chessai-lrshare | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router cnbp --route cluster --leaf-share 0.1 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+- Needs:
+  - own_games.binary_by_lineage -> chessai-lrshare, because older binaries panic on sharing with LR leaves when
+    training;
+  - no tournament-binary change: chessai-tanroute2 loads these files.
+- Cost signature "bdt d0 jitter10 --branch-factor 3 --error log --forget-factor 1 --leaf lr --leaf-share 0.1
+  --reset-leaves inf --route error --router cnbp --split-limit 5 --split-threshold 5000000":
+  - the same as T-L-Ne-c's (0.001666 CPU-s a game) until it splits;
+  - after that, training grows with the number of leaves: about 1.35x at 11 leaves, so about 0.0023.
+
+CPU: about 8 min (identity 0.6, offline 2.6, smoke 4.3, checks 0.2), builds excluded.

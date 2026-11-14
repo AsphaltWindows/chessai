@@ -1,0 +1,57 @@
+Topic 4c (2026-11-07/08 night): do unstarved leaves let trees grow? Leaf sharing at three to four times the leaves.
+
+Verdict: sharing makes size nearly free in accuracy, but not useful. No line.
+- Without sharing, trees with 25-33 leaves are clearly worse than with 7-11.
+- With each family's best share, 27-35 leaves are level with 7-11 (differences 0.0003-0.0011, not significant).
+- The share's training cost grows with the number of leaves.
+
+Setup (size.sh; size2.sh -> size.out, parts.csv):
+- offline-c15 as ../leshare/dose.sh, on chessai-sparsefit: train on round-robins 80-83, 4 rounds, score on round 84's
+  10 parts, calibrated.
+- Bigger trees: split threshold 30k and split limit 20, against 100k and 5. At 100k the trees made 3-5 splits, and
+  le-s03 hit the limit.
+- Each family is run with and without its best share from the dose sweep: Nc 0.1, Ne 0.3, Le 0.3.
+- Run notes:
+  - A restart of the script truncated the first run's output, and a duplicate restart was stopped mid-way.
+  - size2.sh retrained the interrupted tree and evaluated all six.
+  - Training is deterministic, and the retrained trees reproduce the first run's.
+
+Calibrated log-loss, mean over the 10 parts, and paired differences (95% intervals):
+
+| family | 100k | 30k | 30k - 100k | 100k, share | 30k, share | 30k - 100k, share | share at 30k |
+|---|---|---|---|---|---|---|---|
+| T-L-Nc | 0.6077 | 0.6126 | 0.0049 [0.0010, 0.0088] | 0.6067 | 0.6078 | 0.0010 [-0.0012, 0.0032] | -0.0049 |
+| T-L-Ne | 0.6144 | 0.6239 | 0.0095 [0.0046, 0.0145] | 0.6075 | 0.6078 | 0.0003 [-0.0006, 0.0011] | -0.0161 |
+| T-L-Le | 0.6158 | 0.6215 | 0.0057 [0.0032, 0.0082] | 0.6095 | 0.6107 | 0.0011 [-0.0006, 0.0029] | -0.0108 |
+
+- "share at 30k" is the shared 30k tree minus the unshared one. All three are significant.
+- Against flat LR (0.6116): nc-s01-30k -0.0038 [-0.0071, -0.0006]; ne-s03-30k -0.0038 [-0.0051, -0.0025];
+  le-s03-30k -0.0009 [-0.0024, 0.0005].
+
+| tree | leaves | leaf-pair log-odds diff | training user-s |
+|---|---|---|---|
+| nc-30k | 29 | 0.605 | 16.8 |
+| ne-30k | 33 | 0.692 | 23.7 |
+| le-30k | 25 | 0.553 | 29.8 |
+| nc-s01-30k | 27 | 0.254 | 45.0 |
+| ne-s03-30k | 35 | 0.113 | 54.6 |
+| le-s03-30k | 29 | 0.104 | 60.1 |
+
+At 100k the shared trees trained in 22-28 user-s.
+
+Reading:
+- The size penalty without sharing is starvation: 29-33 leaves at about 75k positions each.
+- Sharing removes it, but the extra leaves find nothing the 7-11 leaves didn't. On 2.4M positions, more
+  conditioning contexts carry no more information for LR leaves; that is either data per leaf or what the routers
+  split on.
+- The league's lineages are in another regime. At a 5M threshold every leaf sees millions of positions, and the
+  limit of 5 splits (11 leaves) binds eventually. Whether share lineages could use a higher limit there is open; this
+  benchmark can't say.
+
+Idea, not run:
+- T-L-Nc-share-c with --split-limit 20, one factor from T-L-Nc-share-c, would test the league regime directly.
+- Offline, size is free with sharing, so it is unlikely to be broken. Its cost grows with leaves: sharing makes
+  every leaf step on every example.
+- A cheaper share that scales would sample k other leaves per example, at weight share x (L-1)/k.
+
+CPU: 6 trainings, 230 user-s (plus about 40 retrained), and evaluations. About 6 CPU-min.

@@ -1,0 +1,101 @@
+bal: balanced error targets against the LR-router lock-in (2026-11-08 ~15:30-16:00, the coordinator's fork)
+
+VERDICT: balanced targets break the lock-in. Continuing T-L-Le-c v1538 for 16 rounds, Best keeps sending 100% of
+every self-play round to one leaf (L4); balanced does too for 5 rounds while its frequencies warm up, then spreads to
+1.8-3.0 effective leaves (top leaf 42-75%), and the balanced tree predicts held-out self-play better. T-L-Le-bal-c
+(T-L-Le-c's line plus --error-target balanced, from scratch) is staged for the cycle 34->35 boundary.
+
+Why: models/from-scratch/balance/summary.txt. LR error routers (T-L-Le-c, T-L-Le-pre-c) send 97-100% of each
+self-play round to one leaf, switching leaf after own steps; NB routers and LR routers with share 0.3 spread. A
+calibrated router's argmax under a weak signal is the child most often best.
+
+What --error-target balanced does (models/from-scratch/balsrc = sparsefit-src + bal.patch; bin/chessai-bal, md5
+d6145e866f471cb5cda08531b597cd4c):
+- The target is Best's one-hot on the best child. The router step is weighted by w = 1/(K pbar_best), clipped to
+  [0.1, 10]: K the branch factor, pbar the delegator's running frequency of each child being best (an EMA over
+  BALANCE_HORIZON = 1M examples through that delegator, starting uniform; reset when the node splits). LR routers
+  take a weighted AdaGrad step (as leaf sharing does), CNBP routers train_weighted. The router then learns about
+  p(k|x)/pbar(k), so its plain argmax routes by lift.
+- Only error-routed delegators (train_router with --route error) are weighted; switch error routers and BDD
+  comparisons treat balanced as Best. Play and model files are unchanged.
+- pbar is a tail of the state file, written only with balanced, so other states are byte-identical to before. A
+  state without the tail (older, or trained with Best) resumes balanced with uniform frequencies; a state's
+  options may differ in Best/Balanced only (the error target only changes how routers learn from then on).
+- Unit tests (139 pass, 4 new): balanced routes a weak signal by lift where Best piles onto the majority (LR and
+  CNBP routers); the frequencies follow the EMA from uniform and the weight clips at 10; states round trip with the
+  frequencies and mix with Best both ways while other options must still match; non-LR/CNBP routers are refused.
+
+Identity (identity.sh, identity/): without the option chessai-bal = chessai-cyc5 on T-L-Le-c's line, md5 of every
+model and state file and the output (timings removed):
+- from scratch, split threshold 20000 (routers train; 2 splits), 6 rounds of 200 games: 10 files equal;
+- from scratch, the exact line, 2 rounds of 1000: 6 files equal;
+- resuming T-L-Le-c's v1538 (a copy) for one round of 1000: v1539 model and state equal.
+
+Check (check/run.sh): copies of T-L-Le-c v1537/v1538 (model and state), the league line (seed 21, jitter10,
+--vs-previous), 16 rounds of 1000 games each, 2 threads. Per round (balance/perround.py, topleaf.py), effective
+leaves / top leaf share:
+  Best:     v1539-v1554 all 1.0 / 100%, all on L4.
+  balanced: v1539-v1543 1.0 / 99-100% (L4); v1544 1.8/75%, v1545 2.3/63%, v1546 2.0/59%, v1547 2.2/49%,
+            v1548 2.1/60%, v1549 2.3/62%, v1550 3.0/42%, v1551 2.4/68%, v1552 3.0/42%, v1553 2.6/60%,
+            v1554 3.0/51% (top leaf L4, L15, L12, L7 by round).
+Held-out (check/eval.py; routercmp's 10 game-disjoint parts of T-L-Le-c v1505 self-play, each scored with the
+calibration fitted on the other fold), calibrated log-loss / winner log-loss:
+  start v1538 0.2140 / 0.5610; Best v1554 0.2147 / 0.5594; balanced v1554 0.2117 / 0.5396.
+  balanced - Best: log-loss -0.0029 [-0.0049, -0.0010], winner -0.0197 [-0.0383, -0.0012].
+  Best - start: +0.0006 [-0.0008, 0.0020]; balanced - start: -0.0023 [-0.0035, -0.0011].
+Caveats: one seed, 16 rounds, held-out positions from v1505's (locked) self-play; the spread is still rising at
+round 16 and the top leaf changes from round to round; balanced costs 1.16x Best's CPU here (111 against 96 s).
+
+League: staged-c34 (cycles/champ/staged-c34/): T-L-Le-bal-c, binary chessai-bal for self-play and the own step
+(binary_by_lineage), cost row an estimate (0.0029 CPU-s a game). Smoke (smoke/): self-play from scratch and
+--resume with the exact line, a small-threshold run that splits, the own step's train --start, and chessai-sparsefit
+(the tournament) loading the models. Rehearsal: cycle.py status with the staged files lists it active with a cost,
+selftest ok, dry-run Files missing: 0. Watcher pid 628461 waits for loop pid 627021; STOP touched 15:54:44, so the
+loop stops after cycle 34 and the watcher swaps in the files and restarts it.
+
+CPU: about 9 CPU-min at nice 19 (builds and tests ~3.5, identity ~1, check 3.5, eval and smoke ~1).
+
+==== Ne: balanced targets on NB error routers, and a bigger cluster tree (2026-11-08 ~16:00-16:30, coordinator's fork)
+
+VERDICT: balanced is harmless on NB routers and spreads them a little; nothing breaks. T-L-Ne-bal-c (T-L-Ne-c's line
+plus --error-target balanced, from scratch) and T-L-Nc-share-l10-c (T-L-Nc-share-c's line with --split-limit 10) are
+staged for the cycle 35->36 boundary (cycles/champ/staged-c35/).
+
+Identity (ne/identity.sh, ne/identity/): without the option chessai-bal = T-L-Ne-c's binaries on T-L-Ne-c's line, md5 of
+every model and state file; outputs differ only in timing (plies/s):
+- self-play against chessai-cyc5: from scratch with split threshold 20000, 6 rounds of 200 games (5 splits, 16 nodes:
+  the CNBP routers split and train), 10 files equal; the exact line, 2 rounds of 1000, 6 files equal; resuming copies
+  of T-L-Ne-c v1750/v1751 for one round of 1000 (v1752), all files equal.
+- own step against chessai-cyc5-labels (own_games.binary): train --start from v1751's state on two game-disjoint
+  self-play parts, model and state equal, output equal.
+- Resuming a copy needs placeholder bdt1..bdt(N-2).model files (--resume scans versions from 1) and the run's
+  results.txt and ladder.csv.
+
+Check 1, continuing T-L-Ne-c v1751 (ne/check/: the league line, 16 rounds of 1000, Best vs balanced on chessai-bal):
+no difference. Per round both arms stay at 4.6-5.3 effective leaves, top leaf L10 45-48%, 3-4 leaves under 1%
+(ne/check/rounds.py). Held-out (routercmp's 10 parts of T-L-Ne-c v1681 self-play, calibration fitted on the other
+fold): balanced v1767 - Best v1767 log-loss -0.0005 [-0.0011, +0.0002], winner +0.0000 [-0.0046, +0.0047]. The
+reason: a CNBP router's counts hold all its past (T-L-Ne-c's root about 400M positions), so 16 rounds of reweighted
+counts barely move it, where the LR routers of the Le check moved within 5 rounds. CPU 116 (Best) and 114 (balanced) s.
+
+Check 2, from scratch (ne/scratch/: T-L-Ne-c's line with split threshold 200000, 24 rounds of 1000, so the routers
+learn with balanced weights from birth; one seed): both reach 5 splits (11 leaves) by round 14-15, at different
+times. Once both have 11 leaves (rounds 15-24): Best 6.2-7.0 effective leaves, top leaf 30-43%, 1-3 leaves under 1%;
+balanced 7.0-7.6, top leaf 28-33%, 0-2 under 1%. Held-out v24: balanced - Best log-loss -0.0001 [-0.0016, +0.0014],
+winner +0.0087 [-0.0031, +0.0205]: level. CPU 205 (Best) and 193 (balanced) s.
+
+T-L-Nc-share-l10-c smoke (l10/smoke.sh): from scratch with split threshold 20000, 15 rounds of 200 games: splits
+1,2,2,3,5,5,5,5,7,8,8,8,8,9 by version (9 splits, 28 nodes at v15, past T-L-Nc-share-c's 5); --resume; the own step's
+train --start (model and state written); chessai-sparsefit (the tournament) plays the last two versions.
+
+CPU for this section: about 15 CPU-min at nice 19, at most 2 jobs (identity about 2 over three passes, check 1 about
+4.8 with its scoring, check 2 about 7.3 with its scoring, smoke about 0.5).
+
+League (staged 16:27): cycles/champ/staged-c35/ adds T-L-Ne-bal-c (chessai-bal, own step too) and T-L-Nc-share-l10-c
+(chessai-lrshare, own step too) from scratch at the cycle 35->36 boundary, with two binary_by_lineage entries and two
+estimate cost rows (0.0030 CPU-s a game: lineages from scratch measured 3.0-3.1 ms/game in their first cycle). Staged
+after the 34->35 deploy went live (16:27:06, loop pid 634290), against its files (live.md5 = staged-c34's files).
+Rehearsal: a sandbox run of the watcher (rehearsal/: swap, selftest and status ok, both lineages active with costs,
+71 active lineages at 51 CPU-s); with the staged files, status lists both as active with a cost, selftest ok, dry run
+Files missing: 0. STOP touched 16:27:28; watcher pid 634509 (staged-c35/watcher.out, cycles/champ/deploy.log) waits
+for loop pid 634290; the restarted loop's pid goes to staged-c35/loop.pid.

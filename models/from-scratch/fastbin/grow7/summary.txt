@@ -1,0 +1,36 @@
+chessai-grow7 (2026-11-12, the ply-2 prep fork; analyst 6.95's warm starts for the ply-2 rung of training standard v1)
+=====================================================================================================================
+Source: fastbin/grow7-src (a copy of grow6-src; rs/ untouched). Patch: grow7.patch (src/delegation.rs, bdt.rs, bdd.rs,
+main.rs). Installed 18:40 as models/from-scratch/bin/chessai-grow7 (cp -n; nothing overwritten),
+md5 f0f9df79139e08c57e7f6ff7e01e5326 (= cand/chessai-grow7).
+
+WHAT. Two Train-only flags (not model options, so the state header and read_state are unchanged), only with --start,
+only for bdt and bdd, applied once after the state is read:
+  --warm-reset            (needs --split-rule grow) a growing tree or DAG keeps its structure and growth state
+                          (credits, closes, back-off, router chain and counts) and:
+                          - closes its leaf growth trials in flight on their statistic so far (grow_verdict over the
+                            finished blocks); a trial with fewer than 2 finished blocks has no SE and is KEPT;
+                          - (DAGs) closes its router trials in flight under their own keep rule (router_verdict over
+                            the finished windows); a trial without a finished window is KEPT;
+                          - restarts every node's windows (forget_window, open_window, GrowStats::restart), drops the
+                            snapshots, the routers' shadows and null shadows and the pending post-split checks; path
+                            tables carry over.
+  --start-leaf-forget F   (F > 0; under the grow rule only with --warm-reset) every live leaf forgotten once (LR
+                          AdaGrad sums / F, probit variances x F, CNBP counts / F) with its path table; routers and
+                          revision shadows untouched; refused with a trial in flight or with leaf_residual.
+Each logs what it did (the counts of trials closed, kept and undone; nodes restarted; leaves forgotten).
+
+PROOF.
+- Unit tests: 248 lib + 1 main pass (unit-tests.log, .summary); 5 new (grow7_*): leaf trials closed by their verdicts
+  (378 judged, 368 undone; 66 kept without a statistic), router trials by their rule (537 judged, 284 undone; 381
+  kept without a window), windows-only reset without trials, leaf forget equals manual forgets of every leaf and
+  nothing else (LR and probit DAGs, a capped LR tree; refusals), warm-started models resume exactly.
+- CLI (cli_checks.py -> cli_checks.txt): refusals and runs, bad 0.
+- IDENTITY with the flags absent (id_p1_g7.py -> id_p1_g7.txt; offline pool P1, 112 rounds, 22.4M positions, every
+  model and state file byte for byte and the training log with timings masked): failures 0.
+    grow7 = grow6:   the standard's T-L-Ne-grow-f10, D-L-Ne-ctx-grow, D-P-Ne-ctx-grow (std-v1-p1-s1's arguments),
+                     T-P-Ne-grow bar on (tpneg-bar), tpneg-fast (21 leaf trials), dag-688-fast (12 router splits,
+                     36 undos), F-L, F-P;
+    grow7 = hybrid6: the standard's two capped trees (T-L-Ne limit 4/1M/forget 10; T-P-Ne limit 4/1M/noise 0.03).
+  So the capped LR tree may train on grow7 for its one-off --start-leaf-forget 10.
+  Training CPU equal or lower (e.g. dag-688-fast 466.6 -> 389.7 user-s, run beside other jobs).

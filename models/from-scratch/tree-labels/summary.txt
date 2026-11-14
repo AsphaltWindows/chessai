@@ -1,0 +1,58 @@
+chessai-treelab (2026-11-13, the tree-labels build fork; analyst theory-2 6.113, labels-tree-p2)
+=================================================================================================
+
+WHAT
+  grow7 (fastbin/grow7-src; = hybrid6 on the standard's capped trees, = grow6 on grow trees and DAGs) with search
+  labels for trees and DAGs: `train --model bdt|bdd --label-depth K --label-result W [--label-model SPEC]`.
+  Each position's label = W x the game's result + (1 - W) x the outcome a depth-K search expects from it, the search
+  by the tree as it starts the round (its own leaves evaluate the search's leaves), or by --label-model's model,
+  calibrated on the round's results (selfplay::fit_calibration / search_labels, as the flat path). The blended label
+  goes into Bdt::train / Bdd::train like a result label, so leaves AND routers' error targets train on it; splits
+  and growth logic unchanged. A tree that scores rounds (--log-fresh-gains, --revise-on fresh) gets observe_round /
+  train_in_game / end_round with the blended labels and its games' ids, as train_rounds gives them. Only main.rs
+  changed (tree-labels/src; diff against fastbin/grow7-src).
+
+BINARY
+  bin/chessai-treelab md5 e7d31b0e81f03afb6c40ff1f4bb29df0 (cp -n; = tree-labels/cand/chessai-treelab, built 03:04 from
+  tree-labels/src). build1 (df571926..., the same logic before help-text/comment edits) in cand/build1.
+
+PROOF
+- Unit tests (unit-tests.log): 248 lib + 1 main pass.
+- CLI (cli_checks.txt, cli failures 0), on 3 rounds of 120 P1 games (~14.3k positions a round):
+    --label-depth 2 --label-result 1 trains exactly as no labels (the labels are then the results bit for bit, so the
+    positions, their order and the game ids are train_rounds's): capped T-P-Ne, T-P-Nc-merge-fresh (--revise-on
+    fresh: a tree that scores rounds), T-P-Ne-grow (leaf trials), D-P-Ne-ctx-grow (router splits), windows of 10k so
+    they split in 3 rounds. --label-result 0.5 trains differently (and runs).
+    Own search == --label-model <the start model file>: capped T-P-Ne and the D-P DAG from std-v1-p1-s1's v604
+    states (the trainee as it starts the round is the version that played).
+    Refusals: --model ht / tan with --label-depth; --label-model without --label-depth.
+    Play identity: arenas bdt v604 vs bdd v604 and bdt v604 vs F-P v604 at depths 1 and 2, 20 games each, treelab =
+    grow7 game file for game file.
+- Exact resume and threads (resume_check.txt, failures 0): with labels, 2 rounds in one process == 1 round, then a
+  resume from its state on the next round (seed s' = s ^ splitmix64(1) ^ splitmix64(0)), models and states, tree and
+  DAG; and 1 thread == 3 threads (the labels are computed in parallel).
+- IDENTITY with the label flags absent (id_p1_tl.py -> id_p1_tl.txt; offline pool P1, 112 rounds, 22.4M positions,
+  every model and state file byte for byte and the log with timings masked): failures 0 of 11. treelab = grow7's
+  stored runs on dp-std, the standard's two capped trees (= hybrid6), tpneg-bar, tpneg-fast (21 leaf trials),
+  dag-688-fast (12 router splits, 36 undos), F-L, F-P; = grow7 run here on tlneg-std and dl-std (their stored runs are
+  incomplete now); and with labels the flat path = hybrid6 (fp-lab3: F-P --label-depth 2 --label-result 0.5, 3 full
+  P1 rounds).
+
+DRIVER (leagues.py, swapped 2026-11-13 04:08:01; backup leagues.py.before-labelline; leagues/BUILD.md section)
+  A line's --label-model may name another trained line by its model id (label_lines_option at create: exactly one
+  other line); train_line then passes that line's current version as KIND:PATH (label_line_args). Inert: no config
+  has --label-model (446 configs, 1,136 lines); old vs new train commands identical for 100 experiments, 511 lines
+  (inert/inert_check.py); quick selftest 246 (one new check) before and after the swap; full selftest 246, exit 0.
+  Recipes F-P-lab and T-P-Ne-cap added (make_recipes.py HAND, re-applied on the pairs3 fork's F-P-S7v3 edit).
+  League smoke (smoke/league, 5 cycles, ply 2, the four draft lines): the labeller resolved to F-P-lab's probit0-3 in
+  cycles 1-4 and its calibration equals F-P-lab's own each cycle (the tree trains on F-P-lab's labels); a bad name is
+  refused at create.
+
+COST (cost/cost.txt; one P1 round, 200k positions, 1,761 games, 1 thread)
+  T-P-Ne-cap at its cap (std-v1-p1-s1 v604): result 1.2 user-s, own-search labels 25.7 (~122 us a position), with an
+  F-P labeller 8.3; F-P own labels 6.6; the big D-P DAG (v604) result 11.7, own labels 90.0 (~390 us a position).
+  labels-tree-p2 at ~133k positions a cycle: training ~32 CPU-s at the cap (young trees less), games + own
+  calibration + self-games ~35-40: ~70 CPU-s a cycle, ~6 CPU-h to the 300 floor, ~8 to the 401 cap.
+
+DRAFT (not launched): leagues/specs/batch7/labels-tree-p2.DRAFT.json (validated by a create in draftcheck/root);
+reads: draft/labels-tree-read.sh (tags fl, tr, to, tf; TR face for tree cells, both faces for tree vs flat).

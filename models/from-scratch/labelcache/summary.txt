@@ -1,0 +1,69 @@
+chessai-treelab2: chessai-treelab plus the shared label cache (distill fork, 2026-11-13; fastbin review-1113c's
+candidate 1, approved with the distillation run: the coordinator's directive 11-13 ~12:55 on the user's go)
+
+WHAT
+The distillation runs (distill-p2-s1/s2) train six trees/DAGs a cycle with --label-depth 2 --label-result 0.5
+--label-model F-P on the same set (trainsets/local) and the same labeller (the F-P line's current version): six
+identical computations of fit_calibration + search_labels. treelab2 computes them once: the first line to need them
+computes and keeps them in <games>/.labelcache/labels-<128-bit key>.bin, the others read them.
+- src: labelcache/src = tree-labels/src (treelab e7d31b0e...) + src/src/labelcache.rs (new) + lib.rs (pub mod) +
+  main.rs (Command::Train begins the cache before the labeller loads, only with --label-model and --label-depth;
+  train_rounds_labelled takes it and computes through Keyed::labels; own-search labels are never cached).
+- key: "chessai labels key 1", the binary's bytes (/proc/self/exe digest), the CHESSAI_* environment less
+  CHESSAI_LABELCACHE (sorted; any *_STATS/*_CHECK turns the cache off), the labeller's kind, --use-probs and file bytes
+  (digested before it loads and again when keying: changed meanwhile = no cache), the depth, the result weight's f64
+  bits, and the round's records in read order (count; each game's result, movetext, move count, positions). Parts as
+  128-bit digests (two XXH64s with the length, hybrid16's calcache code); the entry holds the whole key, compared in
+  full, then the calibration and every label as f64 bits, then a checksum. A hit must also match the round's shape.
+- only labeller kinds that load exactly one file (cnbp, lr, probit, bdt, bdd); anything unexpected = compute as before.
+- locking: a miss takes flock (std File::lock) on labels-<key>.lock, looks again, computes, writes (unique temp file,
+  rename), unlocks: of lines started together one computes, the rest wait and read. Kernel drops the lock on death.
+- CHESSAI_LABELCACHE=off: the cache off; =log: one stderr line a round (stdout unchanged).
+- disk: one entry a cycle a run (~24 bytes a position: ~5-8 MB), removed with trainsets/ at the cycle's end.
+
+BUILD
+- 14:16 nice cargo build --release -j 3: no warnings. md5 f676d842566aabf720ccc14b572a753c, installed 14:18 as
+  models/from-scratch/bin/chessai-treelab2 (cp -n; also labelcache/cand/).
+- unit tests (unit-tests.log): 253 lib (248 as before + 5 new: XXH64 reference vectors and streaming; entry round trip,
+  every flipped byte / cut / extra byte / other key / other shape misses; every key part changes the key, a labeller
+  changed after begin is refused, wrappers (cal:, moe:) and missing files aren't cached; miss computes and keeps, hit
+  reads the same bits, a corrupt entry is recomputed, no temp files left; six threads started together: one computes)
+  + 1 bin test, all pass.
+
+PROOF 1: THE LEAGUE REPLAY (compare_replay.py -> compare_replay.txt)
+distill-p2-s1 exactly (same name, seed 86, spec as launched; root replay/root2) with the six trees/DAGs on treelab2
+(cache on, silent: as it will run live), 5 cycles 14:21:08-14:25:04, against the live distill-p2-s1 (treelab, no
+cache) over the same cycles: 48 model files (8 lines x v0-v5) byte-identical; tour/games.csv (8,288 rows),
+tour/elo_history.csv (1,008), self_games.csv (672), cold_rounds.csv, rounds.csv, cycles.csv, history.csv, events.csv
+(dates, CPU, prices dropped), entries.csv (as of cycle 5), and the 40 trainings' stdout (label/train timings masked):
+all the same, failures 0. (A first replay, replay/failed-1420, stopped in cycle 1's cleanup on my set-capture hook,
+which copied trainsets/ after pool/, its links' targets, was gone; fixed, not a cache issue.)
+Training CPU a cycle, live vs replay, cycles 1-5: 78.5 vs 19.5, 58.2 vs 13.7, 68.6 vs 16.2, 67.6 vs 17.3, 67.1 vs 17.2
+(per line: the first tree line to train computes, ~10-13 CPU-s; the other five read, ~0.5-1.2 CPU-s each).
+
+PROOF 2: SIX KINDS, CACHE OFF / COLD / WARM, SIX AT ONCE (idtest.py -> idtest.txt, idtest-summary.txt)
+treelab2 against treelab (e7d31b0e, the runs' binary) on distill-p2-s1's six tree/DAG argument lists with
+--label-model probit:<a real F-P>, three sets: S0 review-1113b's snapshot (labels-tree-p2 cycle 256, 1,536 games,
+119k positions; labeller its F-P-lab; starts x3's finals bdt436/bdd436: grown trees and DAGs), S3 the replay's cycle-3
+set (1,792 games; labeller the F-P v2 that played it; from scratch), S5 cycle 5's (labeller v4; x3's finals). Arms:
+off (CHESSAI_LABELCACHE=off), cold (fresh games dir: miss, computed and kept), warm (same dir: hit). 54 arms: every model
+and state file byte-identical, stdout identical with label/train timings masked, stderr identical less the cache's own
+log lines (the DAGs' router logs included); the old and off arms made no .labelcache. SIX: the six kinds started
+together on one fresh S5 dir: one computed (dp), five "hit after waiting", all byte-identical. failures 0.
+Hits: warm CPU 0.6-1.5 s for trees on S0/S3 (vs 7-13 s), the DAGs' own training remains (S5 dl 20 s of 34).
+
+DEPLOYMENT
+14:33:17 swap_labelcache.py on both runs (checks: running with repeat.sh, config.json round-trips, exactly the six
+--label-model lines on treelab, a six-line diff, treelab2's md5; backups labelcache/swap/RUN/*.before-labelcache;
+atomic replace; one driver.log line). distill-p2-s1 after cycle 26 (cycle 27 in progress finished on treelab),
+distill-p2-s2 after cycle 27. The driver reads config.json once per cycle process and never writes it in a cycle.
+First cycles on treelab2: distill-p2-s1 28, distill-p2-s2 29 (runs/*.log name the binary; one tree line computed,
+~10-11 CPU-s, the other five read in ~0.6-1.2 s, every exit 0).
+
+MEASURED (cpu_before_after.py; totals.csv)
+distill-p2-s1: training 62.3 -> 16.2 CPU-s a cycle (cycles 18-27 vs 28-37); the whole measured cycle (tournament process
+  + training + calibration + self-games + cold games) 96.3 -> 50.1.
+distill-p2-s2: training 58.7 -> 15.5 (cycles 19-28 vs 29-38); the whole cycle 92.0 -> 49.2.
+Wall per cycle ~35-45 s -> ~20-28 s. About -45 CPU-s a cycle a run (~48%): ~10 CPU-h over the two seeds to cycle 400,
+~15 to the cap (601). PERF-LEDGER.md: Done row chessai-treelab2, the queued entry marked done (backup
+labelcache/PERF-LEDGER.md.before-labelcache).

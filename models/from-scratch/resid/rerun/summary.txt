@@ -1,0 +1,68 @@
+RESIDUAL-LEAVES RERUN (T3): BINARY CHECKS AND EXPERIMENT SETUP (2026-11-10 13:20-13:35, the residual fork)
+
+Task: get the clean one-factor rerun of residual (additive) leaves ready to launch. Copy-on-split against residual
+leaves, no merges, a smaller delta step. Launch only on the user's confirmed lines.
+
+NO NEW BINARY IS NEEDED
+- Residual leaves are already in chessai-hybrid6.
+  - The resid4 patch is in the binary lineage: resid4, then the q9 builds, then hybrid4gfx, hybrid5, hybrid6 and hybrid7.
+  - rs/ is the old 11-06 tree and doesn't have them.
+  - Every lineage binary since resid4 takes the flags: --leaf-residual, --residual-inherit-sums, --residual-delta-rate,
+    --residual-l2, --revise-on and --log-fresh-gains.
+- So all three lines train on chessai-hybrid6 (md5 0bd96e76dcf1...), the binary that split-growth trains on, and the
+  residual flags are the only difference.
+
+CHECKS (all passed; scripts and logs in this dir)
+- Data: games/heldout-lr-d2-s555/round0 then games/heldout-cnbp-d2-s555/round0, 4,000 games each (no experiment's).
+- Settings: split threshold 20k, so splits happen (5-7 leaves), and split limit 4.
+- Recipes:
+  - C: comparator, the no-merge T-L-Nc limit-4 recipe;
+  - R: C plus --leaf-residual --residual-inherit-sums;
+  - R0: --leaf-residual alone;
+  - RD: R plus --residual-delta-rate 0.5.
+- check_resid.sh / check_resid.log (1.5 min):
+  - Exact resume: two rounds in one go equal the same rounds in pieces (save, then --start), for models and states,
+    for C, R, R0 and RD. The second piece's seed is chosen so that its shuffle is the one-go run's round-1 shuffle:
+    derive_seed = splitmix64(splitmix64(seed ^ splitmix64(round)) ^ game), so seed' = seed ^ sm(1) ^ sm(0).
+  - hybrid6 = hybrid4gfx (the float code hybrid6's speedups were proven against) for C, R, R0 and RD: every model,
+    state and log line except timings.
+  - hybrid6 = resid4 (the 11-07 build) for C, R and R0. The rerun runs the residual code that was tested on 11-07,
+    unchanged.
+  - Default threads = one thread (R).
+  - No split (threshold 1M): R's model = C's model. Only the state differs, since it records the options.
+  - Play: hybrid7 (fixed point for calibrated trees at ply 1 and 2) and hybrid4gfx (float) play byte-identical arena
+    games for cal:-calibrated residual trees at ply 2: R against C, and R0 against RD, 6 games each.
+- check_resume3.sh / check_resume3.log: exact resume from a state that holds a split residual tree. Three rounds in one
+  go equal two rounds then a third from the saved state, for C, R, R0 and RD: models and states.
+- unit-tests.log: hybrid6's source (a copy in h6-src-copy, identical to fastbin/hybrid6-src/src), cargo test
+  --release. 155 of 155 pass, including the 13 residual tests:
+  - residual_leaves_start_as_their_shadow_and_follow_it (bdt.rs:1217): at a split the shadow is the leaf as it was,
+    every new delta is 0, and each new leaf is exactly the shadow, so predictions are unchanged at the split;
+  - inheriting_sums_a_split_makes_the_copies_a_split_without_residual_leaves_makes (bdt.rs:1261);
+  - residual_trees_save_their_summed_leaves_as_plain_trees (bdt.rs:1417).
+- --residual-inherit-sums: delegation.rs:1584 (new_delta) starts each new delta as shadow.zeroed(), which has 0 weights
+  and the shadow's AdaGrad sums, instead of shadow.blank(), which has no sums. The summed leaf's sums are the delta's.
+  So a new leaf's first steps are exactly those a copy of the parent would take under copy-on-split (the test at
+  bdt.rs:1261), not AdaGrad's full first-step rate. The shadow still steps on its own loss alongside.
+
+EXPERIMENT (prepared, not created)
+- Spec: leagues/specs/batch3/11-residual-leaves.json. Experiment dir to be: leagues/experiments/residual-leaves.
+- dry_config.py: the engine's make_config on the spec, diffed against split-growth's config.json. It differs only in
+  name, created, seed 6 and train seed 6, and in train_binary (hybrid4gfx at create; swap6.py then sets hybrid6 on
+  every line, as for split-growth). The tournament (hybrid7, --reports-last --sparse-fit, game_cpu), calibration,
+  references, prices, nice, threads, jobs, rounds (9) and cycles (400) are identical. The comparator line is identical
+  to split-growth's line of the same name except train_binary.
+- Lines and train args (proposed, pending the user):
+  1. F-L.loc: --use-probs
+  2. T-L-Nc+split-limit=4+split-threshold=1000000.loc:
+     --leaf lr --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp
+     --route cluster --reset-leaves inf --use-probs
+  3. T-L-Nc+leaf-residual+residual-inherit-sums+split-limit=4+split-threshold=1000000.loc: line 2's args plus
+     --leaf-residual --residual-inherit-sums
+- Launch steps:
+  - python3 leagues/leagues.py create leagues/specs/batch3/11-residual-leaves.json
+  - DRY=1, then without DRY: models/from-scratch/fastbin/hybrid6/swap6.py leagues/experiments/residual-leaves
+  - when split-growth's repeat process has exited: setsid nohup leagues/repeat.sh leagues/experiments/residual-leaves
+    >> .../repeat.log 2>&1 < /dev/null &
+- To add a line (a limit-1 pair, or a --residual-delta-rate below 1), add a model entry to the spec's models with its
+  "set" and rerun dry_config.py.

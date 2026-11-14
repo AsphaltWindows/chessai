@@ -1,0 +1,96 @@
+TAN routers in LR-leaf trees (2026-11-07). Verdict: they work, but they act like CNBP routers. They are not broken,
+and nothing here says they would beat CNBP routers. In self-play every split merges back, as with CNBP routers.
+Expect T-L-Tc-merge-c and T-L-Te-merge-c to track T-L-Nc-merge-c and T-L-Ne-merge-c, which mostly sit as flat LR.
+
+Code: ../tanroute-src = ../nbmix-src + tanroute.patch.
+- NodeKind::Tan / NodeModel::Tan: a TAN node of a delegation tree, with fixed m (--router tan --tan-m M). It can also
+  be --leaf tan or --error-router tan.
+- While training, the router predicts from its current counts with the tree of its last refresh
+  (Tan::predict_counts). It relearns its tree at each refresh (each round), and has no parents until its first
+  refresh with counts.
+- Text model: the prediction tables. State file: every pair count, bit-exact.
+- Options and files of existing kinds are unchanged. --tan-lambda/--tan-games are refused on tree nodes, and TAN
+  nodes only in --model bdt.
+
+Binaries:
+- ../bin/chessai-tanroute2 (md5 a25836325c9571bdd1b88aa227f450e1): use this one.
+- ../bin/chessai-tanroute (md5 7ff98967577d85b171a15add78a92e7c): the first build, superseded. Its fresh router used
+  a star from feature 0 until its first refresh.
+
+Checks:
+- Unit tests: 128 pass. They cover predict_counts = predict after refresh, text and state round trips, tan nodes
+  as leaf and router, and a TAN cluster router separating two groups without labels.
+  - With small m (5 against about 500 per child), one child's TAN takes part of the other group (406/75 against
+    0/519). With m near the counts it splits cleanly.
+- Identity: chessai-tanroute2 = chessai-nbmix2 on every non-log output of ../probit/identity/run2.sh (0 diff
+  lines; out2-tanroute2, out2-tanroute). Every existing kind is the same.
+
+Offline (offline.sh; offline-c15's benchmark: train on RRs 80-83, --seed 1 --rounds 4 --use-probs, score on RR 84,
+fitted calibration; 100k split threshold).
+Calibrated log-loss / winner log-loss, and the tree at the end:
+
+| model | log-loss | winner log-loss | tree at the end |
+|---|---|---|---|
+| nc-100k-ref (CNBP router, this binary) | 0.6178 | 0.3294 | 9 leaves |
+| tc-100k (TAN, m 2e5) | 0.6175 | 0.3287 | 7 leaves |
+| tc-100k-m2e6 | 0.6174 | 0.3289 | 7 leaves |
+| tc-100k-m2e4 | 0.6178 | 0.3288 | 7 leaves |
+| tc-100k-merge | 0.6220 | 0.3293 | 1 leaf (3 merges; = flat LR, as nc-100k-merge) |
+| te-100k (TAN error routing) | 0.6228 | 0.3313 | 5 leaves (ne-100k 0.6242, 7 leaves) |
+| te-100k-merge | 0.6201 | 0.3285 | 5 leaves (2 merges; ne-100k-merge 0.6199, 5 leaves, 2 merges) |
+
+- nc-100k-ref is exactly offline-c15's nc-100k.
+
+Paired differences, 95% intervals over 10 contiguous, nearly game-disjoint parts of RR 84 (parts.csv,
+summarise.py). Each model has its own fitted calibration per part.
+
+| difference | calibrated log-loss |
+|---|---|
+| tc-100k − nc-100k | −0.0003 [−0.0016, 0.0010] |
+| tc-100k-m2e6 − nc-100k | −0.0004 [−0.0013, 0.0006] |
+| tc-100k-m2e4 − nc-100k | −0.0000 [−0.0010, 0.0010] |
+| tc-100k-merge − nc-100k-merge | 0 exactly (both are flat LR) |
+| te-100k − ne-100k | −0.0015 [−0.0027, −0.0002] (TAN slightly better without merges; te-100k is still worse than flat LR: 0.0013 [−0.0001, 0.0028]) |
+| te-100k-merge − ne-100k-merge | 0.0003 [−0.0004, 0.0010] |
+
+Leaf shares at the root (routing-tc-nc.txt): TAN 43.9/31.1/25.0%, CNBP 42.7/30.1/27.2%. Neither collapses.
+
+Caveat: offline, a router made mid-round predicts as CNBP until that round ends (up to about 600k examples), so
+these partitions start as CNBP's. In the league the hash warm-up (1M examples) spans about 3 refreshes, so the
+router routes as a TAN from the start.
+
+Self-play smoke (smoke/run.sh). The league recipes scaled down: 500 games a round, --split-threshold 150000, 20
+rounds, seed 21, depth 0, 2 threads. Each TAN run equals its CNBP comparator until the first split.
+
+| run | merges | revisions | revision gains per example |
+|---|---|---|---|
+| tc | 5 | 5 | −0.0031 to −0.00075 |
+| nc | 5 | 5 | −0.0030 to −0.0004 |
+| te | 4 | 4 | −0.0009 to −0.0004 |
+| ne | 5 | 5 | −0.0013 to −0.0004 |
+
+- Every split loses to the unsplit shadow at its revision and merges back, as in the from-scratch league runs (T-L-Nc-merge-s21:
+  7 merges in rounds 132-559).
+- CPU, user-s for 20 rounds: tc 33.1 against nc 29.8 (11% more), te 31.6 against ne 27.7 (14% more).
+  - The extra is training: about 0.5-0.8 s more in a round with a split (the router's pair counts and its round-end
+    Chow-Liu).
+  - Play time per ply is the same within noise (about 4 CPU-us).
+- State: about 8.7 MB per TAN router while split (te's last state). Only the last two states are kept. Model files
+  are about the same size (630 KB).
+
+League (only if the coordinator wants them; expect near-duplicates of the CNBP-router trees):
+  T-L-Tc-merge-c | T-L-Tc | models/from-scratch/bin/chessai-tanroute2 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router tan --tan-m 200000 --route cluster --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+  T-L-Te-merge-c | T-L-Te | models/from-scratch/bin/chessai-tanroute2 | scratch | lr | own | --model bdt --leaf lr --branch-factor 3 --split-threshold 5000000 --split-limit 5 --forget-factor 1 --router tan --tan-m 200000 --route error --error log --revise 0 --reset-leaves inf --use-probs --seed 21 --vs-previous --no-games
+- Comparators: T-L-Nc-merge-c and T-L-Ne-merge-c (the same lines with --router cnbp and no --tan-m).
+- Needs:
+  - own_games.binary_by_lineage -> chessai-tanroute2 for both;
+  - the tournament binary switched to chessai-tanroute2, because chessai-nbmix2 cannot load tan nodes. It is a superset
+    of chessai-nbmix2, with the identity above.
+- Cost signature "bdt d0 jitter10 ... --router tan --tan-m 200000 ...":
+  - unsplit, the same as the CNBP-router tree;
+  - while split, up to about 15% more;
+  - so at most about 0.0036 CPU-s a game at depth 0, against 0.0031 for T-L-Nc-merge-c's signature in costs.csv.
+- If only one: T-L-Te-merge-c. Error routing is the only cell with any offline difference, and T-L-Ne-merge is
+  the adopted recipe.
+
+CPU: about 7 min (identity 0.7, offline about 3.5, smoke 2, routing 0.2), builds excluded.

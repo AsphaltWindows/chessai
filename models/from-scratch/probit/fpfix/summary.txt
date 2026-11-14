@@ -1,0 +1,50 @@
+F-P self-play randomness: diagnosis, fix and check (2026-11-07). Verdict: the fix fails (about -350 to -430 Elo); do not deploy.
+
+Diagnosis (chessai-probit4 probit-diag: 100 games of the model's own jitter10 self-play, seed 3; diag-1646.txt,
+diag-others.txt). F-P-c probit1646: learned draw margin eps 1.988, beta 1; the weights' variance at a candidate is
+1.30e-3 at the median and 1.33e-3 at most, so S/beta = 1.0006 at every candidate.
+  variant                                    top-two E gap median (90%)   jitter10 non-top
+  as is                                      1.4e-3 (6.9e-3)              83.3%
+  mean weights (no variance inflation)       1.4e-3 (6.9e-3)              83.4%
+  eps fitted to the games' draw share 1.980  1.4e-3 (7.0e-3)              83.2%
+  eps 0 / 0.5 / 1                            7.2e-3 / 6.5e-3 / 4.8e-3     62.3% / 64.5% / 70.3%
+  (LR, F-L-c lr3143: 7.1e-3, 60.7%)
+Q1: the draw band compresses the gaps, and the inflation contributes nothing measurable. eps is not mis-estimated: it
+    matches the self-play draw share. E's slope in m is phi(eps/S)/S = 0.055 at eps 2, against 0.40 at eps 0.
+    eps now: about 2.0 in self-play (1.960 at v1808; 1.93-2.13 over v1770-v1808). The own-step versions, trained on d2
+    league games, sit at 0.33-0.40 (v166, v909, v1262, v1459, v1809), and one self-play round brings eps back to ~2.
+Q2: no. The inflation changes the top log-odds move in 0.00% of positions (S is the same at every candidate), and so do
+    all the eps variants. eps scales the log-odds, which the tournament's calibration slope refits anyway.
+Q3: the proposed fix, chessai-probit4 --probit-play-eps 0. Self-play chooses moves with copies of the models at draw
+    margin 0. Training, the learned eps, the model files and the tournament are unchanged.
+
+Check (chessai-probit4; from scratch, seed 21, 1000 games/round, --vs-previous, 100 rounds, nice 19, 2 threads; run.sh):
+  The baseline reproduces chessai-probit's F-P-s21 v1-v30 byte for byte.
+  CPU: FP-base 163.3 s (25.3M plies), FP-fix 113.6 s (19.8M plies): 30% cheaper, because its games are shorter
+  (191 vs 241 plies a game in rounds 90-99). Self-play draws in rounds 60-99: base 88.3%, fix 95.9%.
+  Learned eps at v100: base 1.955, fix 2.252.
+  Equal CPU (cumulative plies x CPU per ply): fix v100 (113.6 s) ~ base v68 (112.9 s).
+d2 arenas, fix as A (cal on heldout-lr-d2-s555/round0, log-odds softmax T 0.1, 2 x 1000 games; arena.sh, arenas.sh):
+  v30 vs v30          W/L/D 122/1810/68   score 7.8%   Elo -429 (-458 to -404)
+  v100 vs v100        W/L/D 157/1806/37   score 8.8%   Elo -407 (-435 to -382)
+  fix v100 vs base v68 (equal CPU)
+                      W/L/D 200/1719/81   score 12.0%  Elo -346 (-369 to -324)
+
+Why (play-diag, chessai-diag2 = chessai-probit4 + play-diag.patch, analysis only; 1000 games, same model both sides,
+seed 3; play-diag.txt):
+                                  jitter10 non-top   decisive   plies/game   draws by repetition
+  F-L-c lr3143                    60.6%              4.9%       152          11.8%
+  F-P-c probit1646, as is         83.9%              12.1%      234          2.4%
+  probit1646, play eps 0          66.7%              4.1%       178          10.2%
+  FP-base v100                    83.4%              9.9%       247          2.9%
+  FP-fix v100, play eps 0         61.5%              3.4%       207          36.4%
+  eps 0 is greedier in every material bucket, including when the mover is 3+ points ahead (76.6% vs 88.6% non-top for
+  probit1646). So this is plain greediness, not random play when winning. LR-like move choice gives the probit a third of
+  the decisive games and many more repetitions, and its models end up far weaker. F-P's random move choice is not what
+  keeps it below LR; the tested direction (less random) costs about 400 Elo.
+
+Files: fpfix.patch (chessai-probit3 source -> chessai-probit4), ../probit4.patch (resid-src -> chessai-probit4),
+play-diag.patch (diagnostic only, chessai-probit4 source -> chessai-diag2). chessai-diag2 lives here, not in bin/.
+probit-src rebuilds chessai-probit4 byte for byte (md5 16ae978331848aedc2c7aca9d68ad66b).
+Identity: chessai-probit4 = chessai-probit3 on every non-log output of ../identity/run2.sh.
+CPU for this task: self-play 4.6 min, arenas 4.0 min, builds and diagnostics about 2 min.

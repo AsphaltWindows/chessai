@@ -1,0 +1,103 @@
+RESIDUAL PROBIT LEAVES: chessai-hybrid6rp AND THE residual-leaves-probit EXPERIMENT (2026-11-10 13:50-14:15, a fork)
+
+Task: give probit leaves the LR residual leaves' design (T3's probit twin), check it, and prepare (not launch) the
+probit experiment. The user must OK the launch.
+
+BINARY
+- models/from-scratch/bin/chessai-hybrid6rp (md5 49a716e209091fd5ce10bc777f806ff3), built from this dir's src/:
+  chessai-hybrid6's source (fastbin/hybrid6-src) plus residual probit leaves. Flags off it is hybrid6 (checks below).
+- Same flags as hybrid6: --leaf-residual with --leaf probit is now accepted (hybrid6 refuses it: "residual leaves need
+  logistic-regression leaves"); --residual-inherit-sums works for both leaf kinds.
+
+DESIGN AS BUILT (mirrors the LR residual leaves with inherit-sums; code: probit.rs "residual leaves", delegation.rs
+lines marked chessai-hybrid6rp)
+- The delegator's shadow is a probit model. It trains on its own prediction, on every example through the delegator,
+  at the same point in the step as the LR shadow (train_shadow: after routing, before the leaf).
+- A residual probit leaf holds a delta (Node::residual_probit): per-weight Gaussians (mu_d, s2_d) and its own draw
+  margin. Its classifier, the summed model, has means mu_shadow + mu_d, variances s2_d and the delta's eps. That
+  summed model is what predicts, is saved in model files (they load and play as plain probit trees) and is kept up to
+  date (Probit::set_sum / set_sum_at) whenever the shadow or the delta trains. State files hold the deltas.
+- Training a residual leaf (Probit::train_residual): exactly Probit::update with the summed model in the model's
+  place (tau^2 added to the used variances, which are the delta's; the latent's truncation with the configured
+  tempering; the draw-margin step), but only the delta's means, variances and eps move; the shadow's means are a fixed
+  offset.
+- At a split: the shadow is the leaf's model forgotten by --forget-factor (as before). New deltas have means 0 and the
+  shadow's eps; with --residual-inherit-sums their variances are the shadow's widened by --split-noise, so each new
+  leaf is exactly (bit for bit) the copy a split without residual leaves makes; without it their variances are the
+  prior's (prior^2).
+- A residual leaf that splits becomes a delegator whose shadow is its summed model (means summed, the delta's
+  variances and eps), forgotten. A reset leaf gets a new delta (inheriting: the shadow's variances forgotten and
+  widened, i.e. the reset copy). A merged branch below a delegator becomes a residual leaf again with delta = its
+  shadow minus the shadow above (its shadow's variances and eps). Graph::forget forgets the deltas and re-syncs.
+- Refused with residual probit leaves (assert in Graph::new, clear message): --residual-l2, --residual-delta-rate
+  (LR delta options: a probit delta has no AdaGrad step or L2 term; its prior plays that part) and --probit-shared-eps
+  (it would overwrite the summed models' margins but not the deltas').
+- Departures and caveats:
+  - "Its first updates equal a copy's": at the split the leaf IS the copy, and its variances, eps and step sizes stay
+    exactly those of a plain probit leaf with the summed model in its place (unit test). But, as with LR residual
+    leaves, the shadow trains on each example before the leaf, so the leaf's update starts from the shadow's new mean;
+    a literal copy would not see that.
+  - Without --residual-inherit-sums the probit leaf predicts less confidently than its shadow from the split on (the
+    prior's variances enter the predictive spread), unlike LR, where AdaGrad sums don't affect predictions. Not used in
+    the proposed experiment.
+
+CHECKS (all passed)
+- Unit tests: 163 of 163 pass (cargo test --release, unit-tests.log): hybrid6's 155 and 9 new (3 should_panic):
+  - residual_probit_leaves_start_as_their_shadow_and_follow_it: at the split the shadow is the leaf as it was, every
+    delta has means 0 (and the shadow's variances when inheriting), the inheriting leaf is the root's model text for
+    text and predicts the same; training and forgetting keep every leaf exactly shadow + delta.
+  - inheriting_variances_a_probit_split_makes_the_copies_a_split_without_residual_leaves_makes: shadows and leaves
+    byte-identical to copy-on-split's, at forget factors 1, 2, 4 and split noise 0, 0.05, 0.1.
+  - a_residual_probit_step_trains_the_delta_on_the_summed_prediction_and_the_shadow_on_its_own: 200 steps x 2: the
+    shadow equals a plain Probit::train; the leaf equals a plain probit step on (new shadow + old delta): variances and
+    eps exact, means within 1e-12 (rounding: mu_s + (mu_d + inc) vs (mu_s + mu_d) + inc); only that leaf's delta moves.
+  - residual_probit_state_round_trip_trains_on_identically: 7 variants (inherit or not; split noise and forget 2;
+    merges by stream and fresh tests; resets every window): state save/load trains on byte-identically round by
+    round; nested splits; model files load as plain probit trees with identical predictions and routing.
+  - a_residual_probit_leaf_that_splits_materialises_its_sum_as_the_shadow; a_merged_probit_branch_below_a_delegator_
+    becomes_a_residual_leaf_again; three refusals.
+- check_rp.sh / check_rp.log (2 min, ~1.4 CPU-min). Data: games/heldout-lr-d2-s555/round0 and heldout-cnbp-d2-s555/
+  round0 (4,000 games each). Split threshold 20k, limit 4 (9 leaves by round 3).
+  - Flags off, hybrid6rp = hybrid6, every model, state and log line (timings aside) of version 0, rounds A,B in one go,
+    A then B in pieces, A,B,A in one go, and the third round from the round-2 state: probit trees (cluster no-merge,
+    cluster with merges, error-routed), flat probit, the LR comparator and the LR residual recipe.
+  - Exact resume (pieces = one go; the boundaries are after the splits, since round A already splits) for all of
+    those and for residual probit trees: inheriting, not inheriting, and inheriting with split noise 0.05 and forget
+    factor 2. Default threads = one thread.
+  - Residual probit models differ from copy-on-split's once the root splits (version 0 identical). Residual states are
+    larger (388 KB vs 264 KB: the deltas); model files are plain probit trees.
+  - Play: chessai-hybrid7 (fixed point for cal: trees at ply 1-2) and chessai-hybrid4gfx (float) play byte-identical
+    arena games at ply 2 with calibrated residual probit trees (residual vs copy-on-split; not inheriting vs split
+    noise).
+  - Options: --residual-l2 and --residual-delta-rate refused with probit leaves.
+
+EXPERIMENT (prepared, NOT created or launched; needs the user's OK)
+- Spec: leagues/specs/batch3/12-residual-leaves-probit.json; experiment dir to be leagues/experiments/
+  residual-leaves-probit.
+- dry_config.log (the engine's make_config, via ../resid/rerun/dry_config.py, against split-growth-probit): the
+  top level differs only in name, created, seed 7 and train seed 7; 1000 cycles, 9 rounds (min 9), tournament
+  chessai-hybrid7 --reports-last --sparse-fit, game_cpu, calibration, references, prices, nice, threads, jobs are
+  split-growth-probit's. F-P's line is split-growth-probit's except the train binary (hybrid4gfx at create, set to
+  hybrid6 by swap_rp.py, as there).
+- Lines (no T-P-Nc no-merge recipe exists, so the comparator is T-P-Nc-merge with --revise removed: its arguments
+  are then the LR comparator's with --leaf probit; the line ids say "revise=off"):
+  1. F-P.loc: --use-probs   (chessai-hybrid6)
+  2. T-P-Nc-merge+revise=off+split-limit=4+split-threshold=1000000.loc   (chessai-hybrid6rp)
+     --leaf probit --branch-factor 3 --split-threshold 1000000 --split-limit 4 --forget-factor 1 --router cnbp
+     --route cluster --reset-leaves inf --use-probs
+  3. T-P-Nc-merge+revise=off+leaf-residual+residual-inherit-sums+split-limit=4+split-threshold=1000000.loc
+     (chessai-hybrid6rp): line 2's arguments plus --leaf-residual --residual-inherit-sums
+- Launch steps:
+  - python3 leagues/leagues.py create leagues/specs/batch3/12-residual-leaves-probit.json
+    (plain create works: hybrid4gfx's train --help has the residual flags and --revise)
+  - DRY=1 python3 models/from-scratch/resid-probit/swap_rp.py leagues/experiments/residual-leaves-probit, then
+    without DRY (probit tree lines -> chessai-hybrid6rp, F-P -> chessai-hybrid6; swap_et.py's checks; old config
+    kept in this dir's config-before/)
+  - setsid nohup leagues/repeat.sh leagues/experiments/residual-leaves-probit
+    >> leagues/experiments/residual-leaves-probit/repeat.log 2>&1 < /dev/null &
+- Cost: 3 lines, so 1,026 local games a cycle (split-growth-probit plays 2,430 with 5).
+
+FILES: src/ (the source), check_rp.sh, check_rp.log, unit-tests.log, dry_config.log, swap_rp.py. scratch/ (108 MB of
+check runs) and target/ (the build) can be deleted. Nothing committed; rs/, bin/'s other binaries, leagues.py,
+recipes.txt, running experiments and the models/*.md docs untouched.
+CPU: about 9 CPU-minutes (release build 1.6, three test builds ~4.2, checks ~2.6, the rest small), nice 19, -j 2.

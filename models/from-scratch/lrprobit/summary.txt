@@ -1,0 +1,220 @@
+lrprobit: is LR strictly better than probit, or is each better somewhere? And an LR + probit hybrid (2026-11-08)
+User: "Another thing I would like you to look into is a potential probit-LR MoE investigation the way we did for
+LR + NB." This is lrnb (models/from-scratch/lrnb/summary.txt) with the probit in NB's place, plus the hybrid itself,
+built and staged at the coordinator's request.
+
+VERDICT
+LR is better than the probit everywhere we looked, as it was against NB. But the probit is not a weaker model of
+everything: 97% of its deficit is the draw question. On who wins it is nearly level with LR.
+- Log-loss: the probit is worse at every training size, from 10k positions (0.065 [0.053, 0.077]) to the full
+  2.3M (0.140 [0.125, 0.155]). The gap grows with data, and there is no crossover.
+- The loss splits exactly into "draw or decisive?" plus, on decisive positions, "who wins?". At full data the
+  probit is 0.136 [0.122, 0.150] behind on the first and 0.0045 [0.0007, 0.0083] behind on the second. That is 97%
+  of the gap in the draw question.
+  - On the winner loss the learning curve crosses zero. It runs 0.013 at 10k positions, then -0.009 [-0.018, 0.001]
+    at 100k, then 0.006 at 2.3M. None of the points favours the probit significantly.
+- No group of positions has the probit ahead: it is worse in 50 of 59 label-free groups and ties in 9. Its worst
+  places are drawish ones: bare endgames (2-6 pieces) 0.56 behind, games past ply 150 0.50-0.77 behind, drawn
+  games 0.37 behind.
+- The model's form explains this. An ordinal probit has one latent "white advantage" and one draw margin, so a
+  draw can only mean "balanced". On these games its calibrated draw slope is negative (-0.35 to -0.40): where it
+  expects draws, draws are rarer. LR has its own weights for the draw class.
+- Gates: no gate beats LR alone, mixing or hard (section 3).
+  - The best mixing gate, over both models' outputs, is -0.0011 [-0.0032, 0.0009] against LR alone (lrnb's NB
+    gate: -0.0006).
+  - Hard gates that pick by a mixing gate's weight hand the probit 0.01-1.2% of positions and score as LR does.
+  - A hard gate trained to predict which model will do better hands the probit 17-19% of positions. The probit is
+    in fact worse there, and the gate loses 0.0063 [0.0019, 0.0106].
+  - The oracle's -0.108 is the noise bound lrnb found: over two LRs it "gains" 0.071.
+- The hybrid (section 4) gains nothing offline either: -0.0014 [-0.0034, 0.0005] against LR alone. Its gate gives
+  LR 98-99% of the weight, and the hard version hands the probit 0.4% of positions. Offline, both are LR with a
+  little probit, so we expect them near F-L-c, at about 1.5x its cost. Their lines (MoE-LP-L-c, MoE-LP-L-hard-c)
+  went to the coordinator anyway: the user's policy is that the league, not offline results, decides entry.
+- League context: the league's play ranks moves by ln P(win) - ln P(loss), which ignores draws (player.rs, the
+  log-odds policies). So the probit's big loss on draws never reaches its moves, and only the who-wins part bears
+  on its strength. That fits the league:
+  - flat probit trails flat LR (champions 1646 vs 1790), and its champion is behind on who wins: 0.008 [0.004,
+    0.013];
+  - at depth 2 the probit leads (1831 vs 1806), and the two champions tie on who wins: -0.001 [-0.007, 0.006].
+  This is suggestive, not causal: the champions differ in age and data.
+
+SETUP
+lrnb's setup throughout, so the numbers compare.
+- Data: offline-c15. Training is cycle 15's round-robins 80-83 (2,308,895 positions); the test set is round 84
+  (575,099 positions in 10 parts).
+- Models:
+  - LR: F-L-c's recipe (lrnb's own lr-* models, linked into m/).
+  - Probit: F-P-tau0-c's recipe (--model probit --probit-tau 0 --use-probs). It is trained with lrnb's seed and
+    rounds, so it sees the LR's exact stream, on lrnb's nested subsets (data/sN) and on all of it.
+- Binary: chessai-lrnb trains and scores the probit byte-identically to the league's chessai-probit (identity.out:
+  models at 10k and 100k positions, and eval-loss on a test part). So no new build was needed for the analysis.
+- Losses are held out twice, as in lrnb. Each model's own 4-parameter calibration is fitted on one fold (A = the
+  even parts, B = the odd ones) and scored on the other.
+  - 95% intervals: paired t over the 10 parts (9 df).
+  - Groups use lrnb's ratio estimator with the parts as clusters.
+  - The LR rows of curve.csv equal lrnb's byte for byte, and common.py's calibration reproduces the binary's
+    per-part losses for the probit too.
+- League models (m/league/SOURCE): the champions at cycle 41 of F-L-c (v4100), F-P-tau0-c (v3595), F-L-d2jit-c
+  (v4978) and F-P-tau0-d2jit-c (v5150), copied and calibrated the same way.
+
+1. LEARNING CURVE (curve_summary.out; probit minus LR)
+     positions   LR      P       P-LR [95% CI]              winner: LR    P       P-LR [95% CI]
+         9,885   0.9121  0.9773  0.0652 [ 0.0533, 0.0772]          0.5792 0.5917  0.0126 [ 0.0037, 0.0214]
+        29,634   0.8120  0.8931  0.0811 [ 0.0673, 0.0948]          0.4836 0.4872  0.0036 [-0.0064, 0.0135]
+        99,921   0.7314  0.8237  0.0923 [ 0.0770, 0.1076]          0.4120 0.4031 -0.0088 [-0.0184, 0.0007]
+       294,184   0.6741  0.7856  0.1115 [ 0.0969, 0.1262]          0.3634 0.3608 -0.0026 [-0.0069, 0.0016]
+       972,833   0.6354  0.7688  0.1333 [ 0.1181, 0.1485]          0.3384 0.3421  0.0036 [-0.0022, 0.0095]
+     2,308,895   0.6234  0.7635  0.1401 [ 0.1249, 0.1553]          0.3299 0.3357  0.0058 [ 0.0009, 0.0108]
+- The Bayesian prior doesn't help early: the probit is furthest behind in relative terms at 10k positions, and
+  NB tied LR there (lrnb). From 30k positions on, it flattens toward 0.76 while LR keeps improving.
+- Side note: the default tau (1e-5) at full data differs from tau 0 by -0.0007 [-0.0021, 0.0006] (log-loss) and
+  -0.0010 [-0.0024, 0.0003] (winner). That is a tie.
+- Calibration (eval_curve.out; fold A / fold B). The first parameter is the slope on the model's white-vs-black
+  log-odds; the second is the slope on its decisive-vs-draw log-odds.
+  - lr-all: 1.02 / 1.05 and 1.03 / 0.98.
+  - p-all: 1.07 / 1.12 and -0.40 / -0.35.
+  - The league champions:
+    - F-L-c: 1.21 / 1.24 and 1.81 / 1.72.
+    - F-P-tau0-c: 1.08 / 1.09 and 1.22 / 0.58.
+    - F-L-d2jit-c: 0.94 / 0.95 and 1.33 / 1.26.
+    - F-P-tau0-d2jit-c: 1.20 / 1.22 and -1.25 / -1.15.
+  The probit's own draw signal points the wrong way on these games, offline and in the depth-2 league champion.
+
+2. WHERE THE GAP IS
+Decomposition (decompose.out). Per position over all test positions: total = draw-vs-decisive + who wins.
+     lr-all  0.6234 = 0.3696 + 0.2538       p-all  0.7635 = 0.5052 + 0.2583
+     fl      0.6395 = 0.3775 + 0.2620       fp     0.7859 = 0.5157 + 0.2702
+     fl2     0.6408 = 0.3815 + 0.2593       fp2    0.7757 = 0.5170 + 0.2587
+  - p-all - lr-all: draw 0.1356 [0.1215, 0.1497], who wins 0.0045 [0.0007, 0.0083]
+  - F-P-tau0-c - F-L-c: 0.1382 [0.1222, 0.1541], 0.0082 [0.0038, 0.0125]
+  - depth-2 champions: 0.1355 [0.1186, 0.1525], -0.0006 [-0.0073, 0.0060]
+Groups (groups.out): lrnb's label-free bins, with the probit in NB's place.
+  - There are 59 bins. The probit is worse in 50 with the interval above zero and ties in 9. It is never ahead.
+    - On the winner loss: worse in 29, ties in 30.
+    - The league pairs: the flat one is worse in 52 bins and ties in 7; the depth-2 one is worse in 53 and ties
+      in 6.
+  - Ties: 13-18 pieces (0.022 [-0.002, 0.045]), where either model is at least 97% confident, LR under 40%
+    confident, and the tiny bins (ply unknown, rarest entry 100-999).
+  - Largest gaps, all drawish:
+    - 2-6 pieces 0.561 [0.489, 0.632] (LR 0.496, probit 1.057);
+    - ply 151-250 0.504, ply 251+ 0.766;
+    - no castling rights 0.174;
+    - drawn games 0.370 [0.303, 0.436] (a label bin);
+    - where the two models' most likely results differ (25% of positions) 0.360.
+  - Where it is closest: the middlegame and positions it is sure of.
+
+3. GATE (gate.py, gate.out; lrnb's gates plus hard picks)
+Each part is scored by a gate fitted on the other fold. Both calibrations and the gate are fitted on that fold too.
+The mix is p = g LR + (1-g) P; the hard gates pick one model per position. The settings were fixed before any
+held-out loss was seen.
+
+     method        held-out log-loss  minus LR alone [95% CI]   winner  minus LR [95% CI]
+     LR alone      0.6234                                         0.3299
+     probit alone  0.7635   0.1401 [ 0.1249,  0.1553]             0.3357   0.0059 [ 0.0009,  0.0108]
+     constant      0.6236   0.0002 [-0.0002,  0.0005]             0.3299  -0.0000 [-0.0001,  0.0001]
+     outputs       0.6222  -0.0011 [-0.0032,  0.0009]             0.3296  -0.0003 [-0.0005, -0.0001]
+     full gate     0.6229  -0.0005 [-0.0032,  0.0023]             0.3295  -0.0004 [-0.0008,  0.0001]
+     hard-outputs  0.6234   0.0000 [ 0.0000,  0.0000]             0.3299   0.0000 [-0.0000,  0.0000]
+     hard-full     0.6236   0.0002 [-0.0002,  0.0006]             0.3298  -0.0001 [-0.0002,  0.0001]
+     hard-reg      0.6297   0.0063 [ 0.0019,  0.0106]             0.3303   0.0004 [-0.0003,  0.0011]
+     oracle        0.5150  -0.1084 [-0.1193, -0.0976]             0.2939  -0.0360 [-0.0403, -0.0316]
+
+- The mixing gates:
+  - constant: one weight for every position. The fitted weight on LR is 0.995 on fold A and 0.972 on fold B
+    (lrnb's NB: 0.992 and 0.925).
+  - outputs: a sigmoid over both models' calibrated log-probabilities and confidences. Its held-out weight on LR
+    averages 0.97 and 0.94.
+  - full gate: outputs plus the 70 features one-hot (851 weights). It cut its own fold's training loss by
+    0.003-0.006 more than outputs did, and none of that holds out.
+  - The only interval clear of zero is the outputs gate's on the winner loss: 0.0003 [0.0001, 0.0005]. That is
+    negligible.
+- The hard gates (the user prefers hard routing):
+  - hard-outputs and hard-full: the probit wherever the matching mixing gate gives it more than half the weight.
+    They hand it 0.01-0.6% and 0.1-1.2% of held-out positions and score as LR does.
+  - hard-reg: a least-squares regression of the probit's loss minus LR's (clipped to 5 nats either way) on the full
+    gate's inputs, with the gates' Adagrad settings. It picks the probit where the predicted difference is below
+    zero.
+    - It explains 17-18% of the variance on its own fold and hands the probit 17-19% of held-out positions.
+    - Those are not positions where the probit is better: its loss there is about 0.036 a position above LR's,
+      hence the loss of 0.0063.
+  - The hard hybrid (section 4) hands the probit 0.38% of test positions, 2,207 of 575,099 (hybrid/routed.out).
+- The oracle is the same loose bound as in lrnb. It picks the better model after seeing the result.
+  - The same oracle over two LRs, lr-all and the league's F-L-c, "gains" 0.071 (oracle_check.out). Their most
+    likely results differ on 12% of positions.
+  - Over LR and the probit it gains 0.108, and their most likely results differ on 25%. Over the depth-2
+    champions it gains 0.122, with 26%.
+  - So the larger gain mostly reflects more disagreement, not a probit that is right more often.
+
+4. THE HYBRID (hybrid/; built after the coordinator's 21:00 message: league entry is not gated on offline results)
+Binary bin/chessai-hybrid, md5 89605f852f5dfeee72b32218b35d5b5f.
+- Source: models/from-scratch/hybrid-src = lrnb-src (sparsefit-src plus eval-loss --dump) plus src/hybrid.rs and
+  its wiring in lib.rs, classifier.rs and main.rs (hybrid/hybrid.patch).
+- Tests: 140 pass, 5 of them new.
+- --model hybrid --hybrid-experts lr,probit (generic over lr, probit and cnbp, 2 to 4 experts).
+  - Each expert trains on every position exactly as it would alone.
+  - The gate is a logistic regression over the position with one class per expert. It starts uniform and learns
+    the experts' responsibilities from their predictions before they learn (moe.rs's gate step).
+  - It predicts with the mixture. --hybrid-hard predicts with the gate's top expert alone.
+  - --hybrid-pin K predicts with expert K alone, for identity checks.
+  - The options live in the model file, so --resume and --start keep them.
+  - NB experts work (a CNBP expert's training-time predictions come from its counts), but no NB line was
+    prepared, as the user abandoned NB as a predictor.
+- Identity (hybrid/identity.out), byte for byte:
+  - lr, probit and cnbp train as chessai-sparsefit does.
+  - F-L-c's self-play recipe runs as chessai-cyc5's, and so does the hybrid pinned to its LR: models v1-3,
+    ladder.csv, results.txt. Pinned to its probit, it runs as chessai-probit's F-P-tau0-c recipe.
+  - Unpinned, its experts equal the standalone models trained on the same stream: at 100k positions, and at full
+    data (h-all's experts are lr-all and p-all).
+  - 3 rounds straight equal 2 rounds plus --resume.
+  - The driver's commands work: the own step's train --start, the gate's arena, eval-loss, cal: specs, mix-stats.
+- Tournament binary. The league's tournament and own-cal games must load hybrid:PATH, so the coordinator switches
+  the tournament binary to chessai-hybrid. With the live flags, chessai-sparsefit and chessai-hybrid wrote
+  identical files:
+  - 1,033 files on lr, probit, cnbp, bdt (NB and TAN routers; the LR-router entry picked had left the field), bdd,
+    moe and nbgate entries (tourney.out);
+  - 2,553 files on fm, ht with LR and NB leaves, tan, moenb, nbmix (ply 1 and a frozen ply-2 champion), the random
+    references (depths 0-3), the d4mix reference and the frozen F-P-c (tourney2.out);
+  - each with a retirement and late joiners.
+- The hard line's smoke (hard-smoke.out): self-play, exact --resume, the driver's own step (the hard flag kept),
+  and the gate arena.
+- Offline (hybrid/offline.out, summary.out), held out against lr-all:
+  - hybrid: log-loss -0.0014 [-0.0034, 0.0005], winner -0.0001 [-0.0002, 0.0001];
+  - hard: -0.0003 [-0.0014, 0.0007], winner 0.0000.
+  - Its gate's mean weight on LR over the test parts is 0.98-0.99, and above 0.99 on 70-79% of positions. In
+    effect it is LR.
+  - The hard version hands the probit 0.07-1.2% of each part's positions, 0.38% in all (hybrid/routed.sh).
+- Cost: 3 x 100 self-play games at depth 0 took 1.61 s unpinned against 1.09 s pinned to its LR (which plays as
+  F-L-c does), so about 1.5x F-L-c's CPU per game: it evaluates both experts and the gate.
+- Lines sent to the coordinator (one factor each; MoE-LP-L-c's comparator is F-L-c, and the hard twin's is
+  MoE-LP-L-c):
+    MoE-LP-L-c | MoE-LP-L | models/from-scratch/bin/chessai-hybrid | scratch | lr | own | --model hybrid
+      --hybrid-experts lr,probit --probit-tau 0 --use-probs --seed 21 --vs-previous --no-games
+    MoE-LP-L-hard-c: the same plus --hybrid-hard.
+  Both need own_games.binary_by_lineage set to chessai-hybrid.
+
+CAVEATS
+- This is prediction loss on league games (round 84), not playing strength, and the league plays by win/loss
+  log-odds.
+- One global calibration per model, as in lrnb.
+- The league pairs are champions of different ages, trained on their own self-play data.
+- The oracle is a loose bound: it picks after seeing the result (section 3).
+
+CPU: about 22 CPU-minutes in all, at nice 19 with at most 2 jobs.
+- The analysis: about 3.5 minutes.
+  - Training 9 s, eval_curve 36 s, dumps 12 s, groups 25 s, decompose 15 s, oracle_check 16 s.
+  - The gate study 80 s.
+- 13 minutes were wasted on a first gate run with a quadratic diagnostic print. It was killed and fixed.
+- The hybrid's builds and tests: about 3 minutes.
+- Its identity, tournament and smoke checks: about 2 minutes. Its offline run and routed count: 25 s.
+- The dumps (690 MB) are deleted after use; dump.sh regenerates them in about a minute.
+
+FILES
+- Scripts: identity.sh, train.sh (jobs.txt), eval_curve.sh, curve_summary.py, dump.sh, common.py (from lrnb's),
+  groups.py, decompose.py, gate.py, oracle_check.py.
+- Outputs: *.out.
+- Models:
+  - m/: p-* and p-all-tau; lr-* linked to lrnb's; h-all and hh-all; league/ with SOURCE.
+  - identity/: the probit identity models.
+- hybrid/: identity.sh, tourney.sh, tourney2.sh, hard-smoke.sh, offline.sh, summary.py, routed.sh (it needs
+  dump.sh's lr-all and p-all dumps), expert.py (prints one expert from a hybrid file), hybrid.patch, and their
+  outputs and work directories.

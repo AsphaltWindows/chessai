@@ -1,0 +1,64 @@
+HYBRID15: FIXED-POINT PLAY FOR DAGS WITH ROUTER SPLITS (CELLS)
+(2026-11-11 ~16:00 to ~17:00, the hybrid14/15 implementation fork: candidate 4 of the ~12:50 performance review,
+built on hybrid14)
+
+RESULT
+- Binary: models/from-scratch/bin/chessai-hybrid15 (md5 58717c38118eebc7e0748a67b8d98c88), a new file. Same games,
+  models and states as hybrid14 (and so errdag4 and hybrid13) everywhere checked; DAGs with path cells now take
+  hybrid5's fixed-point path at depths 1-2 instead of the float one. CHESSAI_FX_CELLS=off gives hybrid14's play.
+  Installed 16:32 (cp -n; md5 equal to fastbin/hybrid15/cand and the build).
+- Play CPU (cpu15.txt: cpu14's method, the same arena with each binary in ABBA order, 1 thread, pinned to the
+  E-cores, nice 15; identical games in every row; hybrid14 is the base):
+  - DAGs with cells (D-P z0 and D-L z0 of the experiments' final versions; D-P z30 with cells):
+    - ply 1: D-P against T-P-Ne x0.74, D-L against T-L-Ne x0.70; self-games x0.54 (D-P), x0.52 (D-L);
+    - ply 2: D-P against T-P-Ne x0.44, D-L against T-L-Ne x0.40, D-P z30 against F-P x0.42, D-P against D-L x0.31;
+      self-games x0.31 (D-P), x0.27 (D-L);
+    - against errdag4 (the binary the DAG experiments ran on): D-P against T-P-Ne x0.66 (ply 1) and x0.32 (ply 2),
+      D-L against T-L-Ne x0.25 (ply 2), D-P self-games x0.26 (ply 2).
+  - Per position, self-games: D-P z0 15.8 us (ply 1) and 174.1 us (ply 2) against T-P-Ne's 11.9 and 130-137 us; D-L
+    z0 14.4 and 146.4 us against T-L-Ne's 82.7 us at ply 2. A DAG with cells now costs ~1.3x (D-P) to ~1.8x (D-L)
+    its tree at ply 2, from ~4x and ~6.5x on hybrid14.
+  - Controls without cells (same code): T-P-Ne self-games x0.95, T-L-Ne x1.00, D-P z30 without cells against T-P-Ne
+    x0.96, T-P-Ne against F-P x0.98 (noise).
+  - Own calibration (play_id15.txt, unpinned): DAGs with cells 1.4-1.5 -> 0.8 s a version (trees 0.6 s).
+
+WHAT CHANGED (fastbin/hybrid15-src = hybrid14-src plus hybrid15.patch: src/compound.rs and src/delegation.rs)
+- delegation.rs: Graph::descend_from(node, data, marks), the float descent from a node with its path marks (the
+  fixed-point path's fallback when a router's margin is inside its bound).
+- compound.rs:
+  - Cells: every (node, sorted marks) a path reaches from the root (a DFS over router children; at most 4,096
+    states, else the DAG plays in float as on hybrid14), each with the cell terms its path context adds:
+    - LR routers: the cells' log-odds offsets in fixed point (round(offset x SCALE)); CNBP routers: ln of the cells'
+      class factors (finite and positive only, else float). Each router state's decision margin is recomputed from
+      the node's bound plus the offsets' rounding and evaluation error.
+    - LR leaves: the logit difference the cells add (with its absolute value and error); probit leaves: the cells'
+      latent mean and variance (mu, s2).
+  - route_cells: the incremental fixed-point sums plus the state's offsets; a router decides in fixed point when the
+    top class clears the state's margin (plus a product check on the raw top), else descends in float
+    (descend_from) and looks the state up. CHESSAI_FX_CHECK=1 asserts every decision against node_predict_path.
+  - Leaf estimates with bounds as hybrid5/hybrid9's, shifted by the state's terms (probit: mean + mu, var + s2 with
+    their extra error), so best() values in float only the replies that can be a move's minimum, as before; exact
+    values from node_predict_path (the float model's path code).
+  - The cell-less path is numerically unchanged (estimate refactored through estimate_probit with zero shifts).
+- New unit test dags_with_cells_value_exactly: ctx BDDs with LR and probit leaves trained until they have 2+ sibling
+  sets (router-split z 0), every searched position's values bit-equal to the float search. 196 tests pass
+  (unit-tests.log); the compound tests pass with CHESSAI_FX_CHECK=1 too.
+
+IDENTITY
+- CHESSAI_FX_CHECK=1 arenas on real cell DAGs (D-P z0, D-L z0, D-P z30 with cells, against trees, a flat and each
+  other; depths 1 and 2; scratch/chk-*): every decision asserted equal to the float path; at depth 2, 1.35-3.06M
+  router decisions per arena, 0 float fallbacks, 0 positions valued all in float.
+- play_id15.txt: play_id14's 161 jobs (15 own calibrations; 23 pairs x depths 1-3 x T 0.1 and 0.02; 4 mixed-depth
+  pairs) SAME against hybrid14's outputs (which matched errdag4 and hybrid13). Failures 0.
+- dry15.txt: hybrid14's whole-cycle dry runs again with hybrid15 as the tournament and DAG training binary, from the
+  same snapshots, against errdag4's run: error-dag-probit-p1 0 of 3,724 key files differ, error-dag-p1 0 of 2,076;
+  the second cycle's 12,291 game files identical; only lines.csv, scan-cache and totals.csv differ (path, times).
+- train_id15.txt: the 36 training comparisons (errdag4's configs, seeds 11 and 12) SAME against errdag4 and hybrid6.
+
+NOT VERIFIED / LIMITS
+- Ply 3 and deeper play the float path (identical at depth 3 in play_id15). Outcome search not compared on DAGs.
+- DAGs over 64 nodes (hybrid5's cap) or with more than 4,096 route states play in float: exact, but at hybrid14's
+  speed. The state count of a DAG grows with its sibling sets; the final cell DAGs (D-P z0, D-L z0, D-P z30#2) have 25 nodes and 607, 607 and 445 route states (probe:
+  hybrid15/probe-src, a test-only copy). At split limit 4 and router limit 4 they are full size (4 splits, 4 sibling sets
+  of 3), so the global league's DAGs stay inside the caps; nodes = 1 + 3 x (splits + router splits), so the 64-node
+  cap binds past 21 splits in all.

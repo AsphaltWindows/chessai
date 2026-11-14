@@ -1,0 +1,130 @@
+T4: GRADIENT-DISAGREEMENT SPLIT TRIGGER (2026-11-10, the T4 fork)
+
+Source: models/from-scratch/trigger-src (a copy of fastbin/hybrid6-src; patch scripts in trigger/scripts/).
+Binary: models/from-scratch/bin/chessai-trigger (md5 a1775f73356ac873900b7fe8543d63b9). Not deployed anywhere.
+Theory: RESULTS.md section 10 item 9, models/from-scratch/theory/summary.txt 6.3 and 9.6.
+
+WHY
+Today's rule splits a leaf when its window error stops falling (SplitRule::Worse), which every leaf does as its
+learning curve flattens. Theory 6.3: a routed split of leaf theta into theta + d_k on region k changes the loss by
+sum_k d_k . G_k to first order, where G_k is the leaf's gradient summed over region k. That is zero when the leaf's
+mean gradient is the same in every region the router can make, so the trigger should test that, not stalling.
+
+DESIGN AS BUILT
+Option: --split-gradient Z (BDT only; off by default). A leaf splits when the test below gives z > Z, at the end of
+each of its windows (today's windows: split_threshold scored examples, num_trained_last), instead of by --split-rule.
+--split-gradient-install (needs --split-gradient): the split's router is the probe, already trained, and skips the
+hash start. A second factor, for a separate arm only; not tested offline here (a unit test checks it).
+
+Per leaf, while the split limit is not reached:
+1. Probe: a router of the tree's --router kind over branch_factor regions, trained on the side, never used to route.
+   It learns label-free by today's cluster rule (cluster_pick): its first split_threshold / 5 examples go to a region
+   by a hash of the position, later ones to its own pick. Its pick for an example, made before it trains on it, is
+   the example's region k.
+   Error routing (--route error) uses the same label-free probe. A fresh error target is silent at a split (the
+   children are identical copies, theory item 3), so no label-based candidate exists before the split. NB error
+   routers route like label-free clustering anyway (U 0.02-0.12, RESULTS section 5) and the probe is a router of
+   the same class, so its partition is one an NB router can make. LR error routers route by who is winning (theory
+   item 2), a partition not worth rewarding.
+2. Gradient: g_i = x_i (outer) (p_i - y_i), with x_i the one-hot features plus a bias in the logistic regression's
+   layout (width = 1 + sum of categories), p_i the leaf's training prediction before it trains on the example, and
+   y_i the label. For LR leaves this is the gradient of the leaf's own weights. For other leaves it is the gradient
+   of a zero-initialised LR correction to the leaf's output, i.e. of an additive region delta (theory item 8).
+3. Per window and region: summed gradients G_k[c][j] and use counts n_k[j], the number of region k's examples that
+   use weight j (the bias: every example).
+4. Window end: keep a_k[c][j] = G_k[c][j] / n_k[j] - G[c][j] / n[j] (region k's mean gradient beyond the leaf's,
+   weight by weight; 0 where region k has no uses) and the leaf's per-weight mean. Per-weight centring (the design
+   draft centred whole regions): a weight only one region uses gets a = 0, since the leaf can learn it alone. The
+   draft's region-level centring let a leaf's still-converging main effects into T.
+5. Next window: the test statistic T = sum_k a_k . (G_k - n_k mu), with mu this window's per-weight mean. It is this
+   window's region-specific gradients projected on the directions the previous window found: an out-of-sample
+   estimate of the first-order loss decrease from moving each child along its own region's direction, beyond moving
+   the whole leaf. With no disagreement its mean is 0 (a_k comes from earlier examples and the regions are chosen
+   without labels).
+6. Standard error clustered by game: each example adds d_i = sum over its weights of a_k (r_i - mu_prev), with
+   mu_prev the previous window's per-weight mean (this window's is not known yet), to its game's sum C_g. Var(T) =
+   G/(G-1) sum_g (C_g - mean C)^2, z = T / SE. Centring by mu_prev instead of mu adds a per-game term that grows with
+   the leaf's drift between windows: it can only inflate the SE, never bias T.
+   Game ids: --split-gradient turns on Bdt::scores_rounds, so train and self-play pass each position's game id
+   (train: round << 32 | game; the training order is unchanged, the shuffle depends only on the count). A game's
+   positions all come in one round, so games are closed at the start of each round (observe_round; measure_seams
+   too): an id that recurs in a later round or league cycle is a new game. An example without an id is its own
+   cluster.
+7. A split is today's (copies, forget_factor, a fresh router with its hash start). The leaf's probe goes; each new
+   leaf starts a new probe on its first example. The earliest split is at the end of a leaf's second window, as
+   today (today's rule also needs a previous window).
+8. At the split limit, probes are dropped (gradient_observe), so nothing accumulates.
+9. Cost per example at a leaf: one router prediction and training step, plus two passes over the example's
+   (features + 1) x classes weights. State: per leaf the probe, the window's sums and use counts, the previous a and
+   mean, and the window's game sums; in the state file only with the option. Model files are unchanged.
+10. Logged to stderr at each test: "split-gradient step S leaf L: regions [n_k], games G, T, se, z: split|no split"
+   (a leaf's first window: "first window").
+
+Code (trigger-src/src): delegation.rs (params split_gradient / split_gradient_install, printed in the state's
+parameter line only when used; Node.probe; struct Probe with state I/O; Graph::gradient_observe, gradient_test,
+close_probe_games; check_leaf_split decides by T4 when on; make_delegator drops or installs the probe; state
+blocks; asserts), bdt.rs (train_node calls gradient_observe for a scored example at a leaf before it trains;
+scores_rounds; tests), main.rs (flags and checks: bdt only, install needs the option, Z finite), bdd.rs and
+compound.rs (literals only).
+
+KNOWN LIMITATION
+A main effect the leaf has not finished learning, if it correlates with the probe's regions, shows through the
+shared weights (the bias, feature values both regions use) as disagreement, though the leaf would learn it without a
+split. Per-weight centring removes it for weights one region owns, not for shared ones. It matters most early in a
+leaf's life (a new leaf after a split adapts to its region while its probe is partitioning it).
+A second, smaller effect: the SE centres each example by the previous window's mean (item 6), so when the leaf moves a
+lot between windows (early in its life) the SE is inflated and z understated. Conservative, but it also means z does
+not grow with the window as sqrt(n) at a young leaf (below: the root's first test at 1M windows gave z 4.7).
+
+CHECKS
+- Unit tests (cargo test --release): 158 library tests and 1 binary test pass. New: split_gradient_is_quiet_without_
+  disagreement (two input groups, one LR fits both: 3 seeds x 10 tests, no split, z from -1.5 to 2.4),
+  split_gradient_fires_with_disagreement (the second group's label flipped: splits at the first test, z 37-44),
+  split_gradient_install_makes_the_probe_the_router, split_gradient_drops_probes_at_the_limit; and three T4 variants
+  in state_round_trip_trains_on_identically (LR leaves + cluster, NB leaves + error routing, LR + TAN router with
+  install): saved and resumed states train on byte-identically, round by round, with game ids repeating each round.
+- Off = hybrid6 (ident/run.sh): T-L-Nc and T-L-Ne recipes at threshold 20k, limit 10 (10 splits by round 8), 8 rounds
+  straight and in two pieces of 4 (the second by --start from the first's state): every model, state and stdout line
+  (timings aside) identical between chessai-trigger and chessai-hybrid6.
+- Off = the earlier study: the offline T-L-Ne arms below (today's trigger, chessai-trigger) are byte-identical to
+  bddstudy's bdt-s1 and bdt-s2 (chessai-cyc5): all 60 models and the final state, both seeds. chessai-trigger's
+  held-out scoring of bdt60 equals bddstudy's cal.csv rows, so those rows are reused for today's T-L-Ne arms.
+- On: train --start from a T4 state continues (probe, windows and step count carry over); a T4 state without the flag,
+  or a plain state with it, is refused (the parameter line differs).
+
+OFFLINE RESULTS (offline/; bddstudy's setup: train/ = offline-c15 RRs 80-83, 60 rounds of ~115k positions; threshold
+100k, limit 10, seeds 1-2; T4 at Z 3; held-out log-loss x1000 on RR 84 with cross-fold calibration, 10 parts)
+Splits as round:path (path = child positions from the root; rounds 0-59):
+  nc today s1  1:root 6:2 7:1 9:0 17:21 22:11 32:01 36:12 39:00 40:20      leaves 11/19/21  loss 627.8 / 622.5 / 622.0
+  nc today s2  1:root 6:2 7:0 9:1 17:21 18:20 23:00 24:02 33:10 35:11      leaves 13/21/21  loss 627.0 / 624.4 / 623.9
+  nc T4 s1     2:root 14:2 33:1 35:0 45:10 49:21                           leaves  5/ 9/13  loss 627.5 / 618.2 / 617.0
+  nc T4 s2     2:root 11:0 11:1 39:01 55:2                                 leaves  7/ 9/11  loss 624.0 / 619.2 / 618.3
+  ne today s1  1:root 6:0 8:1 15:02 16:11 30:110 33:00 34:10 34:112 37:020 leaves 11/21/21  loss 634.2 / 626.4 / 624.9
+  ne today s2  1:root 5:0 7:2 25:02 30:01 33:20 34:22 39:21 41:1 53:012    leaves  7/17/21  loss 627.5 / 640.2 / 623.0
+  ne T4 s1     2:root 7:1 11:2 17:11 53:111                                leaves  9/ 9/11  loss 628.0 / 619.6 / 620.8
+  ne T4 s2     2:root 9:1 11:2 32:21 40:10                                 leaves  7/ 9/11  loss 628.2 / 622.9 / 620.9
+  Same-leaves controls (today's trigger at T4's final split count), cp 60: nc limit 6 s1 621.2, nc limit 5 s2 623.2,
+  ne limit 5 s1 622.1, ne limit 5 s2 622.5.
+T4's tests: 50-53 per arm; z median 0.9-1.4, 90th percentile 2.7-3.2, max 5.5-6.1. The root split at its second test
+(round 2) in all four arms, z 5.5-5.7; later splits had z 3.0-6.1. Unsplit leaves sat at z 1-3 test after test (not
+falling), e.g. nc s1 leaf 2: 2.5, 2.4, 3.0, 2.1, 2.2, 2.8, 2.1, 2.3 over rounds 6-28, then 3.1 and a split.
+Differences (both seeds: per-part means of the two seeds' paired differences; 95% t over the 10 parts; negative =
+first arm better):
+  nc T4 - today:          cp20 -1.7 [-4.1, 0.8]   cp40 -4.8 [-7.2, -2.4]    cp60 -5.3 [-6.9, -3.7]
+  nc T4 - same leaves:    cp60 -4.5 [-6.4, -2.7]  (s1 -4.2 [-6.1, -2.2], s2 -4.9 [-7.5, -2.3])
+  nc same leaves - today: cp60 -0.8 [-2.0, 0.5]
+  ne T4 - today:          cp20 -2.8 [-4.3, -1.3]  cp40 -12.1 [-15.6, -8.5]  cp60 -3.1 [-5.1, -1.1]
+  ne T4 - same leaves:    cp60 -1.5 [-3.4, 0.5]   (s1 -1.3 [-3.2, 0.7], s2 -1.7 [-4.2, 0.9])
+  ne same leaves - today: cp60 -1.6 [-3.7, 0.4]
+  (ne today s2's cp40 is 640.2, between 627.5 and 623.0: its splits at rounds 33-39.)
+Window size (offline/run1m.sh, seed 1, T-L-Nc): at the league's threshold 1M, Z 3 split the root at its first test (2M examples,
+z 4.7) and leaf 3 at its first (z 8.0): 2 splits in the 6.9M examples. For a lasting disagreement z grows about as
+sqrt(window), so at 1M the same Z admits smaller effects than at 100k (3 x sqrt(10) = 9.5 would keep the 100k bar).
+Cost: T4 arms 43-65 CPU s each against today's 35-56 (sum 214 against 176 s, about +20%).
+
+LEAGUE DRAFT (not created): leagues/specs/batch3/14-trigger-gradient.json; league/NOTES.txt (how to create);
+league/check_spec.py (read-only dry run of the spec's expansion). F-L; T-L-Nc limit 8 (today's trigger); T-L-Nc limit
+8 with --split-gradient 3. Threshold 1M, local, seed 9, 9 rounds a cycle, hybrid7 tournament, 400 cycles.
+
+CPU: about 16 CPU-minutes in all: builds and unit tests ~4, identity checks ~1, offline training ~10 (13 runs),
+held-out scoring ~1.2.

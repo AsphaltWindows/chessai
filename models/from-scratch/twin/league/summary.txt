@@ -1,0 +1,428 @@
+Full-data flat LR twins of T-L-Ne-share-c, 2026-11-09 00:57-01:31 (run.py; run/progress.txt, ck/v122/results.txt).
+Answer at v122: given the tree's league games too, in the tree's order, a flat LR at F-L-c's rate plays level with
+the tree. The tree's 191-Elo lead over its self-play-only twin (the first pilot) is all data at this version.
+The stopping rule stopped the pass at v122. The user overrode it (~01:40: "please continue with the tree vs twin
+test"), so the pass goes on to v452 with the rule reported but not applied (run.py NO_STOP).
+At v217 the tree leads the full-data twin by 14 [-1, 28], against 236 over the self-play-only twin. At v452 the
+full-data twin beats the tree by 57 [42, 71]: the tree's lead over a flat LR is all league data.
+Pooled over v444-v452, both sides at the same version (05:43), the twin beats the tree by 26 [10, 42]. The single
+v452 point was the most extreme of the nine; adjacent versions differ by about 17 Elo SD (VERSION NOISE).
+
+STATE OF THE NIGHT (06:10; the sections below hold the numbers; [1v] = a single version on each side)
+  Stands:
+    - Exactness: every replay and retrain matched byte for byte (36 own steps, 452 self-play rounds, the tree at
+      every step, the twins, the traced shadows' checks).
+    - The tree's lead over its self-play-only twin (191-294) is league data. A flat LR given the same league games
+      gains 212-302 [1v, but large]. It is level with the tree through v428 (single points -5, 14, 0 [1v]) and
+      26 [10, 42] ahead at v444-v452 (pooled, one window).
+    - The ply-2 entry's league games carry all of the league data's value by v452 (307 vs 302 [1v, large]). Per
+      position, games against stronger opponents are worth 2.7x those against weaker.
+    - Bigger steps lose: rates 0.10 and 0.165 lose to 0.05 at every checkpoint (-43 to -139). C (all data with L9's
+      young sums, about a 1.7x step) is -46 [-54, -38] (pooled).
+    - Probit at equal data trails LR at d2, increasingly (-10, -50, -101 [1v, large]). F-P-c's tau makes it worse
+      (-37, -129, -117 vs tau 0), so stiffening is not the cause.
+    - Version noise: adjacent versions of a mature flat LR differ by about 17 Elo SD. Flat models on the same stream
+      swing together, so their same-version contrasts hold. Windows of nine versions can differ by about 30.
+    - Offline log-loss misranks play throughout (tree vs twin, the rates, the Q6 arms, the learners).
+  Fell:
+    - "The flat twin beats the tree by 57 at v452": 26 pooled.
+    - Q6: "L9's edge needs both its filtered data and its larger step, interaction ~80".
+    - R control: "the router's region is worth 23"; "AdaGrad sums built on other data hurt".
+    - "The best rate falls as the data grows; 0.025 is 31 better by ~v430; F-L-c's 0.05 is too large late": the
+      second window gives 2 [-11, 14] and -5 [-28, 18].
+    - "Probit stiffening explains its decline".
+  Open:
+    - The headline's 26 rests on one window (v444-v452); a second window (say v432-v440) would test it.
+    - R-old's 15 [7, 23] (a random 1 / 0.1 weighting) is one window, the same stretch where the smaller rates
+      looked good. L9's edge over the twin (18 [-6, 43]) is not established; there is no evidence for the routing.
+    - Why probit trails LR at equal data (not stiffening).
+    - Single-version numbers not pooled: the learners' small contrasts (most effects are 50-300 and stand),
+      whytrees' leaf-vs-tree contrasts at d2 (e.g. Ne-share's L9 alone 41 above the tree), the probit-tau column.
+    - No further experiments without the user (the coordinator, ~06:05).
+
+THE RUN
+  One streaming pass over the tree's history, v0 -> v122, every step regenerated exactly:
+    - 116 self-play rounds (30.7M positions): each checked against the log (W-L-D, plies).
+    - 6 kept own steps (cycles 2-7, v28-v110): 21,740 league games, 1.86M positions, 5.7% of the positions, 15.8%
+      of the games. League games average 85 plies, self-play games 265.
+  Checks: every replay equal to games.csv game by game; positions = own_positions; every calibration matched the
+    tournament log's. The tree's own step retrained on each replay gave bdt{v+1} and its state byte for byte.
+    The rate-0.05 twin equals F-L-c's lr1 and lr28 (the tree played F-L-c's games while it was one leaf).
+  Three twins trained on every step: --lr-rate 0.05 (F-L-c's), 0.10, 0.165.
+  Cost: about 45 CPU minutes to v122, checkpoint included; 33 min wall at 2 jobs, nice 19, league running.
+    About 380 own-games sets made (2.6 s CPU each, most copied or remade), 6 replays (about 130 s CPU each).
+
+CHECKPOINT v122 (sparsefit arena, d2 both sides, log-odds-softmax T0.1, own calibration, 2000 games, seed 11)
+  Elo A - B [95% range]:
+    tree vs twin r0.05                     -5 [-19, 10]    (A +890 -916 =194)
+    tree vs twin r0.10                     41 [26, 56]
+    tree vs twin r0.165                    99 [84, 114]
+    twin r0.05 vs pilot twin (self-play only, same version)   221 [204, 239]   (A +1500 -374 =126)
+    (first pilot: tree vs self-play-only twin 191 [174, 208])
+  eval-loss --fit-calibration (calibrated log-loss / winner log-loss):
+                       heldout-d2play       heldout
+    tree v122          0.9256 / 0.5694      0.1389 / 0.5017
+    twin r0.05         0.9263 / 0.5717      0.1396 / 0.5085
+    twin r0.10         0.9352 / 0.5789      0.1402 / 0.5108
+    twin r0.165        0.9478 / 0.5880      0.1411 / 0.5164
+    pilot twin v122    0.9475 / 0.5953      0.1406 / 0.5261
+  Rule: the tree over the best twin (r0.05): -5, short of 30 with the range above 0 -> STOP.
+
+CHECKPOINT v217 (same settings; 13 own steps, 4.0M league positions = 7.1% of the stream)
+    tree vs twin r0.05                     14 [-1, 28]     (A +926 -848 =226)
+    tree vs twin r0.10                     57 [42, 72]
+    tree vs twin r0.165                   130 [114, 146]
+    twin r0.05 vs pilot twin (self-play only, same version)   212 [195, 229]
+    (first pilot: tree vs self-play-only twin 236 [218, 255])
+  eval-loss:           heldout-d2play       heldout
+    tree v217          0.9085 / 0.5576      0.1385 / 0.5028
+    twin r0.05         0.9136 / 0.5618      0.1393 / 0.5162
+    twin r0.10         0.9202 / 0.5666      0.1402 / 0.5254
+    twin r0.165        0.9311 / 0.5734      0.1411 / 0.5361
+    pilot twin v217    0.9402 / 0.5854      0.1402 / 0.5233
+  Rule: 14 [-1, 28] -> STOP by the rule, not applied (the user's override): continuing to v452.
+
+CHECKPOINT v452 (same settings; 36 own steps, 11.47M league positions = 9.9% of the stream; 04:00)
+    tree vs twin r0.05                    -57 [-71, -42]   (A +727 -1051 =222)
+    tree vs twin r0.10                     18 [4, 33]
+    tree vs twin r0.165                    82 [67, 97]
+    twin r0.05 vs pilot twin (self-play only, same version)   302 [282, 323]   (A +1659 -257 =84)
+    (first pilot: tree vs self-play-only twin 294 [274, 315])
+  eval-loss:           heldout-d2play       heldout
+    tree v452          0.9069 / 0.5563      0.1376 / 0.4915
+    twin r0.05         0.9104 / 0.5593      0.1387 / 0.5094
+    twin r0.10         0.9153 / 0.5632      0.1392 / 0.5119
+    twin r0.165        0.9221 / 0.5678      0.1397 / 0.5150
+    pilot twin v452    0.9342 / 0.5832      0.1396 / 0.5139
+  At equal data, the tree's structure is worth -5, 14, -57 at v122, v217, v452 (5 -> 11 leaves). By v452 the flat
+  LR beats the tree in play, though the tree still predicts better offline (0.9069 vs 0.9104). The tree's 294 lead
+  over the self-play-only twin is all league data.
+  Checks: all 36 own steps replayed exactly and every tree own step reproduced byte for byte. Cost of the pass:
+  about 4.7 CPU h (regeneration, replays, checks, training; 3 checkpoints about 10 CPU min each), 3 h wall.
+
+READING
+  - At v122 (5 leaves), the tree adds nothing a flat LR on the same data lacks: level in play, 0.0007 apart in loss.
+  - The league data, 5.7% of the positions, is worth 221 Elo to the flat LR. So league positions are worth far more
+    than self-play positions. This bears on every comparison between lineages with different league shares
+    (IDEAS.md, 2026-11-08 ~23:50, the league-data confound).
+  - Bigger steps are worse, monotonically, in play and in loss. The rate is not what the flat twin lacked.
+  - Open: the first pilot's gap grew from 191 (v122) to 294 (v452, 11 leaves). Whether the tree pulls ahead of its
+    full-data twin later is unknown; resuming to v217 costs about 1-2 CPU hours, to v452 about 6-8.
+
+  - At v217 the tree has a small edge (14, at the edge of significance; 0.005 better d2play loss). About 94% of its
+    lead over the self-play-only twin is data.
+
+LEARNERS ON THE KEPT STREAM (learn.py; learn/v122/results.txt; d2, 2000 games, own cal, seed 11; Elo A - B)
+  Each trains on the twin's stream in its order. probit: F-P-tau0-c's recipe (chessai-probit, tau 0), from scratch.
+  own-*: LR at 0.05 from the twin's lr28, with only part of each own step's games:
+    d1/d2: the tree's ply-1 or ply-2 entry's games;
+    up/down: games against opponents rated above or below the tree's ply-2 entry (elo_history after the cycle's last
+      tournament; names then -> now via the calibrations).
+  The two entries' game against each other counts for d1 and d2 only. A subset step is a dir of links to the kept
+  game dirs; train shuffles it with the step's seed (a linked full step reproduces the twin byte for byte).
+  v122:                     vs twin r0.05        vs tree             vs self-play-only twin
+    probit d2               -10 [-24, 5]         -10 [-25, 5]
+    probit d1               -30 [-39, -21]
+    own-d1                 -128 [-144, -113]     -85 [-100, -70]      98 [83, 114]
+    own-d2                  -27 [-41, -12]       -15 [-29, -1]       190 [173, 207]
+    own-up                  -77 [-92, -62]       -48 [-62, -33]      128 [113, 144]
+    own-down               -105 [-120, -90]      -74 [-89, -59]      106 [91, 122]
+  Subsets (6 own steps), tree W-L-D, value over the self-play-only twin per 100k positions:
+    all    21740 games 1855960 positions         7500-11695-2485   221 Elo  11.9
+    d1     10900 games  928580 (50.0%)           1243-7560-2037     98      10.6
+    d2     10900 games  931246 (50.2%)           6257-4135-448     190      20.4
+    up      9320 games  722366 (38.9%)           1112-7983-225     128      17.7
+    down   12360 games 1129728 (60.9%)           6388-3712-2260    106       9.4
+  eval-loss (heldout-d2play | heldout): probit 0.9788 / 0.5695 | 0.1445 / 0.5214; own-d1 0.9351 / 0.5823 |
+    0.1400 / 0.5170; own-d2 0.9243 / 0.5755 | 0.1402 / 0.5143; own-up 0.9292 / 0.5788 | 0.1404 / 0.5209;
+    own-down 0.9366 / 0.5824 | 0.1398 / 0.5126.
+  Reading:
+    Q1: at equal data, probit is level with LR at d2 and 30 behind at d1, so the league's d1 probit edge is not the
+        model on equal data.
+    Q3: the ply-2 entry's games carry most of the value (half the positions, 190 of 221). Per position, d2-entry
+        games and games against stronger opponents are worth about twice the rest. The halves don't add up:
+        diminishing returns.
+  Cost at v122: 24 CPU min (training 4 min, 15 matches 20 min). Repeated at v217 and v452 from the learners' last
+  versions.
+  v217 (learn/v217/results.txt; 13 own steps):
+                            vs twin r0.05        vs tree             vs self-play-only twin (per 100k)
+    probit d2               -50 [-65, -35]       -47 [-62, -32]
+    probit d1               -62 [-71, -52]
+    own-d1                 -129 [-145, -114]    -151 [-168, -135]     78 [63, 94]     (3.9)
+    own-d2                  -30 [-44, -16]       -39 [-54, -24]      202 [186, 220]   (10.1)
+    own-up                  -78 [-93, -63]       -79 [-94, -65]      133 [117, 149]   (11.2)
+    own-down                -66 [-81, -52]       -52 [-67, -37]      166 [150, 183]   (5.9)
+    all (twin r0.05)                                                 212              (5.3)
+  Subsets: d1 2.01M positions (50%), d2 2.00M, up 1.19M (29.8%), down 2.80M (70.0%).
+  eval-loss d2play: probit 0.9758, own-d1 0.9236, own-d2 0.9136, own-up 0.9238, own-down 0.9186.
+  Reading: probit falls further behind LR as the data grows (d2 -10 -> -50, d1 -30 -> -62). That fits probit
+  stiffening (variance ~1/n at tau 0, vs AdaGrad's 1/sqrt(n)), but it is not shown. The d2 entry's games again give
+  nearly all the league value (202 of 212). Per position, games vs stronger opponents are worth 1.9x the rest and
+  d2-entry games 2.6x d1-entry games.
+  probit-tau (Q2, the coordinator ~04:05): F-P-c's exact recipe, chessai-probit --model probit --use-probs with the
+    default tau, from scratch on the stream with the stream's seeds. Its header = F-P-c's: prior 3e-1, beta 1e0,
+    tau 1e-5, alpha 1e0, per_game none, eps 5e-1, eps_rate 1e-4 (the tau-0 probit twin: tau 0e0, else the same).
+                            vs twin r0.05 d2     vs tau-0 probit d2   vs twin r0.05 d1
+    v122                    -69 [-84, -55]       -37 [-52, -23]       -14 [-23, -6]
+    v217                   -191 [-208, -175]    -129 [-145, -114]     -56 [-65, -47]
+    (tau-0 probit vs twin r0.05: d2 -10 and -50, d1 -30 and -62)
+  eval-loss (heldout-d2play | heldout): v122 0.9885 / 0.5830 | 0.1445 / 0.5191; v217 0.9843 / 0.5777 |
+    0.1446 / 0.5280 (tau-0 probit: 0.9788 / 0.5695 | 0.1445 / 0.5214; 0.9758 / 0.5663 | 0.1444 / 0.5241).
+  Reading (Q2): tau does not rescue the probit; it makes the d2 decline much worse (tau-0 probit -37 -> -129 ahead
+    of it). So stiffening (tau 0's 1/n variance) is not why probit falls behind LR at equal data. At d1 the tau
+    twin is level-ish with the tau-0 one (-14 vs -30, -56 vs -62). A guess, not tested: tau's floor on the variance
+    is forgetting, and forgetting loses the league data's value in the self-play rounds between own steps.
+  v452 (learn/v452/results.txt; 36 own steps; single versions, so each number also carries the ~17 Elo version
+  noise, VERSION NOISE below):
+                            vs twin r0.05        vs tree             vs self-play-only twin (per 100k)
+    probit d2              -101 [-117, -86]      -66 [-81, -52]
+    probit d1               -57 [-67, -48]
+    probit-tau d2          -197 [-214, -181]    (vs tau-0 probit -117 [-133, -102])
+    probit-tau d1           -62 [-71, -54]
+    own-d1                 -183 [-200, -167]    -118 [-134, -103]     85 [69, 100]    (1.5)
+    own-d2                  -14 [-28, 1]          19 [4, 34]         307 [287, 328]   (5.4)
+    own-up                  -85 [-100, -70]      -39 [-54, -25]      219 [202, 237]   (8.0)
+    own-down                -46 [-60, -32]         0 [-14, 14]       261 [243, 281]   (3.0)
+    all (twin r0.05)                                                 302              (2.6)
+  Subsets: d1 5.76M positions (50.2%), d2 5.73M (50.0%), up 2.75M (24.0%), down 8.70M (75.8%).
+  eval-loss d2play: probit 0.9747, probit-tau 0.9822, own-d1 0.9130, own-d2 0.9125, own-up 0.9164, own-down 0.9163
+    (twin r0.05 0.9104).
+  Reading over v122 -> v217 -> v452:
+    Q1: at equal data the tau-0 probit falls further behind LR at d2 (-10, -50, -101); at d1 it levels off near
+        -60 (-30, -62, -57).
+    Q2: tau (F-P-c's recipe) is worse than tau 0 at d2 every time (-37, -129, -117) and about level at d1 from v217
+        (-56 and -62 against the twin, tau 0 -62 and -57). Stiffening is not why probit trails LR.
+    Q3: the ply-2 entry's games alone give all of the league data's value by v452 (307 against 302; own-d2 vs twin
+        -14, n.s.). The ply-1 entry's give 85. Per position, games against stronger opponents are worth 2.7x those
+        against weaker (8.0 vs 3.0 per 100k), d2-entry games 3.6x d1-entry games. Halves don't add up: diminishing
+        returns. Stronger opponents fell to 24% of the league positions as the tree climbed.
+  Cost at v452: 41 CPU min (training 9, 24 matches 32).
+
+Q6 LEAF-DATA 2x2 (q6.py, trace-src/, bin/chessai-trace; q6/results.txt; done 04:27)
+  Is L9 of v428 (alone 41 above the tree at d2) strong from filtered data or from its large step?
+    L9 itself (node 9 of bdt428 = whytrees' leaf9.model, checked) | B: L9's exact data, sums set to the twin's each step
+    C: all data, sums set to L9's ancestor's each step            | twin r0.05
+  L9's data: weight 1 when the tree trains L9's ancestor (path 0 -> 1 -> 9) at full weight on an example, else the
+  share 0.1. chessai-trace is chessai-lrshare's own source (its target binary is md5-identical to bin/chessai-lrshare)
+  plus a tracer that trains B and C beside the tree. Step 0 checked: the traced tree = bdt1, C = twin lr1. Every
+  step is checked byte for byte against bdt{i+1}, and the own steps against their saved states.
+  At v428: own cal, a round robin of the four plus the tree vs L9 (d2, 2000 games, seed 11), eval-loss.
+  Cost about 45-50 CPU min.
+  RESULT at v428 (Elo against twin r0.05 at v428; d2, 2000 games, own cal, seed 11):
+                         young step (sums ~35% of the twin's)   old step (the twin's sums)
+    L9's data            L9: 16 [1, 30]                         B: -11 [-26, 4]
+    all data             C: -45 [-60, -31]                      twin: 0
+    Direct: L9 vs B 39 [25, 54] (the step, on L9's data); L9 vs C 65 [51, 80] (the data, at the young step);
+    B vs C 40 [25, 54]; L9 vs tree 39 [25, 54] (whytrees: 41); tree vs twin, both v428: 0 [-15, 14] (v452: -57).
+  L9's data: 28.43M examples at full weight (25.8%), 81.65M at the share. L9's ancestor: node 0 for steps 0-35 (the
+    root split in step 35), node 1 for 36-153, node 9 from 154 on.
+  Bias AdaGrad sums as a share of the twin's (win/draw/loss): L9 36.8/33.3/34.6%, B 99.9%, C 36.9/33.5/34.8%.
+  eval-loss (heldout-d2play | heldout): L9 0.9089 / 0.5529 | 0.1396 / 0.5209; B 0.9097 / 0.5529 | 0.1396 / 0.5218;
+    C 0.9123 / 0.5578 | 0.1393 / 0.5130; twin 0.9105 / 0.5556 | 0.1389 / 0.5118.
+  Checks: the traced tree equalled bdt{i+1} at every step 0-427. 33 of the 34 own steps, started from their saved
+    states, reproduced the saved post-step states (step 28 ran before the check was logged). Self-play's
+    end-of-cycle states differ from train's in a few bytes in all 33 cycles checked: a statistic no model shows
+    (the models are equal), so own steps start from the saved states.
+  Reading: both together, and only together. The young step helps on L9's data (39) and costs 45 on all data; L9's
+    data helps at the young step (65) and not at the old one (-11, n.s.). The interaction is about 80 Elo. "Young"
+    is against the same-age twin: L9's sums are ~35% of the twin's, a step ~1.7x. Offline (d2play loss: L9 < B <
+    twin < C) gives the filtered data a small edge at both steps and misses the interaction.
+  Cost: about 25 CPU min (replay 9 + the first try's steps, matches 15).
+  Random control requested (the coordinator, ~04:30; q6r.py, below).
+
+Q6 RANDOM CONTROL (q6r.py, bin/chessai-trace-r; q6r/results.txt; 04:36-04:51): is L9's edge the routing?
+  R arms: an LR on every example at weight 1 for a uniformly random subset of each step's positions, L9's count in
+    that step (q6/routes.tsv; 25.8% overall), else at the share 0.1. Drawn per step: selection sampling over the
+    step's training order, seed derive_seed(82, step, 0); one subset for both arms.
+    R-young: its own AdaGrad sums (vs L9). R-old: sums set to the twin's at the start of every step, as B's (vs B).
+  How: chessai-trace-r = trace-src plus the R arms beside a flat LR's training. The twin r0.05 retrained step by
+    step with it equalled twins/r005/lr{i+1} byte for byte at every step 34-427, and each step's count at weight
+    1 equalled routes.tsv's. Steps 0-34 have every example at weight 1, so both arms equal the twin there; they
+    start at step 35 from lr35. Checked: at step 34 both arms reproduce lr35 byte for byte.
+  Matches at v428 (d2, 2000 games, own cal, seed 11; Elo A - B [95%]):
+    R-young vs twin     -2 [-16, 13]        R-old vs twin      26 [11, 40]
+    R-young vs L9      -28 [-43, -14]       R-old vs L9       -14 [-28, 1]
+    R-young vs R-old    -5 [-20, 9]         R-old vs B         43 [29, 57]
+  Joint fit of all 14 Q6 and R matches (twin = 0; 95%; chi2 10.8 on 8 dof):
+                                  young step            old step (the twin's sums)
+    L9's routed data              L9 26 [18, 35]        B -13 [-23, -4]
+    random 25.8%, same weights    R-young 4 [-7, 14]    R-old 19 [10, 28]
+    all data                      C -46 [-56, -36]      twin 0          (tree v428: -7 [-18, 5])
+    Contrasts: L9 - R-young 23 +- 10; B - R-old -33 +- 10; R-old - R-young 16 +- 10; R-old - L9 -7 +- 9.
+  Sums at v428 per weight as a share of the twin's (1845 weights above the twin's 25th percentile; p10 / p50 / p90):
+    L9 21 / 36 / 51%; C 21 / 36 / 51% (it inherits L9's profile); R-young 25 / 29 / 34% (nearly a uniform scale);
+    B and R-old 100%. Bias sums: R-young 29.1 / 29.4 / 27.9% (L9 36.8 / 33.3 / 34.6%).
+  eval-loss (heldout-d2play | heldout): R-young 0.9079 / 0.5527 | 0.1388 / 0.5126; R-old 0.9095 / 0.5533 |
+    0.1388 / 0.5125 (L9 0.9089, B 0.9097, twin 0.9105, C 0.9123 in d2play log-loss).
+  Reading:
+    - The router's region pays only with sums built on that region: at the young step it beats random positions by
+      23; with the twin's sums it is 33 worse than random.
+    - On random positions the smaller step is better (R-old over R-young by 16), as in the rate ladder.
+    - Every arm whose sums were built on its own data is level with the twin or above it: L9 26, R-old 19,
+      R-young 4. The two arms whose sums come from other data are the two worst: B -13 (all-data sums on L9's
+      data) and C -46 (L9's sums on all data).
+    - So Q6's "young step" mixed two things: the step's scale and the sums' per-feature profile.
+    - Is it the routing? Partly. At about L9's step the router's region is worth 23 over random positions. A random
+      1 / 0.1 weighting with the twin's sums (R-old) comes within 7 +- 9 of L9 without a router. Its average
+      weight is 0.33: a smaller effective step.
+  Cost: 17 CPU min (replay 404 s for 394 steps, 6 matches 589 s). learn.py was paused (SIGSTOP on its process
+    group) from 04:35 to 04:51 so one side job ran at a time.
+
+RATE LADDER BELOW 0.05 (rates.py; rates/results.txt; 05:10-05:58; the coordinator ~05:00, follow-up (a))
+  Flat twins at --lr-rate 0.025 and 0.0166 (twins/r0025, twins/r00166, every version kept), trained on the stream
+  as the chain trained r0.05 (check: the same command retrains r0.05 at step 300 to lr301 byte for byte).
+  Matches: d2, own cal, seed 11; 2000 games at single versions; the v428 point pooled over v424-v432 at 1000 games
+  a version (each against r0.05 at the same version, and against tree v428).
+                          v122                v217               v424-v432 pooled (over versions)   v452
+    0.025  vs r0.05       -25 [-40, -11]      -2 [-17, 12]       31.4 [20.1, 42.7] (SD 14.7)    -18 [-33, -4]
+    0.0166 vs r0.05       -69 [-84, -54]     -26 [-40, -11]      14.8 [0.1, 29.6] (SD 19.2)     -37 [-51, -22]
+    0.025  vs tree                                               23.7 [9.9, 37.5] (tree v428)    16 [1, 30] (v452)
+    0.0166 vs tree                                               16.4 [6.2, 26.5] (tree v428)    31 [16, 45] (v452)
+    per version v424-v432 vs r0.05: 0.025 36 57 16 17 47 22 22 25 42; 0.0166 2 16 0 21 -9 41 19 -2 46.
+  eval-loss d2play | heldout winner: 0.025 v428 0.9123 | 0.5108, v452 0.9114 | 0.5094; 0.0166 v428 0.9167 | 0.5119,
+    v452 0.9154 | 0.5110 (r0.05: 0.9105 | 0.5118, 0.9104 | 0.5094).
+  Reading: the best rate falls as the data grows. Smaller rates lose early (v122) and lead by v424-v432 (0.025 by
+    31). The single v452 points disagree, but r0.05's v452 looks like a lucky version (also the extreme of the
+    headline recheck); a pooled v444-v452 point would settle it (~20 CPU min). A plain smaller rate gives what
+    R-old's random weighting gave (15), so the Q6 profile question (b) is moot. Offline the smaller rates are
+    slightly worse while playing better. For F-L-c (rate 0.05, ~v4800): its rate is probably too large this late;
+    the one-factor league test would be the mirror of F-L-agdiv-c (sums x4 = rate 0.025 from then on); the user's
+    call.
+  Cost: 61 CPU min (training 8, 44 matches 53).
+  SECOND WINDOW v444-v452 (ratepool.py; rates/results-pool2.txt; 06:00-06:05; 1000 games a version, v452 2000):
+    0.025  vs r0.05: -10 31 15 6 3 -9 -13 9 -18      mean 1.5 [-10.5, 13.5] (version SD 12)
+    0.0166 vs r0.05: 22 56 5 -37 -7 -26 -8 -14 -37   mean -5.1 [-28.1, 17.8] (version SD 28)
+    The first window's lead (31, 15) does not replicate: the windows differ by about 30, beyond either range, so
+    strength also drifts over tens of versions. WITHDRAWN: "the best rate falls as the data grows, 0.025 by ~v430"
+    and the F-L-c implication. Only the early loss of the smaller rates stands. 0.05 looks near a flat optimum
+    (with F-L-agdiv-c's no-gain bigger step). Cost 12 CPU min.
+
+POOLED RECHECKS (recheck.py; recheck/results-1.txt, results-2.txt; 05:20-05:43; the coordinator ~05:15)
+  Both sides at the same version, 1000 games a version (v428 and v452 reuse their 2000-game matches), d2, own cal,
+  seed 11. Per contrast: the spread of the per-version results against match noise (chi-square); without excess the
+  summed games give the range, with it the mean of the versions (t over the versions).
+  Headline, tree vs twin r0.05, v444-v452: -25 -11 13 -40 -37 -33 -11 -35 -57. Mean -26.2 [-42.0, -10.3]
+    (version SD 18, chi2 39.4 on 8 dof); summed games -29.1 [-35.6, -22.7] (match noise only). The single v452
+    point (-57) was the extreme of the nine: at equal data the flat twin beats the tree by about 26 at v444-v452.
+  Q6 / R arms, v424-v428 (L9 at v424-v427 = leaf 9 of bdt{v} by chessai-whytrees leaves; bdt428's = whytrees'):
+                          v424  v425  v426  v427  v428   pooled [95%]        version noise in the contrast
+    C vs twin              -56   -31   -48   -50   -45    -45.9 [-54.2, -37.6]  none: chi2 3.1, p 0.54
+    R-old vs twin           10    18    -3    14    26     14.8 [6.5, 23.2]     none: chi2 5.6, p 0.23
+    R-young vs R-old        17   -11     1     4    -5      0.0 [-8.3, 8.3]     none: chi2 4.5, p 0.34
+    L9 vs twin              31    38   -14    22    16     18.5 [-6.3, 43.3]    yes: chi2 14.9, p 0.005, SD 17
+    R-young vs L9           14    -5    10   -14   -28     -4.5 [-26.0, 16.9]   yes: chi2 15.6, p 0.004, SD 14
+    R-old vs B             -32    -2    26     8    43      8.6 [-26.6, 43.8]   yes: chi2 39.3, p < 0.001, SD 27
+  Reading: the flat arms on the shared stream (twin, R-young, R-old, C) swing together, so their same-version
+    contrasts carry no version noise (even single-version ones held). L9 and B, on the router's data, swing on their
+    own. What stands: C -46 (all data with L9's young sums, about a 1.7x step; fits the rate ladder); a random
+    1 / 0.1 weighting beats the twin by 15, whatever the step (R-young = R-old). What falls: the router's region
+    (L9 - R-young 5 [-17, 26], B - R-old -9 [-44, 27]), Q6's interaction and the R control's "router worth 23",
+    and the reading that sums built on other data hurt (B is not clearly bad; C's loss is its step). Is it the
+    routing? No evidence: L9's edge over the twin (18 [-6, 43]) is about what a random 1 / 0.1 weighting gives.
+  Cost: 32 CPU min.
+
+VERSION NOISE (vnoise.py; vnoise/results.txt; the coordinator ~04:58; 05:09)
+  Twin r0.05 at v426-v430, each against tree v428 (d2, 2000 games, own cal, seed 11; --out game records, game g
+    seeded alike in every match). Steps 425-429 are self-play rounds, about 250k positions each.
+    twin - tree v428:  v426 17.9 [3.5, 32.3]   v427 4.7 [-9.6, 19.0]   v428 0.3 [-14.0, 14.7] (= Q6's match)
+                       v429 -1.7 [-16.1, 12.6]  v430 -31.5 [-46.1, -17.1]
+  Spread: SD 18.2 (range 49) against 7.3 for match noise alone. Common random numbers hardly matter: 1, 3, 7 and 4
+    identical games of 2000 between adjacent versions; 6% of the per-game noise is shared by the versions.
+  Blocked test (game x version): F = 6.50 on 4 and 7996 dof, p about 3e-5. Version-to-version SD of the true
+    strength about 17 Elo (one-sided 95% bound 42).
+  Reading: contrasts of 20-40 Elo at one version each are not reliable alone. Two models at single versions carry
+    up to about 24 SD between them (less if the shared stream correlates their fluctuations). The rate ladder and
+    the league-data effects are far larger and consistent across checkpoints. From here, single points are pooled
+    over adjacent versions.
+  Cost: 14 CPU min.
+
+THE STREAM (stream/; the coordinator, 01:15: keep it on disk for more learners on the identical data)
+  stream/NNN-sp, stream/NNN-own: step NNN (version NNN -> NNN+1) as a train source dir (round0/, one dir per game,
+    under the names trained on). stream/steps.tsv: step, dir, kind, seed, games, positions; stream/README: how to
+    train any learner on it exactly. One entry and its seed give the step's order exactly.
+  Steps 110-121 kept by run.py as they were trained (from the restart at v110; own-games sets kept too).
+  Steps 0-109 regenerated by regen.py after the checkpoint, one job: each checked as above, and once more by
+    retraining the rate-0.05 twin on it from lr{i}, which must give lr{i+1} byte for byte. All 107 passed
+    (cycles 2-6 replayed exactly again); 32 CPU min. Steps 0-216 on disk by 02:03, 8.07 GB.
+  Prepared but untrained data past v122 (sp/r123.., cycles/c008-c009) is left where it is, for a resume.
+
+FILES
+  run.py (the pass), regen.py (the stream's early steps), stream_index.py (steps.tsv, README), snapshot.py
+  (everything read from the live league, copied first: records/, models/, cycles/, tree/), twins/{r005,r010,r0165}/
+  lrN.model (N = 1..122), ck/v122/ (calibrations, matches, eval-loss, results.txt).
+
+================================================================================================================
+FEASIBILITY PILOT (2026-11-09, before the run)
+
+Own-step (league) games of T-L-Ne-share-c: can they be replayed exactly? Feasibility pilot, 2026-11-09.
+Answer: yes, exactly. Two kept cycles were replayed: 45 (chessai-hybrid) and 43 (chessai-sparsefit, the binary
+of the other 35 kept own steps). The tree's own step, retrained on each replay, reproduces bdt447 and bdt434 byte
+for byte, model and state. The twins can therefore get the tree's exact data in the tree's exact order.
+
+WHAT THE OWN STEP TRAINS ON (cycles/champ/cycle.py: own_steps, games_of, own_opponents, own_step)
+  Games: every game of the cycle's 5 round-robins (tournaments 5(c-1)..5c-1) between one of the lineage's current
+    entries (vN-1, vN-2; not the champion's entry) and any field player but the references (random, random-1..3,
+    ref-d4mix43-1). Both colours, each game once; the two current entries' games against each other count too.
+  Positions: all of each game's positions, labelled by the game's result, as in self-play.
+  Order: the game directories are linked as {t:03d}~{white}~{black}; train reads them in name order and shuffles
+    with seed 21, round 0 (derive_seed(21, 0, MAX)). The shuffle depends only on the number of positions.
+    The names are those of the time: the 45->46 deploy renamed the MoE lineages (MoE-c -> M-L4-L-c, ...). Linked
+    under today's names, the retrained step differs; linked under the names of the time, it is identical.
+    check_cycle.py gets the old names by matching each own-games set's calibration with the tournament log's.
+  Check: plan_own.py finds every kept cycle's games and plies equal to cycles.csv's own_games and own_positions
+    (all 37 kept steps, plan-T-L-Ne-share-c.txt).
+
+REPLAY
+  Seeds: the tournament seeds every game derive_seed(1, t, g), g its pairing index in the field's order, so one
+    lineage's games replay alone (replay-games).
+  Field order: games.csv appends each round-robin in pairing order, which gives the field's order. It is checked
+    for every kept cycle (order ok).
+  Calibration: entries are calibrated on their own games (600 games, d1, seed 5).
+    - Sets still in cycles/champ/owncal or the seed directory: copied.
+    - Deleted sets (most of them): remade by the command recorded in KEY.arena. All 147 remade sets matched the
+      recorded result.
+    - At load, every calibration equals one the cycle's tournament logged, by value: 136 for cycle 45, 125 for
+      cycle 43.
+  Binary: the cycle's tournament binary, from tournament.log.
+  Results:
+    cycle 45 (v446): 4050 of 4050 games equal games.csv (result, plies); 360574 positions = own_positions.
+    cycle 43 (v433): 3710 of 3710 games equal; 329298 positions = own_positions.
+
+COST (nice 19; machine load 10-16)
+  Per cycle:
+    - about 70 own-games sets to make, 2.9 s CPU each (about 200 s);
+    - the replay, 185-208 s CPU (140-180 s wall at 4 threads);
+    - the tree check, 10 s;
+    - about 400 s CPU in all.
+  All 36 kept own steps before v452:
+    - Games: 134540 games, 11469437 positions.
+    - Own-games sets: 2370 needed; 107 can be copied, 147 are made already, about 2120 remain. About 1.7 h CPU.
+    - Replays: about 2.0 h CPU.
+    - Checks: about 6 min.
+    - Total: about 3.8 h CPU.
+  Self-play rounds again (416): 2215 s, plus 170 s for the per-game layout. About 40 min.
+  Training 3 twins: about 10 min.
+  Total: about 4.6 h CPU, about 4 h wall at 2 jobs.
+  Disk: transient, about 2 GB at peak. Own-games sets are deleted after the last cycle that needs them.
+
+PLAN: one streaming pass, versions 0 -> 452 in the tree's order, three twins (--lr-rate 0.05 = F-L-c's, 0.10,
+0.165). The rate is stored in the model file, so --start keeps it.
+  Self-play round r:
+    - Regenerate it as before (arena bdt r vs r-1; rounds 0-1 by a scratch self-play) and check it against the log.
+    - Split it into per-game directories in game order (pergame.py).
+    - Train each twin with --seed 21^sm(r)^sm(0), which is self-play's shuffle, so the order is the tree's too.
+      Checked: train on per-game round 0 reproduces F-L-c's self-play lr1.model byte for byte.
+  Kept own step at vN (cycle c):
+    - Lane 2 prepares it ahead: own-games sets, replay, checks, the round with the names of the time, and the
+      tree retrain (must give bdt{N+1} byte for byte).
+    - Train each twin on the same round with --seed 21, --start twin vN, so it gets the same shuffle as the tree.
+  Lanes: lane 1 regenerates and trains, waiting at an own step until its round is ready; lane 2 prepares the own
+    steps. At most 2 jobs, 2-4 threads each.
+  Keep: each twin at the tree's 45 league versions (champion v428, current v452).
+  Then: the comparisons as in the first pilot, for each twin.
+
+FILES
+  Scripts: plan_own.py (plan-*.txt/json), prep_cycle.py, remake.sh, check_cycle.py, ../pergame.py.
+  T-L-Ne-share-c-c043/, -c045/: players, games, replays, checks.
+  owncal/: the pool of own-games sets so far.
+  prep.py: the first cycle-45 version of prep_cycle.py.

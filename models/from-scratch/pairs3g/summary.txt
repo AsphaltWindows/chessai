@@ -1,0 +1,56 @@
+chessai-pairs3g: summary (the PAIRS FINAL TEST fork, 2026-11-13 14:05-; the user: "Let's do one final test of pairs";
+the coordinator's directive ~14:05). Source models/from-scratch/pairs3g/src (a copy of pairs3-src = pairs3f's source:
+rebuilt at the new path it gives pairs3f's md5 byte for byte) + the duplicate fix in src/src/pairs.rs.
+
+BINARY (cp -n into models/from-scratch/bin/)
+  chessai-pairs3g  f42fdaff9687e5a802e4aaca631e14d9  pairs3f + THE DUPLICATE FIX: at a checkpoint the additions go down
+                   the ranking skipping a candidate whose interaction a chosen pair already is (the list after the
+                   drops, and the pairs added before it at the same checkpoint), until k (20) are added. A pair's
+                   interaction (`interaction`): the pair with a two-valued feature's value made a wildcard (features 64
+                   side to move, 66-69 castling rights): x(i:0&X) + x(i:1&X) = x(X), a weight the probit has, so the two
+                   are one interaction; with two two-valued features all four pairs of the block are one. Statistics,
+                   model file, state (kind probit-pairs3) and training order are pairs3f's; the checkpoint log line
+                   gains "; duplicates skipped N[: pair z, ...]" before "; M chosen". Tests 224 + 2 pass (one new:
+                   a_candidate_whose_interaction_is_chosen_is_skipped_for_the_next).
+
+IDENTITY AND RESUME
+  training, pairs off: pairs3g vs hybrid6 (pairs's chains: flag absent and --pairs off x probit and lr x 4 chained
+    steps): 16/16 IDENTICAL (id/chains3g.log).
+  exact resume (multi-round vs chained single-round processes, --pairs-every 100000; id/resume-*.log):
+    -cmdrop (--pairs-se clustered --pairs-drop-after 20000, which picks side-to-move pairs, so the skip works: 19, 31
+      and 40 skipped at the three real checkpoints, 1 and 5 dropped): models after sets 1-3 and the state IDENTICAL;
+      list 20 -> 39 -> 54 pairs, 0 duplicates (pairs3f's same run: 55 pairs, 53 in 25 duplicate groups, 27 distinct).
+    -fcells (--pairs-contrast cells: no duplicate occurs): IDENTICAL, and byte-identical to pairs3f's own -fcells run
+      (models after sets 1-3 and the state): without a duplicate to skip pairs3g trains exactly as pairs3f.
+
+NULL (scripts/nullg.sh null-mf: data/null25, shuffled results, 25 rounds from scratch, seed 401, the recipe's defaults)
+  bands (mean z^2 of the clustered z by the candidate's games): <100 0.94-0.96 | 100-999 0.99-1.02 | 1000+ 1.75 (window 1,
+  the burn-in), 1.02, 1.21, 1.00, 0.97; CHOSEN 0 in every window. The checkpoint lines equal pairs3f's null (null/mf)
+  bar the new clause, and the 25 models and the state are byte-identical to pairs3f's (nothing chosen, nothing to skip).
+  play: pairs3g vs hybrid21's suite (31 cases, plies 1-5: tournaments, self-games, own calibration, check mode):
+    31/31 IDENTICAL, 0 stderr differences (identity/compare3g.txt).
+
+LAUNCH (2026-11-13 14:23)
+  specs leagues/specs/batch7/s7v3-p1-s1.json / -s2.json (launch/make_specs.py from the pairs3 fork's drafts: seeds 77/78,
+  ply 1, floor 300, cap 401; tournament binary and both entries' train_binary chessai-pairs3g; recipes.txt untouched;
+  launch smoke 2 cycles in launch/smoke/root OK). Launched 14:23:41 (repeat.sh, detached).
+  PRE-REGISTERED RULE (in the specs' description): at the final (two seeds, windows final-10/-5/final), F-P-S7v3 minus
+  plain F-P below +20 at every ply read (1, 2, 3) closes pairwise features for good; -30 or worse at ply 3 closes them
+  for the goal whatever plies 1-2 say; +20 or more at plies 2 AND 3 reopens them (a ply-2 test next).
+  READS: models/from-scratch/batch7-reads/pairs-final-read.sh mid (v150, plies 1-2) / final (plies 1-3, verdict line);
+  waiters started 14:23:47 -> pairs-final-mid.out, pairs-final-final.out.
+
+CLEAN-LIST SMOKE (smoke/: pairs3's root A settings, seed 79, 29 cycles, one driver, 2.80M examples; the recipe line's
+1M windows give 2 checkpoints; an observer with 200k windows; scripts/listcheck_g.py on the final models, probit28)
+  Same seed as pairs3's root A: F-P-S7v3.loc's models v1-v10 and F-P.loc's v1-v11 are byte-identical to it; they part at
+  the first checkpoint (v11's training), where pairs3f added 20 holding 64x66 and 64x67 four ways each.
+  F-P-S7v3.loc (the recipe): 40 pairs (checkpoint 1: 203 passed the floor, 23 duplicates skipped, 20 added, all side to
+    move x a value; checkpoint 2: 77 passed, 2 skipped, 20 added); DUPLICATES 0 of 40 (pairs3f: 22 of 40, 27 distinct);
+    values in > 5 pairs: 64:0 x12, 64:1 x9, 68:0 x6, 7:0 x6 (by interaction: 64:* x21, 68:* x8, 7:0 x6); inert 9/40
+    (22%, as pairs3f's); kinds sq x stm 19, sq x sq 10, castle x sq 8, castle x stm 2, castle x castle 1.
+    => duplicates fixed; the side-to-move hub stays (half the list); inert unchanged: FAILS 6.111's clean-list criterion
+    (no value in > ~5 pairs, < 10% inert). Per the directive the test runs anyway.
+  observer, 200k windows: 51 pairs, DUPLICATES 0 (pairs3f's observer: 52 with 18 duplicates); hubs 65:0 x8 (no en
+    passant), 59:11 x7 (by interaction 69:* x8, 68:* x8, 65:0 x8, 59:11 x7); inert 1/51 (2%; pairs3f's 33%); mostly sq x
+    sq and castle x sq: with 200k windows the per-example floor stops the side-to-move pairs.
+  Bands (real data, clustered z): checkpoint 1 <100 1.02 | 100-999 1.34 | 1000+ 26.5; checkpoint 2 1.09 | 1.59 | 5.2.

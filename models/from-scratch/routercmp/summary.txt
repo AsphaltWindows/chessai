@@ -1,0 +1,165 @@
+routercmp: NB against LR error routers on the same fixed LR leaves (2026-11-08)
+User: "can we do a similar comparison of Le and Ne routers for the same LR leaves? maybe there's a difference in how
+well they predict the correct leaf to send the position to".
+
+VERDICT: with the leaves held fixed, neither router kind is clearly better at sending positions to the right leaf.
+- On each tree's own self-play positions, NB-routed and LR-routed trees differ by at most 0.0017 nats of calibrated
+  log-loss (under 1%). The sign flips with the leaf set and the data size.
+- No small-data advantage for NB holds across the settings.
+- LR routers do pick the child that turned out best more often (6-17 points more at the root). They do it mostly by
+  sending nearly everything to the child that is most often best. NB routers spread positions out, and lose the same
+  or less when they pick wrong.
+
+The one consistent difference is concentration. On the same leaves, LR routers put positions into fewer leaves than
+NB routers in all 4 settings. Effective leaves at full data, NB against LR: 6.4 against 2.0, 6.2 against 4.3, 5.5
+against 4.6, and 2.6 against 1.0.
+
+The live league trees show the same thing, much more strongly:
+- Every LR-router error tree without sharing (T-L-Le-c, -merge, -fresh, -pre) routes about 84% of its self-play to
+  one leaf, 1.5-1.8 effective leaves. T-L-Le-c's champion v1505 sent 99.9% of cycle 30's self-play to a single leaf.
+- The NB-router error trees run on 5.1-6.5 effective leaves.
+
+So the league gap (Ne above Le by about 70 Elo in 4 of 5 pairs) is more likely the training feedback than routing
+skill at any one moment:
+- An LR router favours the leaf that is most often best.
+- That leaf gets the data and gets better.
+- The tree collapses towards one leaf.
+
+Leaf sharing breaks this: T-L-Le-share3-c runs on 8.5 effective leaves, which fits share3 closing the gap. This test
+does not prove the feedback. It shows that the static difference is too small to explain about 70 Elo, and that the
+concentration difference is real.
+
+Setup
+- Binary: bin/chessai-routercmp, md5 8d607093. It is chessai-lrnb plus two commands (routercmp-src = lrnb-src plus
+  routercmp.patch):
+  - refit-routers TREE GAMES OUT [--fresh-router cnbp|lr]: loads a tree and makes every router an untrained one of
+    the given kind, as a split makes it. It then trains only the routers, on train's positions in train's order (the
+    same seed, so the same shuffle for both kinds).
+    - It uses the tree code's own error routing: at each delegator on the path, every child's subtree predicts the
+      position, and the router learns the child with the smallest raw log-loss (the Best target, first on ties).
+      The router is trained before it routes the position on.
+    - No leaf trains, splits, merges or resets. The LR rate is 0.05, the trees' own.
+  - route-stats MODEL GAMES: for each delegator, over the positions that reach it:
+    - how often the router picks the child whose subtree had the smallest realized raw log-loss;
+    - the mean regret (the picked child's loss minus the best child's);
+    - the shares routed to each child, and the shares each child is best for;
+    - every leaf's loss on every position, and each position's leaf (--leaves-out).
+- Identity checks (identity/):
+  - eval-loss of both trees on the test is identical with chessai-routercmp, chessai-lrnb and chessai-cyc5.
+  - Flat LR and BDT training is byte-identical to chessai-lrnb's.
+  - All 11 leaves are byte-identical before and after a refit.
+  - route-stats' tree loss equals eval-loss's raw log-loss (1.9616).
+- Leaf sets: the champions T-L-Ne-c v1681 ("ne", leaves grown under NB routers) and T-L-Le-c v1505 ("le", leaves grown
+  under LR routers). Both have 5 splits and 11 LR leaves (copies in trees/).
+- Arms per leaf set:
+  - fresh NB routers and fresh LR routers, each on nested subsets of about 10k, 30k, 100k, 300k and 1M positions,
+    and on all of the training data;
+  - the tree's own routers, as they are;
+  - the best single leaf, chosen on one fold and scored on the other;
+  - the per-position oracle over the leaves (raw; a loose bound, as lrnb noted).
+- Two data sets:
+  - c15, as the directive and lrnb: offline-c15, trained on RRs 80-83 (2.3M positions) and tested on RR 84 in 10
+    parts. Calibration is held out as in lrnb (A = even parts, B = odd).
+  - sp, each tree's own positions (selfplay.sh): the tree plays itself through arena --out at depth 0 with jitter10
+    and --use-probs, as the lineages' self-play does.
+    - 4 training rounds of 2250 games: 2.28M (ne) and 2.30M (le) positions.
+    - 10 test parts of 230 games, each with its own seed: 579k and 585k positions.
+    - 94-95% of the positions are from drawn games.
+    - Subsets are prefixes of each round's outcome files, at lrnb's fractions.
+- 95% intervals: mean of the 10 per-part paired differences, t with 9 df.
+
+1. Calibrated held-out log-loss, NB minus LR (negative = NB better)
+
+   Own self-play positions (sp), the routers' real job:
+     size    ne leaves                    le leaves
+     10k     0.0008 [-0.0002, 0.0018]     -0.0017 [-0.0027, -0.0007]
+     30k     0.0007 [ 0.0001, 0.0013]     -0.0012 [-0.0022, -0.0001]
+     100k   -0.0003 [-0.0010, 0.0003]     -0.0011 [-0.0018, -0.0004]
+     300k   -0.0008 [-0.0011, -0.0004]     0.0003 [-0.0006, 0.0013]
+     1M     -0.0008 [-0.0012, -0.0004]     0.0012 [ 0.0003, 0.0022]
+     all    -0.0007 [-0.0011, -0.0004]     0.0013 [ 0.0004, 0.0022]
+   - The levels are about 0.229 (ne) and 0.215 (le).
+   - Winner log-loss: ne has NB better from 300k on (all: -0.0071 [-0.0127, -0.0014]). le has no significant
+     difference, since only 5% of its positions are decisive.
+   - ne: NB at full data equals the tree's own NB routers (0.0001 [-0.0002, 0.0005]). LR is 0.0009 worse
+     [0.0003, 0.0015]. Both beat the best single leaf: NB by 0.0019, LR by 0.0012 (not significant).
+   - le: LR at full data equals the tree's own LR routers (0.0000 [-0.0001, 0.0001]), including the collapse. On
+     these positions leaf 4 is the only good leaf: raw 0.215, the other ten 0.436-0.895. The own routers and the
+     LR refit send 100% of positions to it. The NB refit sends 28% elsewhere.
+   - So fresh routers trained on 2.3M positions reproduce each tree's own routing quality in its own setting.
+
+   League positions (c15):
+     size    ne leaves                    le leaves
+     10k     0.0065 [ 0.0029, 0.0102]     -0.0139 [-0.0187, -0.0091]
+     100k    0.0213 [ 0.0148, 0.0277]     -0.0123 [-0.0197, -0.0049]
+     all     0.0180 [ 0.0130, 0.0229]     -0.0066 [-0.0128, -0.0004]
+   - Here every refit is worse than the best single leaf (ne: NB by 0.028, LR by 0.010; le: 0.027 and 0.034).
+   - The leaves are badly calibrated on league positions: raw log-loss 1.96 (ne) and 1.85 (le), against 0.635 and
+     0.651 calibrated. Raw-loss targets then favour the least-trained, least confident leaves. In ne, leaf 8 was
+     trained on 2,734 positions, yet it is the raw-best child for 87% of d1's positions.
+   - c15 is a poor stand-in for the routers' job, so read the sp table.
+
+2. Raw log-loss of the whole tree, NB minus LR (the loss the routers learn from)
+   - c15: NB is better at 10k (ne -0.036, le -0.149) and LR from 100k on (all: ne 0.029, le 0.030).
+   - sp: LR is better at 10k (ne 0.0017, le 0.051). At full data NB is better on ne (-0.0014 [-0.0019, -0.0008]) and
+     LR on le (0.138: the collapse onto leaf 4).
+   - There is no consistent crossover by data size.
+
+3. Picking the best child at the root (realized raw loss), full data, NB against LR
+   - Rate: c15 ne 55.0% against 71.5%, c15 le 46.9% against 58.5%, sp ne 78.4% against 84.0%, sp le 84.9% against
+     94.9%. LR is higher everywhere, and also at 10k.
+   - Mean regret, NB minus LR: c15 ne -0.058 [-0.083, -0.033], c15 le 0.005 [-0.007, 0.017], sp ne -0.0013
+     [-0.0019, -0.0007], sp le -0.0061 [-0.0118, -0.0004]. NB loses the same or less despite its lower hit rate.
+   - LR's hit rate comes from routing nearly everything to the child that is most often best. Root routing on c15
+     ne: LR 1/97/3, NB 10/51/39.
+   - Agreement: the two kinds send 69% (sp ne), 72% (sp le), 34% (c15 ne) and 47% (c15 le) of positions to the same
+     leaf.
+
+4. Concentration: effective leaves, exp of the entropy of the leaf shares (concentration.out)
+     setting      own    NB 10k  LR 10k   NB 100k  LR 100k   NB all  LR all
+     c15 ne       5.9    5.9     4.3      7.1      2.4       6.4     2.0
+     c15 le       1.0    7.2     5.3      7.3      4.7       6.2     4.3
+     sp ne        4.9    6.1     3.0      5.3      3.8       5.5     4.6
+     sp le        1.0    1.8     1.3      2.3      1.1       2.6     1.0
+   - The live lineages' training routing over their last 7 versions (balance/leafshare.py, count differences):
+     - LR routers: T-L-Le-c 1.8, -merge 1.6, -fresh 1.5, -pre 1.6, each about 84% to one leaf. T-L-Le-share3-c 8.5.
+     - NB routers: T-L-Ne-c 5.1, -fresh 5.1, -pre 6.5, -share 6.0. T-L-Ne-share3-c 2.0 is young (v77, 3 leaves) and
+       T-L-Ne-merge-c 1.0 has merged back to one leaf.
+   - T-L-Le-c over time: 2.0 (v600), 2.4 (v800), 2.0 (v1000), 1.8 (v1200), 1.7 (v1400), 1.0 (v1497-1505).
+
+Reading
+- Static routing skill does not separate the two kinds: the differences are tiny and change sign.
+- What separates them is how much they concentrate. A plausible mechanism:
+  - An LR router is a roughly calibrated estimate of P(best child | position). When one child is best most of the
+    time, its argmax stays on that child unless the position's features strongly say otherwise.
+  - NB's posteriors are overconfident (lrnb: a raw draw slope of about 0.1), so its argmax follows weaker evidence
+    and spreads positions.
+- In a live tree, spreading keeps several leaves trained. Concentrating feeds the favoured leaf until the tree is
+  one LR.
+- In the league, sharing lifts the LR-router tree that collapses (T-L-Le-share3-c 1796 against T-L-Le-c 1690) and
+  not the NB one that spreads (T-L-Ne-share-c 1762 against T-L-Ne-c 1800). That fits, but these are single pairs.
+
+Caveats
+- The leaves are frozen. The feedback (routing shapes which leaf learns) is outside this test. The live lineages'
+  routing shares are the evidence for it.
+- One champion per kind. Their leaves differ a lot: le is effectively one good leaf on its own positions.
+- Self-play positions are 94-95% from drawn games, so the absolute differences are small.
+- The raw best-child target is noisy: one child always looks best on the realized outcome. This holds for both kinds
+  and is what the tree code trains on.
+
+CPU: about 13 CPU-min, at nice 19 with at most 2 jobs.
+- Build: about 1-2 min (not measured).
+- Identity checks: about 0.5 min.
+- Refits: 122 s (c15) and 77 s (sp).
+- Self-play games: about 133 s (22,600 games at 5.8 ms each, measured on 230 games).
+- Scoring: 174 s for sp, measured. c15 is about the same workload and was not measured.
+
+Files
+- Scripts: refit.sh, selfplay.sh, sp-refit.sh, eval.py, analyze.py and concentration.py.
+- Outputs:
+  - analysis-c15.out, analysis-sp-ne-v1681.out, analysis-sp-le-v1505.out and concentration.out.
+  - results.csv and leaf_fits.csv (c15), and sp/TREE/results.csv.
+  - rs/ and sp/TREE/rs/: route-stats per part and leaf files.
+- Models: m/ and sp/TREE/m/, the final bdt4.model of each refit.
+- Data: sp/TREE/train and sp/TREE/parts (the seeds are in sp-jobs.txt). The subsets and folds were deleted (about
+  0.5 GB). selfplay.sh --split-only remakes them from the rounds and parts in seconds.

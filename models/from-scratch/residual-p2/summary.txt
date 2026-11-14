@@ -1,0 +1,64 @@
+RESIDUAL-P2: VERIFIED AND PREPARED, NOT LAUNCHED (residual fork, 2026-11-12 21:55-22:20)
+
+The user approved residual leaves at ~21:48. Analyst 6.98: chessai-hybrid6rp's residual probit leaves are the wanted
+trunk + residual, so no new build is needed. The flags are --leaf-residual and --residual-inherit-sums.
+
+SPEC: leagues/specs/batch7/residual-p2.json
+- Ply 2, from scratch, seed 70; floor 300 / cap 400 (cycles 401); 1,584 games; tournament chessai-hybrid20.
+- Settings: self-games; cold games T 0.02, share 0.5, rating-only; rate_every 4; crowning at 3 draw-aware SEs;
+  plateau sqrt with guard_z 1.
+- Lines, two each:
+  - F-P on hybrid6;
+  - the std's capped T-P-Ne on hybrid6;
+  - the same plus --leaf-residual --residual-inherit-sums on hybrid6rp.
+- The description carries the reads (y+v+l @299 at v150, v300 and the final, plies 2 and 1), the bands and the rules.
+- leagues.py 1315b8ef creates it: flags, prices and recipes all pass. No recipes.txt edit was needed.
+
+IDENTITY (hybrid6rp flags off = hybrid6, on the T-P-Ne capped recipe under today's driver)
+- Two scratch runs, identical except the capped lines' train binary:
+  - rsmokeA: hybrid6, md5 0bd96e76;
+  - rsmokeB: hybrid6rp, md5 49a716e2.
+- Both use the real spec with split threshold "0100000" (= 100k, the same name length) and 9 cycles.
+- Result: all 58 version files byte-identical. That is models v0-v8 of all 6 lines plus the trees' current states,
+  with both capped lines splitting to 9 leaves. cycles.csv is identical too (54 rows). See compare.py and compare.out.
+- The Nov 10 checks (resid-probit/summary.txt) also covered exact resume of residual states and float/fixed play.
+
+SMOKE (rsmokeA/B residual lines)
+- Splits: both residual lines split like the capped ones, 5 leaves at v4 and 9 at v8. Nested delegators 0, 2, 3, 9.
+- Deltas: every leaf's delta moved, norms 0.93-2.73, largest weight 0.40.
+- Gain over the shadow: -0.0055 to +0.030 nats per example, negative in 2 of 38 windows.
+- No resets, no merges: --reset-leaves inf only logs, and merging needs --revise.
+- States: 388,589 B against 264,461 B for the plain capped trees.
+- Playback on chessai-hybrid20: the model files load as plain probit trees ("leaves" lists 9 Probit leaves).
+  - They played every cycle's tournament, self-games, calibration and cold games.
+  - A 40-game ply-2 arena, residual v4 against capped v4, ran normally. Its score is a smoke figure, not a read.
+- Real names: rreal, the exact spec in a scratch root, ran cycle 1 including self-games with the 103-character
+  residual line names. No "File name too long".
+
+NE + RESIDUAL CODE PATH (delegation.rs / bdt.rs of resid-probit/src): SOUND
+- Order per example at a delegator:
+  1. Children's errors come from their summed models.
+  2. The error router trains (error log).
+  3. The shadow trains (train_shadow; with residual leaves, revise_step leaves the shadow to it).
+  4. The children's sums are re-synced on the example's weights.
+  5. The routed leaf trains its delta on the new shadow + delta.
+- At a split the new leaves are exactly the plain copies: the same widening by split-noise squared, unit-tested on
+  Nov 10. Plain and residual children both start identical, so the error router's symmetry breaking is the same.
+- One dynamic difference is the design itself. Non-routed residual children follow the shadow as it trains, while
+  plain copies freeze. Every child still received examples.
+- A residual leaf that splits becomes a delegator whose own shadow (its summed model) is the trunk for its children.
+  So deeper leaves track a shadow fed only by their subtree, not the root's. This is the hierarchical form 6.98
+  accepts.
+
+CAVEATS
+- The residual line names are 103 characters. They work (rreal), but don't add more overrides.
+- The smoke split at 100k; the real 1M threshold splits later (the first split needs ~2 cycles of 581k positions).
+- Cycle CPU was measured under load ~30 on 8 cores, so it is inflated.
+
+COST
+- Steady cycles ~57 CPU-s (tournament ~34, training ~13 for 9-leaf trees, calibration ~6, self-games ~3).
+- Rated cycles, every 4th, add ~18-27 s of cold games.
+- Total: ~5-5.5 CPU-h to the floor (300), ~7 to the cap (400). This matches 6.98's 5-7.
+
+FILES: rsmoke{A,B}.json and rreal.json (scratch specs); runner.sh; compare.py; compare.out. The scratch roots are
+rootA/, rootB/ and rootR/ (kept as evidence).

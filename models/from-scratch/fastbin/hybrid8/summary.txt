@@ -1,0 +1,129 @@
+HYBRID8: EXACT FAST DEPTH-2 PLAY FOR FLAT PROBIT (2026-11-10 ~13:40 to ~15:40, the probit-speedup fork)
+
+Task: the PERF-LEDGER's queued item, fixed-point flat probit (F-P) in play and search, built exact and swapped into
+the running experiments as their tournament binary. The user: "make sure that the optimized probit binary is being
+used".
+
+RESULT
+- Binary: models/from-scratch/bin/chessai-hybrid8 (md5 d0fe74fe2e3a28d1cac3909f30cd0b63).
+  - Source: models/from-scratch/fastbin/hybrid8-src, a copy of hybrid7-src. Same commands, flags and files.
+  - Changed: root_values at depth 2 for a flat probit in fixed point (search.rs root_values_probit and ply1_probit;
+    the new module fastprobit.rs; fixed.rs exposes the calibration; main.rs prints the stats line on request).
+    Everything else is hybrid7's: training (= hybrid6), trees and DAGs (= hybrid5), reports (= hybrid7).
+- Saving (same games on both binaries; per-game CPU from --game-cpu):
+  - A flat probit's own moves at ply 2: 153-162 -> 99-104 us per ply (new/old 0.645; two F-P@2 entries of
+    split-growth-probit playing each other, 120 games, 1 thread, twice). F-L at ply 2 unchanged (78 -> 77 us).
+  - Tournament games: F-P@2 against F-P@2 new/old ~0.65; F-P@2 against anything else ~0.75-0.80 (half the moves
+    are the other player's); games without an F-P@2 unchanged.
+  - Per cycle: ~2-3 s of game CPU (split-growth-probit 2.3 s = 5.5%, error-targets-probit 2.0 s = 5.8%,
+    cluster-error 2.9 s = 3.0%); nothing in error-targets and residual-leaves (no flat probit). Details below.
+- Deployed between cycles as the tournament binary (it also plays the own-calibration arenas) of all five running
+  experiments, 15:34-15:35: cluster-error from cycle 614, split-growth-probit from 288, error-targets-probit from
+  203, error-targets from 215, residual-leaves from 247. Each first cycle on hybrid8 finished cleanly.
+
+METHOD (fastprobit.rs; the same method as compound::best for trees in hybrid5)
+- A flat probit plays in fixed point (FxLinear, probit head). A position's value for the side to move is the
+  calibration's z_win - z_loss of probit::log_probs_of_latent: a sqrt, two divisions, two ln Phi and the draw's log
+  (about 70 ns). At depth 2 a root move's value is the smallest of its replies' values (negamax with a full window:
+  no cutoffs but at an infinite value), so most replies need not be valued in full.
+- Each reply gets an estimate from a table of ln Phi (grid z_k = -30 + k/256, the bits of probit::ln_cdf_first),
+  with a proven bound on its distance from FxLinear::value:
+  - ln Phi is concave with -1 < (ln Phi)'' < 0, so the chord lies below it by at most h^2/8: chord + h^2/16 is within
+    h^2/16;
+  - each float ln Phi is allowed 1e-13 + 16u|ln Phi| (u = 2^-53), the allowance compound uses for its rational
+    approximations; the interpolation's and x's rounding are added;
+  - the rest is compound's bound: the calibration's rounding (8u of the terms' sizes), times 4, plus 1e-10.
+  - The z's are computed from the sums with the exact path's operations, so they are the same bits. No estimate
+    (|z| > 29.5, a variance <= 1e-12, eps/s <= 1e-6, a bound >= 1e-3): the reply is valued in full.
+- Only replies whose lower bound is at most the smallest upper bound are valued in full; negamax's loop then runs
+  over them in move order with the same comparisons, so the same value, ties and signed zeros. Known replies (mates,
+  draws, repetitions) carry their exact values. If no exact value lies under the smallest upper bound, every reply is
+  valued (never seen).
+- Moves, hashes, repetition history, node counts and game ends follow child_fx and negamax_fx step for step.
+- Switches: CHESSAI_FX_PROBIT2=off gives hybrid7's search; CHESSAI_FX_CHECK=1 asserts every estimate within its
+  bound and every root value bit-equal to hybrid7's full search (it also turns on hybrid5's checks for trees and the
+  flat LR/NB checks); CHESSAI_FX_STATS=1 prints a "probit2 fx:" line.
+- Stats (two F-P@2 entries, 60 games): 9,941 searches, 247,146 root moves, 5,942,398 replies, 0 without an estimate,
+  242,586 valued in full (24 beyond one per root move), 0 positions valued all in full. So about 1 reply in 24 is
+  valued in full; what is left is move generation, the incremental sums and the estimates.
+
+NOT DONE
+- Ply 1 (depth 1) is unchanged: the softmax policy (log-odds softmax, T 0.1) needs every root value exactly, and the
+  own-calibration arenas play at depth 1.
+- Self-play search at depths 2-4 (root_outcomes; alpha-beta with move ordering) is unchanged. Exactness there needs
+  exact cutoff decisions and exact ordering keys, so not straightforward; probit self-play is not in any running
+  experiment.
+- Trees with probit leaves were already fast (hybrid5's compound path).
+
+IDENTITY (chessai-hybrid7 against hybrid8, every output compared byte for byte; at most 2 threads, nice 15-19)
+- Unit tests: 161 pass (cargo test --release; hybrid7's 157 and 4 new: the table within its bound over 400k z;
+  depth-2 values bit-equal to the full search for 3 calibrations x 6 games x 60 plies; estimates within their
+  bounds; known replies and ties follow negamax's loop).
+- Fresh tournaments from a copy of each experiment's field (tourcheck.sh, snapshot.py; the league's flags):
+  split-growth-probit, error-targets-probit, error-targets (19 players each, 3 tournaments: 4,115 files each),
+  residual-leaves (13 players, 3: 1,883 files), cluster-error (46 players: F-L, F-P, and trees with LR, NB and TAN
+  routers, LR and probit leaves, abs and log errors; 2 tournaments: 16,571 files). All identical, tournament.log
+  identical but for timings.
+- Check mode (CHESSAI_FX_CHECK=1 on hybrid8: every F-P depth-2 search asserted bit-equal to the full one and every
+  estimate within its bound, plus hybrid5's tree checks and the flat LR/NB checks): split-growth-probit field (2
+  tournaments, seed 11) and cluster-error field (1 tournament): identical, no assertion.
+- Real experiment states (suite8.sh, suite8.log; hybrid7/suite.sh's method): reflink snapshots of each experiment's
+  tour dir taken after a cycle's tournament (full history, retired players), with copies of the field's models and
+  own-calibration dirs; leagues.py's exact flags and the experiment's seed; cmp8.sh compares every tour/ file, every
+  saved game in the pool, game_cpu.csv without its CPU column, and stdout with times masked.
+  - split-growth-probit at 1,926 round-robins: a cycle (9 round-robins, 12,312 saved game files) SAME; a second
+    cycle chained on each binary's own output SAME; hybrid8 in check mode SAME.
+  - error-targets-probit at 1,242: play SAME, chain SAME, check SAME.
+  - cluster-error at 2,995 (a 1.8 GB history): a cycle (5 round-robins, 41,400 files) SAME; chain SAME; check
+    mode SAME (541 CPU s).
+  - error-targets at 1,872 and residual-leaves at 2,169: a cycle each, SAME.
+  - 0 failures.
+- Own-calibration arenas (arena8.py: the logged 600-game command of the newest F-P version of split-growth-probit,
+  cluster-error and error-targets-probit, replayed on both with copied models): game files and stdout identical.
+  (They play at depth 1, which hybrid8 doesn't change.)
+- No check named a path inside a live experiment dir (leagues.py's busy check).
+- Pinned benchmark (two F-P@2 entries; F-L@2 entries as the control): games.csv identical.
+
+PER CYCLE (cyclecpu.py on the suite's play runs: the same cycle's games on both binaries; the machine was at load
+~17-24, so the games without an F-P@2, the same code on both, drifted 0-5% between runs; the saving is taken
+against that control)
+- split-growth-probit (9 round-robins, 3,078 games, 630 with an F-P@2): F-P@2 against others 16.80 -> 13.38 ms a
+  game (0.796), F-P@2 against F-P@2 26.3 -> 17.1 (0.649), control 1.004: 2.30 s of 41.9 s a cycle (5.5%).
+- error-targets-probit (the same shape): 13.95 -> 11.54 (0.827), 18.7 -> 12.3 (0.659), control 1.055: 1.97 s of
+  33.9 s (5.8%).
+- cluster-error (5 round-robins, 10,350 games, 890 with an F-P@2): 14.42 -> 11.73 (0.813), 22.2 -> 14.6 (0.659),
+  control 1.047: 2.91 s of 96.6 s (3.0%).
+- The chained cycles agree: process user 44.9 -> 42.8 s, 39.4 -> 36.7 s, 110.5 -> 107.6 s.
+- Live (livecpu.py, the same number of round-robins before and after the swap, to ~15:40): F-P@2 against others
+  15.99 -> 12.47 ms a game in split-growth-probit (72 round-robins each), 14.44 -> 11.60 in error-targets-probit
+  (81), 13.87 -> 11.01 in cluster-error (10); F-P@2 against F-P@2 25.0 -> 16.0, 23.7 -> 14.1, 22.1 -> 15.2.
+- To the experiments' ends (1000 cycles): about 27 + 27 + 19 CPU minutes. Small, because an F-P@2 is 2 of the 15
+  model entries in these fields and plays half the moves of its games; a game between two F-P@2 saves ~35%.
+
+DEPLOYMENT (15:34-15:35)
+- Checked first: no engine rule reads measured CPU (budgets and self-play use prices; game_cpu.csv only feeds the
+  records), and the tournament output the driver parses is unchanged.
+- deploy8.py per experiment: swap8.py DRY=1; leagues.py stop; wait until repeat.log says "STOP found" and no process
+  names the dir; swap8.py (only config.json's tournament.binary changes, hybrid7 -> hybrid8, the diff checked to be
+  exactly that line, atomic write, the old config kept in config-before/); repeat.sh restarted detached as BUILD.md
+  says. Logs: deploy-<experiment>.log.
+  - cluster-error: stopped after cycle 613 (15:35:27), restarted 15:35:28 (repeat.sh pid 1745824); cycle 614 on
+    hybrid8 finished 15:37:28.
+  - split-growth-probit: after 287 (15:34:17), restarted 15:34:19 (pid 1745150).
+  - error-targets-probit: after 202 (15:34:28), restarted 15:34:29 (pid 1745255).
+  - error-targets: after 214 (15:34:25), restarted 15:34:27 (pid 1745224).
+  - residual-leaves: after 246 (15:34:15), restarted 15:34:15 (pid 1745111).
+  - Every experiment finished its first cycles on hybrid8 cleanly (cluster-error's 614; the others 3-9 cycles by
+    15:37).
+- Not changed: the train binaries (hybrid6 / chessai-target), leagues.py, recipes.txt, the specs. The draft spec
+  leagues/specs/batch3/12-residual-leaves-probit.json still names its binaries; the main session switches it.
+- Undo: copy config-before/<experiment>.json back between cycles (stop, copy, restart).
+
+CPU used by the checks: ~2,200 s (suite 1,780 s, fresh checks and benchmarks ~410 s), plus the build and tests.
+
+FILES
+- hybrid8-src/ (source); unit-tests.log (cargo test --release, 161 pass: hybrid7's 157 and 4 new ones).
+- tourcheck.sh, snapshot.py: fresh tournaments from a copy of an experiment's field.
+- snap8.py, run8.sh, cmp8.sh, suite8.sh, suite8.log: real experiment states (hybrid7/suite.sh's method).
+- arena8.py: own-calibration arenas replayed. gamecpu.py, cyclecpu.py, livecpu.py: CPU per game and per cycle.
+- swap8.py and config-before/: the deploy.

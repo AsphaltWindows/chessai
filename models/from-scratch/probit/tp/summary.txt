@@ -1,0 +1,30 @@
+T-P: probit leaves in BDTs (2026-11-07). Source models/from-scratch/probit-src (patches: ../probit2.patch vs resid-src,
+tp.patch vs chessai-probit's source; both re-applied and checked), binary bin/chessai-probit2
+(md5 30b7dd345770dd93db10e72086f52111). 119 unit tests pass (3 new: split copies/noise, file format and options,
+state round trip with stream/fresh shadows, resets, trials and noise).
+
+Identity: chessai-probit2 == chessai-probit on every output of ../identity/run2.sh (../identity/summary2.txt), flat
+probit included (eval-loss, tournament, self-play + resume + init, train fresh/--start/--label-depth/--probit-per-game).
+
+1. Offline (offline/table.txt; offline-c15, 100k split threshold, cnbp cluster routers; fitted log-loss / winner):
+   flat F-P 0.7621 / 0.3341, flat LR 0.6220 / 0.3293, LR nc-100k 0.6178 / 0.3294, LR nc-100k-fresh 0.6170 / 0.3285
+   T-P nc-100k 0.6523 / 0.3297 (9 leaves), T-P nc-100k-fresh 0.6519 / 0.3289 (7 leaves, 2 merges)
+   split noise 0.01: 0.6507 / 0.3294, fresh 0.6503 / 0.3286; 0.03: 0.3318, fresh 0.3297; 0.1: 0.3379, fresh 0.3306
+   Leaves learn their own draw margins (0.15 to 1.31; flat 0.44), hence the much better total log-loss.
+
+2. Self-play from scratch (selfplay/run.sh: F-P-c's recipe + T-L-Nc-fresh-c's tree flags, --leaf probit, split
+   threshold 300000, no noise, 30 rounds of 1000 games, 2 threads): v1 is byte-identical to F-P's v1 (the first split
+   comes in round 1); v30 has 2 splits (5 leaves), 3 merges over the run. Resume from v15: every later file
+   byte-identical (49 files). 98 s wall, 134 s CPU = 4.5 ms CPU/game incl. training (F-P: 54 s, 1.8 ms/game);
+   play at depth 0, 1 thread: 4.5-4.7 ms/game (17-18 us/ply) vs F-P v30 2.1-2.4 ms/game (8.6-9.7 us/ply).
+   Arena T-P vN vs F-P vN, depth 2, cal: lr, log-odds softmax T 0.1, 400 games (arena/, diag/):
+     v5 -39 (-70 to -9), v10 -163 (-200 to -129), v20 -178 (-217 to -143), v30 -233 (-276 to -195)
+     v30 with per-leaf calibration (leafcal:) -279 (-327 to -238); v30 raw at depth 0, jitter10: -34 (-47 to -21)
+   Held-out LR set, winner log-loss raw / fitted: T-P v30 0.6631 / 0.6007, F-P v30 0.5969 / 0.5844.
+   The fresh test kept the probit branches: 30 of 37 windows had positive gains (mean 0.00068 nats per example).
+   Control (control/run.sh), the same recipe with LR leaves: 4 merges, v30 back to a single leaf; vs F-L-c lr30:
+   87 (54 to 121) at depth 2, 8 (-6 to 22) at depth 0.
+
+3. Not proposed: T-P is clearly worse than flat F-P in self-play (the gap grows with the splits).
+   own/run.sh: the cycle's own step (train --start bdtN.state with the recipe's flags) and its gate arena work with
+   chessai-probit2; a state with other options is refused.

@@ -1,0 +1,160 @@
+chessai-weight1 (2026-11-12): --weight-by-uncertainty for the flat learners (analyst 6.73), for weight-p2.
+Nothing created or launched; no spec, config or recipe changed; rs/ untouched; nothing committed or deleted.
+
+BINARY
+  models/from-scratch/bin/chessai-weight1   md5 9f6a7ae99318967b5f8cfd3a5f1da2f8 (cp -n; a forced rebuild reproduces it)
+  source: models/from-scratch/fastbin/weight1-src, a copy of fastbin/hybrid17-src. Before any edit, the copy was
+  rebuilt (touched, not cached) to hybrid17's md5 e4a4fbd4bb104579c942fb654cbf3e11.
+  tests: cargo test --release: 212 passed (210 lib + 2 main), 10 of them new:
+    uweight::  weights_follow_the_formula_with_floor_cap_and_running_mean, the_running_mean_forgets_after_its_memory,
+               floor_one_gives_weight_one_always, the_state_round_trips_exactly_and_checks_its_options,
+               probit_at_weight_one_trains_as_before, lr_at_weight_one_trains_as_before (and checks the AVX2 step),
+               weighted_models_save_their_weights_as_state_and_their_model_as_is, options_are_checked
+    probit::weighted_power_is_alpha_times_the_weight (a hand-computed step: the same as alpha = w unweighted)
+    logreg::weighted_step_moves_by_w_g_and_sums_the_unweighted_square (hand-computed bits)
+
+THE OPTION (train only: play, self-play and the model file format are unchanged)
+  --weight-by-uncertainty none|score (default none)   --weight-floor 0.2   --weight-memory 1000000   --weight-cap 3
+  Per example: s = P(W) + P(D)/2 from the model's own pre-update prediction (the one each learner computes anyway:
+  the probit's latent after its tau dynamics; the LR's softmax). u = clamp(4 s (1 - s), floor, 1);
+  n += 1; m += (u - m) / min(n, memory); w = min(u / m, cap). The example's own u enters m first, so the first
+  weight is exactly 1.
+  F-P: the truncation update's likelihood power alpha_x = alpha * w (the --probit-alpha path). The tau dynamics and
+       the eps (draw-margin) step stay unweighted, as they are under --probit-alpha.
+  F-L: weights -= rate * (w g) / sqrt(G), with G += g^2 unweighted. The weighted step is scalar; at w = 1 it is
+       bit-identical to the AVX2 step (tested).
+  Refused, with a clear error and no output: trees, DAGs, MoE and cnbp ("implemented for the flat models lr and
+  probit only"), --label-depth, and self-play.
+  State: m and n, plus the options, go in {kind}N.state beside the model (87 bytes), written by every weighted
+  train. A train with --start X.model reads X.state if it exists. If not, it starts the mean afresh and notes so
+  on stderr. A state written with other floor, cap or memory is refused:
+    "...probit1.state: the state's weighting options differ from this run's (give the options it was trained with)"
+  Weighted model files load in older binaries: hybrid16's eval-loss on a weighted model gives the same numbers.
+  Every weighted train prints, after its "round 0: N positions" line (the driver's regex is unaffected):
+    weights by uncertainty (score): N examples, mean w .., mean u .., at floor ..%, at cap ..%, running mean m .. (n ..)
+  Source changes:
+    src/uweight.rs (new): the weight, its running mean and state, the Weighted<M> wrapper.
+    src/probit.rs: update_with, which multiplies the power by w.
+    src/logreg.rs: train_uw and step_uw.
+    src/classifier.rs: a round_report hook, None by default.
+    src/lib.rs, src/main.rs: the flags, the checks, the train dispatch and the report line.
+  With the flag absent or none, nothing goes through the new code.
+
+DATA (real ply-2 games, read in place)
+  Training sets id/sets/set{1,2,3}: round0/ holds links to the game dirs of replay-p2's replay pool (a finished run),
+  cycles c000536-537, 538-539 and 540-541: 1,536 games each; 165,850, 169,280 and 172,341 positions.
+  Held-out heldout-p2/: c000542's 768 games concatenated into outcome files: 81,781 positions, of which 67,552 are
+  decisive (36,374 white wins, 31,178 black wins, 14,229 draws). games.csv indexes it per game.
+  None of fponly-p2, fponly-p2b or these chains trains on it, and neither will any experiment that does not copy
+  replay-p2's games (global_source None).
+  Start models (reflink copies in id/start):
+    F-P#1: fponly-p2b probit299.model, md5 b821a869...
+    F-L#1: capped-l-f10-p1 lr319.model, md5 f3d6165e... (its final version)
+    fponly-p2 F-P#1 probit299.model, md5 36a534d6...
+
+IDENTITY (flag absent or none) ............................................................... scripts/chains.sh
+  The training commands are the run logs':
+    train SET OUT --model probit|lr --rounds 1 --seed S --start PREV --use-probs
+  Both F-P and F-L lines take --use-probs. Run at nice 19 on cores 4-7 with RAYON_NUM_THREADS=1.
+  Each chain is three chained steps (seeds 101-103, each starting from the previous step's model), plus one
+  from-scratch step on set1 (seed 100). Arms:
+    h6   chessai-hybrid6
+    h17  chessai-hybrid17
+    g5   chessai-grow5 (capped-l-f10-p1's F-L binary)
+    w1   chessai-weight1, no flag
+    w1n  chessai-weight1 --weight-by-uncertainty none
+  scripts/compare.py: every output file of every arm is byte-identical to h6's, and so is stdout (train time
+  masked) and stderr. ALL IDENTICAL. Each step writes only {kind}1.model; no state is written without the flag.
+               F-P (probit1.model)                 F-L (lr1.model)
+    step 1     11e89594adf019fa95b533906b759e52    d3e1c8c388ba5834808baf7f32827cab
+    step 2     8e92dd9fa59f2d9272340b5a576a6677    0569a4c726421a577358775dc1a417e3
+    step 3     d590f69626b63ccf9005f3b261ad68b0    afaa6e4c90f9d42c92fb79379cc45fa5
+    scratch    3b9d56cbce661964e05fd17743aa39d8    cb9913552485569dfd4a6c5776b7be61
+  The driver's untrained version 0 (a round holding one empty game) gives h6's bytes with the flag on and with it
+  off: probit 46559da8..., lr 95f23cdf...
+  Play check: fastbin/hybrid17/scripts/ownrun.py own h17:chessai-hybrid17,w1:chessai-weight1 on
+  fponly-p2b:F-P#1.loc@299 and capped-l-f10-p1:F-L#1.loc@319 (600 own-calibration games each).
+  8 files, 23,084,973 bytes, all identical.
+
+SMOKE (flag score) .................................................................. arm ws of scripts/chains.sh
+  The same chains, run twice (ws, ws2): every model, state, stdout and stderr is byte-identical (deterministic).
+  The state carries over: each step reads the previous step's m and n.
+            examples  mean w  mean u  at floor  at cap  m after (n)
+  F-P  1    165,850   0.9998  0.7209   10.55%    0.00%  0.7209 (165,850)  no state beside the start: fresh
+       2    169,280   0.9947  0.7149   11.31%    0.00%  0.7179 (335,130)
+       3    172,341   1.0182  0.7341   10.08%    0.00%  0.7234 (507,471)
+       0    165,850   0.9969  0.6841   12.89%    0.00%  0.6841            (from scratch)
+  F-L  1    165,850   0.9967  0.6364   19.46%    0.00%  0.6364 (165,850)  fresh
+       2    169,280   0.9923  0.6285   20.16%    0.00%  0.6324 (335,130)
+       3    172,341   1.0232  0.6506   16.93%    0.00%  0.6386 (507,471)
+       0    165,850   0.9818  0.7228    6.61%    0.00%  0.7228            (from scratch)
+  The cap never binds. With u <= 1, w <= 1/m, so the cap of 3 binds only when m < 1/3. The effective range is
+  floor/m to 1/m: about 0.28-1.39 for F-P and 0.31-1.57 for F-L, a factor of 5 between sure and unsure positions.
+  Held-out loss: uloss.py with A = the unweighted step (w1) and B = the weighted step (ws). B - A ± game-clustered SE;
+  "unsure" means A's |s - 0.5| < 0.3.
+                 full A    full B - A        winner B - A       unsure full B - A   unsure winner B - A
+  F-P  step 1    0.8243   -0.0004 ± 0.0005   +0.0003 ± 0.0003   -0.0001 ± 0.0003    +0.0001 ± 0.0004
+       step 2    0.8264   -0.0011 ± 0.0009   +0.0001 ± 0.0005   -0.0006 ± 0.0005    -0.0004 ± 0.0006
+       step 3    0.8207   -0.0007 ± 0.0009   +0.0002 ± 0.0006   -0.0004 ± 0.0005    -0.0003 ± 0.0006
+       scratch   0.8850   -0.0096 ± 0.0027   -0.0059 ± 0.0017   -0.0040 ± 0.0010    -0.0038 ± 0.0012
+  F-L  step 1    0.8408   +0.0019 ± 0.0014   +0.0013 ± 0.0010   -0.0009 ± 0.0017    -0.0011 ± 0.0013
+       step 2    0.8313   +0.0019 ± 0.0014   +0.0019 ± 0.0012   -0.0013 ± 0.0017    -0.0009 ± 0.0014
+       step 3    0.8182   +0.0030 ± 0.0018   +0.0027 ± 0.0015   -0.0012 ± 0.0020    +0.0002 ± 0.0018
+       scratch   0.8608   +0.0021 ± 0.0029   -0.0008 ± 0.0013   +0.0036 ± 0.0031    +0.0001 ± 0.0015
+  From mature starts the effects are small, as expected. The weighted F-P is level or better by up to 0.001. The
+  weighted F-L is 0.002-0.003 worse overall but level or slightly better on its unsure positions. These are one
+  seed's single steps, a smoke test and not a verdict. Details: id/smoke-uloss.txt.
+
+SIDE-READ TOOL .......................................................................... fastbin/weight1/uloss.py
+  python3 uloss.py A B [--games DIR] [--band 0.3] [--binary BIN] [--block 1000]
+    A, B: eval-loss specs (probit:PATH, lr:PATH) or paths named <kind>N.model. A is the reference (unweighted) and
+          also defines the unsure subset; B is the contrast.
+    --games: a dir of outcome files. Default: heldout-p2 (above).
+  Reports both models' full and winner log-loss, overall and on A's unsure subset (|s - 0.5| < band; s = P(W) +
+  P(D)/2), and B - A paired with an SE clustered by game. Games come from DIR/games.csv; without it, the SE uses
+  blocks of --block positions (conservative, since the files are sorted by result).
+  The predictions are eval-loss's own: `chessai-weight1 eval-loss SPEC DIR --dump FIFO`, read through a named pipe
+  in a temporary dir that the tool removes itself, so nothing is written to disk. Each model's overall numbers are
+  checked against eval-loss's summary line. Pure Python; about 1 s.
+  Smoke: A = fponly-p2 F-P#1 v299, B = fponly-p2b F-P#1 v299 (seed replicates):
+    81,781 positions; A unsure on 55,708 (68.1%)
+                  A        B        B - A ± se (768 games)
+    all full      0.8607   0.8453   -0.0154 ± 0.0048
+    all winner    0.4955   0.4806   -0.0148 ± 0.0047
+    unsure full   1.0280   1.0087   -0.0193 ± 0.0059
+    unsure winner 0.6508   0.6333   -0.0175 ± 0.0061
+  Held-out loss is a property of the RUN, not of the line. Full log-loss of all eight replicate lines at v299:
+    fponly-p2   F-P#1-4: 0.8607 0.8604 0.8623 0.8604   (range 0.002)
+    fponly-p2b  F-P#1-4: 0.8453 0.8481 0.8434 0.8462   (range 0.005)
+  The two seed replicates are 0.015 apart, ten times the step effects above. Read weighting as weighted lines
+  minus unweighted lines of the SAME run (shared games). Across runs, the run-to-run gap swamps it.
+
+FOR THE SPEC
+  - A recipe row is needed. The F-P and F-L rows train with chessai-hybrid4gfx, which lacks the flag, so create
+    stops at "spec: F-P: chessai-hybrid4gfx train doesn't accept --weight-by-uncertainty". (Checked by calling
+    expand_models in memory; nothing was written.) Add two rows to leagues/recipes.txt, copies of F-P and F-L with
+    train_binary chessai-weight1:
+      F-P-w | F-P-w | F-P | probit | 21 | models/from-scratch/bin/chessai-weight1 | models/from-scratch/bin/chessai-hybrid4gfx | --use-probs | --model probit --use-probs --seed 21 --vs-previous --no-games | F-P-c | lr
+      F-L-w | F-L-w | F-L | lr | 21 | models/from-scratch/bin/chessai-weight1 | models/from-scratch/bin/chessai-hybrid4gfx | --use-probs | --model lr --use-probs --seed 21 --vs-previous --no-games | F-L-c F-L-new-c F-L-solo-c F-L-agdiv-c | lr
+  - Spec items (checked in memory with those rows):
+      {"model": "F-P-w", "set": {"--weight-by-uncertainty": "score"}, "to": "train", "replicates": 2}
+          lines F-P-w+weight-by-uncertainty=score#1 and #2; train overrides only, no self-play overrides
+      {"model": "F-P-w", "replicates": 2}
+          lines F-P-w#1 and #2: the same binary with the flag off, i.e. hybrid6's bytes
+    The same works for F-L-w. "to": "auto" also routes the flag to train only, because the self-play binary lacks
+    it. floor, memory and cap need no "set": the binary's defaults are the spec's (0.2, 1,000,000, 3).
+  - Unweighted controls on the plain F-P row also work: train_binary.py --from chessai-hybrid4gfx LDIR swaps only
+    those lines to hybrid6, which gives the same bytes. Don't run train_binary.py with its default on the whole
+    experiment: it would refuse the weighted lines, since hybrid6 lacks the flag.
+  - No driver change is needed. The driver passes --start runs/<line>/{kind}V.model and moves out/{kind}1.state to
+    runs/<line>/{kind}V+1.state; the state is read from beside --start. Every version's state is kept (87 bytes).
+  - Version 0 runs with the flag (0 examples); make_version0 drops its state. So v1, and any warm-started line,
+    starts the mean afresh: one stderr note in runs/<line>.log.
+  - Keep floor, cap and memory fixed for a line's life. A state with other options is refused, so the train fails.
+  - The per-step report line lands in runs/<line>.log for the analyst (mean w, mean u, at floor, at cap, m, n).
+
+SCRATCH (nothing deleted; all deletable once the read is set up)
+  id/          22 MB   chains, link sets, start copies, v0, noidx links, smoke-uloss.txt
+  own/         45 MB   own-calibration replays (h17, w1)
+  weight1-src/target   103 MB   build dir (the binary is installed), including calcache-test-* left by the tests
+  Keep: uloss.py, heldout-p2/ (12 MB, the side read's default set), scripts/, summary.txt, weight1-src/src.

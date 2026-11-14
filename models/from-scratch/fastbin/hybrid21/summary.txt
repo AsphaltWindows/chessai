@@ -1,0 +1,70 @@
+chessai-hybrid21 (2026-11-13 01:03-01:28; the implementation fork for candidates 1 and 2 of the 11-13 ~01:00 perf
+review) = chessai-hybrid20 with compound::MAX_STATES 4,096 -> 65,536. Nothing else changes.
+
+Binary   models/from-scratch/bin/chessai-hybrid21, md5 b52b1bac138ae99f7cf29c727249e313 (cp -n 01:07).
+Source   fastbin/hybrid21-src, a reflink copy of hybrid20-src. hybrid21.patch is the whole diff of compound.rs: the
+         constant, its doc comment and one unit test; testdata/dp6601.model (std-v1-p2-s2's D-P v100, md5
+         21183511...) is the test's model. rs/ is untouched.
+
+WHY 65,536 IS SAFE
+- MAX_STATES only decides eligibility: Tables::cells enumerates the route states of a DAG with cells up front and
+  returned None (the whole DAG plays in float) past 4,096. Nothing is sized by it: states live in a Vec and an
+  index HashMap keyed by (node, sorted marks), ids are u32, and every state keeps its own margin, error bound and
+  float fallback (a router decides in fixed point only outside its margin). So every value is the float model's at
+  any state count (the argument of hybrid20's MAX_NODES). Memory ~150 B a state: 65,536 states ~10 MB a model;
+  enumeration at load takes milliseconds. A cap still bounds pathological DAGs.
+- The models that needed it: the warm ply-2 standard's D-P-Ne-ctx-grow lines at v100, std-v1-p2-s1 (82 nodes, 4,756
+  route states) and std-v1-p2-s2 (69 nodes, 6,601), which played entirely in float on hybrid20.
+
+UNIT TESTS: 208 lib + 2 main pass (unit-tests.log). New: dags_past_4096_route_states_value_exactly: the real
+6,601-state DAG takes the compound path (4,096 < states <= MAX_STATES) and its values equal the float search's bit
+for bit at depths 1-2 along 2 random games of 30 plies.
+
+IDENTITY AGAINST HYBRID20 (identity/: identity.sh A|B, compare.py, compare.txt; hybrid20's suite, its 12 players
+plus sp1 = std-v1-p2-s1 D-P v100 (4,756 route states) and sp2 = std-v1-p2-s2 D-P v100 (6,601); m/MD5SUMS; cal/heldout
+and cal/x are reflinks of games/heldout-lr-d2-s555/round0 because hybrid20's were deleted by the 11-12 tier-1 cleanup)
+- 31 cases, ALL IDENTICAL (every output file byte-identical but game_cpu.csv's CPU column; stdout the same with times
+  masked; both halves exit 0): ~5,070 games. Tournaments at plies 1-2 on the 14-player field (T 0.1 with saved games,
+  T 0.02, argmax with 8 random opening plies, T 0.1 with sampled openings), ply 3 (9 players), ply 4 (6), ply 5 (3);
+  self-games at plies 1-4 (sp1/sp2 included); own calibration (sp1, sp2 at depth 1, sp2 at depth 2, and hybrid20's
+  four); check mode (h21 under CHESSAI_FX_CHECK=1 CHESSAI_FX_STATS=1) at plies 1-4 with sp1/sp2: router decisions
+  1.10 M / 14.2 M / 23.0 M / 139.7 M asserted against float, float fallbacks 0 / 1 / 0 / 3, no assertion failed.
+- WHOLE-CYCLE REPLAYS (replay/): reflink snapshots of std-v1-p2-s1 and -s2 (root moved to scratch, tournament binary
+  set), `leagues.py extend --cycles 105` then `run --cycles 1`: cycle 101 again under extend_check, which compares
+  the field, every tour/ and cold/ games.csv row, the decisions and every rating with the hybrid20 originals:
+  s1 PASSED (01:16), s2 PASSED (01:22): 16 entries, 1,680 games, 720 cold games, 8 decisions each. And s1 replayed
+  on hybrid20 too (control): all 8 trained v101 models and 6 training states byte-identical between the two replays
+  (so the saved games and self-games they trained on were too); 2,604 files identical; the rest differ only in
+  measured CPU/wall columns, dates, the binary path in logs, calfit-<binary md5>.bin cache names and an inode stamp
+  (replay/cmp_replays.py).
+- READ ARENA (readcheck/): make_split_read.py's default (hybrid16) against --binary chessai-hybrid21 on 6 entries at ply
+  2 (both warm D-P v100, s1's F-P and T-P-Ne v100, replay-p2's T-P-Ne @299 x2), 3 round-robins: games.csv, ratings.csv,
+  head_to_head.csv identical (90 games); D-P games x0.49.
+
+SPEEDUPS (identity runs, paired games, nice 10 on a loaded machine; games with an over-cap D-P)
+| Ply | T 0.1 | T 0.02 | argmax (8 opening plies) | sampled openings |
+|---|---|---|---|---|
+| 1 | x0.91 | x0.98 | x0.80 | x0.99 (ply 1 is ~4 ms a game) |
+| 2 | x0.40 | x0.49 | x1.09 (hybrid20's known argmax effect: no root windows in compound's depth 2) | x0.38 |
+| 3 | x0.52 | x0.46 | x0.40 | |
+| 4 | x0.40 | x0.45 | x0.48 | |
+- Self-games (process CPU incl. fits): ply 2 x0.84-0.90, ply 3 x0.76, ply 4 x0.59. Own calibration: sp2 at depth 2
+  x0.29, depth 1 x0.80-0.83.
+- The live workload: s1's cycle 101 replayed: tournament 56.2 -> 38.7 CPU-s (x0.69), cold games 22.3 -> 15.8 (x0.71),
+  self-games 4.4 -> 3.0 (x0.68): ~25 CPU-s a cycle saved (the review: ~23 for s1, ~17 for s2), ~2.2-2.5 CPU-h over
+  the queued extension's 200 + 200 cycles, more as the D-P state counts grow.
+
+DEPLOYMENT
+- std-v1-p2-s1 and -s2 (done at their cap 101, extension to 301 queued by batch7-reads/extend-when-free.sh, which
+  fires when at most 8 runs are live): config.json's tournament binary set to chessai-hybrid21 while each run was done
+  and idle and the waiter was mid-sleep (swap/swap21.py: round-trip check, the one-line diff, no process on the run,
+  no extend running, atomic replace, one driver.log line; backups swap/<run>/config-before/): s1 at 01:18:09, s2 at
+  01:23:09. The extension's re-run of cycle 101 will play on hybrid21 under extend_check against the hybrid20
+  originals (a third check, live); from cycle 102 on everything the tournament binary plays (own calibration games,
+  tournament, cold games, self-games) runs hybrid21; training is unchanged (grow7/hybrid6).
+- make_split_read.py (leagues/specs/arenas/): the tournament binary at plies 1-2 is chessai-hybrid21 (was hybrid16; the
+  ledger's identity chain 16 -> 21); own calibration games stay hybrid16 (arena.py's own-games cache keys on its md5);
+  ply 3+ stays hybrid18. Installed atomically at 01:18:26; backup make_split_read.py.before-hybrid21.
+- Not swapped: x3 (its DAGs have 148 / 409 states), every other live run (no DAG over 4,096 states).
+- Not done (out of scope): make_split_read.py at ply 3+ could take hybrid21 too (it has hybrid18's deep search plus
+  hybrid20's and 21's caps).
