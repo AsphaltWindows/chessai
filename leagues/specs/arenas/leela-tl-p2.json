@@ -1,0 +1,58 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid21",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": [
+   "ka436.L1@436-2",
+   "kb599.L1@599-2",
+   "kc599.L2@599-2"
+  ]
+ },
+ "stop": {
+  "ci95": 30.0,
+  "chunk_rounds": 10,
+  "min_rounds": 10,
+  "max_rounds": 200
+ },
+ "name": "leela-tl-p2",
+ "dir": "leagues/arenas/diag/leela-tl-p2",
+ "plies": [
+  2
+ ],
+ "description": "Cold read leela-tl-p2: ply 2, version 50, only the contrast's lines, near argmax (T 0.02), round-robins until every 95% interval is at most 30 Elo; Elo 0 = the mean of ka, kb, kc (3 players), no random player. Tags: zk=/home/iv/dev/chessai/models/from-scratch/leela/exp:^T-L-Ne-cap$@50, ka=std-v1-p2-x3:^T\\-L\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\+forget\\-factor=10\\.loc$@436, kb=base-lr-p2:^T\\-L\\-Nc\\-merge\\+split\\-limit=4\\+split\\-threshold=1000000\\+revise\\-on=fresh\\+revise=2\\#1\\.loc$@599, kc=base-lr-p2:^T\\-L\\-Nc\\-merge\\+split\\-limit=4\\+split\\-threshold=1000000\\+revise\\-on=fresh\\+revise=2\\#2\\.loc$@599",
+ "entries": [
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:T-L-Ne-cap@50",
+   "name": "zk50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp T-L-Ne-cap version v50"
+  },
+  {
+   "version": "std-v1-p2-x3:T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc@436",
+   "name": "ka436.L1@436",
+   "label": "std-v1-p2-x3 T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc version v436"
+  },
+  {
+   "version": "base-lr-p2:T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+revise=2#1.loc@599",
+   "name": "kb599.L1@599",
+   "label": "base-lr-p2 T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+revise=2#1.loc version v599"
+  },
+  {
+   "version": "base-lr-p2:T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+revise=2#2.loc@599",
+   "name": "kc599.L2@599",
+   "label": "base-lr-p2 T-L-Nc-merge+split-limit=4+split-threshold=1000000+revise-on=fresh+revise=2#2.loc version v599"
+  }
+ ]
+}

@@ -1,0 +1,59 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid18",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": "field"
+ },
+ "stop": {
+  "ci95": 20.0,
+  "chunk_rounds": 10,
+  "min_rounds": 10,
+  "max_rounds": 200
+ },
+ "name": "leela-rule-l-p3",
+ "dir": "leagues/arenas/diag/leela-rule-l-p3",
+ "plies": [
+  3
+ ],
+ "description": "Cold read leela-rule-l-p3: ply 3, version 50, only the contrast's lines, near argmax (T 0.02), round-robins until every 95% interval is at most 20 Elo; Elo 0 = the field's mean, no random player. Tags: zu=/home/iv/dev/chessai/models/from-scratch/leela/exp:^D-L-Ne-ctx-grow-unb$@50, zu=/home/iv/dev/chessai/models/from-scratch/leela/exp:^D-L-Ne-ctx-grow-unb$@20, ze=/home/iv/dev/chessai/models/from-scratch/leela/exp:^D-L-Ne-ctx-grow-cap$@50, zk=/home/iv/dev/chessai/models/from-scratch/leela/exp:^T-L-Ne-cap$@50, zl=/home/iv/dev/chessai/models/from-scratch/leela/exp:^F-L$@50",
+ "entries": [
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:D-L-Ne-ctx-grow-unb@50",
+   "name": "zu50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp D-L-Ne-ctx-grow-unb version v50"
+  },
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:D-L-Ne-ctx-grow-unb@20",
+   "name": "zu20.L1@20",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp D-L-Ne-ctx-grow-unb version v20"
+  },
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:D-L-Ne-ctx-grow-cap@50",
+   "name": "ze50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp D-L-Ne-ctx-grow-cap version v50"
+  },
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:T-L-Ne-cap@50",
+   "name": "zk50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp T-L-Ne-cap version v50"
+  },
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:F-L@50",
+   "name": "zl50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp F-L version v50"
+  }
+ ]
+}

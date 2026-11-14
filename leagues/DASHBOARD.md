@@ -686,6 +686,14 @@ These are things `FORMATS.md` leaves open, or that the dashboard takes as given:
     is the arena named `ply1-<original>`. Entries are `<tag>.<line>@<v>`, tagged `orig` or `new`, and the two
     champions of a line are matched by the line. An arena outside that naming shows its own plies' contrasts.
 
+Cleanup 11-13 (2026-11-13 19:12, `dashboard.py.before-cleanup` is the code before): the cleanup
+(`models/from-scratch/inventory/2026-11-13b/`) deletes games and intermediate versions. A pair arena's contrasts are
+computed from `tour/games.csv`; before the games go, the cleanup saves them to `tour/pair_contrasts.json`, which the
+dashboard reads when `tour/games.csv` is gone (the same numbers). A node report that fails for want of games says so
+("the league's games were deleted on 11-13") instead of showing the failure log. Every other page renders as before:
+22 pages of a scratch copy checked the same before and after the cleanup, and 9 pages of the real root the same as
+the code before.
+
 ## Development
 
 It was developed against a synthetic root made from FORMATS.md, then against the engine's smoke root. Each page was

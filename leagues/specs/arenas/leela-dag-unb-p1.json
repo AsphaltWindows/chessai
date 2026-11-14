@@ -1,0 +1,64 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid21",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": [
+   "da366.L1@366-1",
+   "db299.L2@299-1",
+   "dc366.L2@366-1",
+   "dd299.L2@299-1"
+  ]
+ },
+ "stop": {
+  "ci95": 30.0,
+  "chunk_rounds": 10,
+  "min_rounds": 10,
+  "max_rounds": 200
+ },
+ "name": "leela-dag-unb-p1",
+ "dir": "leagues/arenas/diag/leela-dag-unb-p1",
+ "plies": [
+  1
+ ],
+ "description": "Cold read leela-dag-unb-p1: ply 1, version 50, only the contrast's lines, near argmax (T 0.02), round-robins until every 95% interval is at most 30 Elo; Elo 0 = the mean of da, db, dc, dd (4 players), no random player. Tags: zd=/home/iv/dev/chessai/models/from-scratch/leela/exp:^D-P-Ne-ctx-grow-unb$@50, da=error-dag-probit-p1:^D\\-P\\-Ne\\-ctx\\+split\\-limit=4\\+split\\-threshold=1000000\\+split\\-noise=0\\.03\\+router\\-split\\-z=30\\+router\\-split\\-limit=4\\#1\\.loc$@366, db=router-p1:^D\\-P\\-Ne\\-ctx\\-r4\\+router\\-split\\-rule=stall\\-hg\\+log\\-router\\-stats\\#2\\.loc$@299, dc=error-dag-probit-p1:^D\\-P\\-Ne\\-ctx\\+split\\-limit=4\\+split\\-threshold=1000000\\+split\\-noise=0\\.03\\+router\\-split\\-z=30\\+router\\-split\\-limit=4\\#2\\.loc$@366, dd=router-p1:^D\\-P\\-Ne\\-ctx\\-r4\\+router\\-split\\-rule=stall\\-h\\+log\\-router\\-stats\\#2\\.loc$@299",
+ "entries": [
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:D-P-Ne-ctx-grow-unb@50",
+   "name": "zd50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp D-P-Ne-ctx-grow-unb version v50"
+  },
+  {
+   "version": "error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#1.loc@366",
+   "name": "da366.L1@366",
+   "label": "error-dag-probit-p1 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#1.loc version v366"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-hg+log-router-stats#2.loc@299",
+   "name": "db299.L2@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-rule=stall-hg+log-router-stats#2.loc version v299"
+  },
+  {
+   "version": "error-dag-probit-p1:D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#2.loc@366",
+   "name": "dc366.L2@366",
+   "label": "error-dag-probit-p1 D-P-Ne-ctx+split-limit=4+split-threshold=1000000+split-noise=0.03+router-split-z=30+router-split-limit=4#2.loc version v366"
+  },
+  {
+   "version": "router-p1:D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#2.loc@299",
+   "name": "dd299.L2@299",
+   "label": "router-p1 D-P-Ne-ctx-r4+router-split-rule=stall-h+log-router-stats#2.loc version v299"
+  }
+ ]
+}

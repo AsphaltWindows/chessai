@@ -1,0 +1,64 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid21",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": "field"
+ },
+ "stop": {
+  "ci95": 20.0,
+  "chunk_rounds": 10,
+  "min_rounds": 10,
+  "max_rounds": 200
+ },
+ "name": "leela-rule-p2",
+ "dir": "leagues/arenas/diag/leela-rule-p2",
+ "plies": [
+  2
+ ],
+ "description": "Cold read leela-rule-p2: ply 2, version 50, only the contrast's lines, near argmax (T 0.02), round-robins until every 95% interval is at most 20 Elo; Elo 0 = the field's mean, no random player. Tags: zd=/home/iv/dev/chessai/models/from-scratch/leela/exp:^D-P-Ne-ctx-grow-unb$@50, zd=/home/iv/dev/chessai/models/from-scratch/leela/exp:^D-P-Ne-ctx-grow-unb$@20, zc=/home/iv/dev/chessai/models/from-scratch/leela/exp:^D-P-Ne-ctx-grow-cap$@50, zf=/home/iv/dev/chessai/models/from-scratch/leela/exp:^F-P$@50, zl=/home/iv/dev/chessai/models/from-scratch/leela/exp:^F-L$@50, zt=/home/iv/dev/chessai/models/from-scratch/leela/exp:^T-P-Ne-cap$@50",
+ "entries": [
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:D-P-Ne-ctx-grow-unb@50",
+   "name": "zd50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp D-P-Ne-ctx-grow-unb version v50"
+  },
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:D-P-Ne-ctx-grow-unb@20",
+   "name": "zd20.L1@20",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp D-P-Ne-ctx-grow-unb version v20"
+  },
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:D-P-Ne-ctx-grow-cap@50",
+   "name": "zc50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp D-P-Ne-ctx-grow-cap version v50"
+  },
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:F-P@50",
+   "name": "zf50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp F-P version v50"
+  },
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:F-L@50",
+   "name": "zl50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp F-L version v50"
+  },
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:T-P-Ne-cap@50",
+   "name": "zt50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp T-P-Ne-cap version v50"
+  }
+ ]
+}

@@ -1541,6 +1541,8 @@ def pair_contrasts(av, ply):
     pm, tour = pairs_module(), av.p("tour")
     if pm is None or AR is None or not av.is_pair:
         return None
+    if not os.path.exists(os.path.join(tour, "games.csv")):
+        return saved_contrasts(av, ply)
 
     def compute():
         ratings = AR.LG.read_ratings(tour)  # {player: (elo, ci95, games)}, the rated ones
@@ -1574,6 +1576,17 @@ def pair_contrasts(av, ply):
     except Exception:
         traceback.print_exc()
         return None
+
+
+def saved_contrasts(av, ply):
+    """pair_contrasts' value saved in tour/pair_contrasts.json from the games before the 11-13 cleanup deleted
+    tour/games.csv (models/from-scratch/inventory/2026-11-13b/summarize_1113b.py), or None."""
+    d = load(av.p("tour", "pair_contrasts.json"), parse_json)
+    c = (d.get("plies") or {}).get(str(ply)) if isinstance(d, dict) else None
+    if not isinstance(c, dict):
+        return None
+    tup = lambda x: tuple(x) if isinstance(x, list) else None
+    return dict(rows={k: tup(v) for k, v in (c.get("rows") or {}).items()}, mean=tup(c.get("mean")), n=c.get("n"))
 
 
 def h2h_data(av):
@@ -4605,6 +4618,10 @@ def nodes_page(root, lg, ln, query):
         if os.path.exists(out):  # it finished just now
             with open(out, encoding="utf-8") as f:
                 return f.read(), "text/html; charset=utf-8", 200
+        if os.path.exists(logf) and "no games" in tail(logf, 4000):  # the 11-13 cleanup deleted the games
+            return tv_note(title, "<p>No node report for this version: the league's games were deleted on 11-13 "
+                                  "(the cleanup kept the finals, final champions and every stat, not the games). Node "
+                                  "reports made before then still open.</p>", lg.href), "text/html; charset=utf-8", 200
         if os.path.exists(logf) and not q.get("retry"):
             return tv_note(title, "<p>The report failed:</p><pre>" + esc(tail(logf, 4000)) + "</pre><p><a href=\"?"
                            + esc(urllib.parse.urlencode(dict(v=v, retry=1))) + "\">try again</a></p>", lg.href), \

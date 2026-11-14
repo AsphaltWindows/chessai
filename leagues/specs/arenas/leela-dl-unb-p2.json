@@ -1,0 +1,58 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid21",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": [
+   "ea599.L2@599-2",
+   "eb599.L1@599-2",
+   "ec436.L1@436-2"
+  ]
+ },
+ "stop": {
+  "ci95": 30.0,
+  "chunk_rounds": 10,
+  "min_rounds": 10,
+  "max_rounds": 200
+ },
+ "name": "leela-dl-unb-p2",
+ "dir": "leagues/arenas/diag/leela-dl-unb-p2",
+ "plies": [
+  2
+ ],
+ "description": "Cold read leela-dl-unb-p2: ply 2, version 50, only the contrast's lines, near argmax (T 0.02), round-robins until every 95% interval is at most 30 Elo; Elo 0 = the mean of ea, eb, ec (3 players), no random player. Tags: zu=/home/iv/dev/chessai/models/from-scratch/leela/exp:^D-L-Ne-ctx-grow-unb$@50, ea=base-lr-p2:^D\\-L\\-Ne\\-ctx\\+split\\-limit=4\\+split\\-threshold=1000000\\+router\\-split\\-z=120\\+router\\-split\\-limit=4\\#2\\.loc$@599, eb=base-lr-p2:^D\\-L\\-Ne\\-ctx\\+split\\-limit=4\\+split\\-threshold=1000000\\+router\\-split\\-z=120\\+router\\-split\\-limit=4\\#1\\.loc$@599, ec=std-v1-p2-x3:^D\\-L\\-Ne\\-ctx\\-grow\\+router\\-chain=2\\+router\\-trial\\-z=\\-2\\+grow\\-mdl=0\\+forget\\-factor=10\\.loc$@436",
+ "entries": [
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:D-L-Ne-ctx-grow-unb@50",
+   "name": "zu50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp D-L-Ne-ctx-grow-unb version v50"
+  },
+  {
+   "version": "base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#2.loc@599",
+   "name": "ea599.L2@599",
+   "label": "base-lr-p2 D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#2.loc version v599"
+  },
+  {
+   "version": "base-lr-p2:D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#1.loc@599",
+   "name": "eb599.L1@599",
+   "label": "base-lr-p2 D-L-Ne-ctx+split-limit=4+split-threshold=1000000+router-split-z=120+router-split-limit=4#1.loc version v599"
+  },
+  {
+   "version": "std-v1-p2-x3:D-L-Ne-ctx-grow+router-chain=2+router-trial-z=-2+grow-mdl=0+forget-factor=10.loc@436",
+   "name": "ec436.L1@436",
+   "label": "std-v1-p2-x3 D-L-Ne-ctx-grow+router-chain=2+router-trial-z=-2+grow-mdl=0+forget-factor=10.loc version v436"
+  }
+ ]
+}

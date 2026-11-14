@@ -1,0 +1,52 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid18",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": [
+   "pa301.L1@301-3",
+   "pb301.L2@301-3"
+  ]
+ },
+ "stop": {
+  "ci95": 30.0,
+  "chunk_rounds": 10,
+  "min_rounds": 10,
+  "max_rounds": 200
+ },
+ "name": "leela-fp-p3",
+ "dir": "leagues/arenas/diag/leela-fp-p3",
+ "plies": [
+  3
+ ],
+ "description": "Cold read leela-fp-p3: ply 3, version 50, only the contrast's lines, near argmax (T 0.02), round-robins until every 95% interval is at most 30 Elo; Elo 0 = the mean of pa, pb (2 players), no random player. Tags: zf=/home/iv/dev/chessai/models/from-scratch/leela/exp:^F-P$@50, pa=probit-p3:^F\\-P\\#1\\.loc$@301, pb=probit-p3:^F\\-P\\#2\\.loc$@301",
+ "entries": [
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:F-P@50",
+   "name": "zf50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp F-P version v50"
+  },
+  {
+   "version": "probit-p3:F-P#1.loc@301",
+   "name": "pa301.L1@301",
+   "label": "probit-p3 F-P#1.loc version v301"
+  },
+  {
+   "version": "probit-p3:F-P#2.loc@301",
+   "name": "pb301.L2@301",
+   "label": "probit-p3 F-P#2.loc version v301"
+  }
+ ]
+}

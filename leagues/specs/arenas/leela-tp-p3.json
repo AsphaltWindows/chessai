@@ -1,0 +1,52 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid18",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": [
+   "ta301.L1@301-3",
+   "tb301.L2@301-3"
+  ]
+ },
+ "stop": {
+  "ci95": 30.0,
+  "chunk_rounds": 10,
+  "min_rounds": 10,
+  "max_rounds": 200
+ },
+ "name": "leela-tp-p3",
+ "dir": "leagues/arenas/diag/leela-tp-p3",
+ "plies": [
+  3
+ ],
+ "description": "Cold read leela-tp-p3: ply 3, version 50, only the contrast's lines, near argmax (T 0.02), round-robins until every 95% interval is at most 30 Elo; Elo 0 = the mean of ta, tb (2 players), no random player. Tags: zt=/home/iv/dev/chessai/models/from-scratch/leela/exp:^T-P-Ne-cap$@50, ta=probit-p3:^T\\-P\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\+split\\-noise=0\\.03\\#1\\.loc$@301, tb=probit-p3:^T\\-P\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\+split\\-noise=0\\.03\\#2\\.loc$@301",
+ "entries": [
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:T-P-Ne-cap@50",
+   "name": "zt50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp T-P-Ne-cap version v50"
+  },
+  {
+   "version": "probit-p3:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@301",
+   "name": "ta301.L1@301",
+   "label": "probit-p3 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v301"
+  },
+  {
+   "version": "probit-p3:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@301",
+   "name": "tb301.L2@301",
+   "label": "probit-p3 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v301"
+  }
+ ]
+}

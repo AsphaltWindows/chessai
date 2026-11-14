@@ -1,0 +1,64 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid21",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": [
+   "ta399.L1@399-2",
+   "tb299.L1@299-2",
+   "tc314.L1@314-2",
+   "td542.L2@542-2"
+  ]
+ },
+ "stop": {
+  "ci95": 30.0,
+  "chunk_rounds": 10,
+  "min_rounds": 10,
+  "max_rounds": 200
+ },
+ "name": "leela-tp-p2",
+ "dir": "leagues/arenas/diag/leela-tp-p2",
+ "plies": [
+  2
+ ],
+ "description": "Cold read leela-tp-p2: ply 2, version 50, only the contrast's lines, near argmax (T 0.02), round-robins until every 95% interval is at most 30 Elo; Elo 0 = the mean of ta, tb, tc, td (4 players), no random player. Tags: zt=/home/iv/dev/chessai/models/from-scratch/leela/exp:^T-P-Ne-cap$@50, ta=probit-late-p2:^T\\-P\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\+split\\-noise=0\\.03\\#1\\.loc$@399, tb=diversity-p2d:^T\\-P\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\+split\\-noise=0\\.03\\#1\\.loc$@299, tc=diversity-p2:^T\\-P\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\+split\\-noise=0\\.03\\#1\\.loc$@314, td=replay-p2:^T\\-P\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\+split\\-noise=0\\.03\\#2\\.loc$@542",
+ "entries": [
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:T-P-Ne-cap@50",
+   "name": "zt50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp T-P-Ne-cap version v50"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@399",
+   "name": "ta399.L1@399",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v399"
+  },
+  {
+   "version": "diversity-p2d:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299",
+   "name": "tb299.L1@299",
+   "label": "diversity-p2d T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v299"
+  },
+  {
+   "version": "diversity-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@314",
+   "name": "tc314.L1@314",
+   "label": "diversity-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v314"
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@542",
+   "name": "td542.L2@542",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v542"
+  }
+ ]
+}

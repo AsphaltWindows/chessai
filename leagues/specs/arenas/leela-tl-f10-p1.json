@@ -1,0 +1,64 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid21",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": [
+   "ka379.L1@379-1",
+   "kb361.L1@361-1",
+   "kc319.L2@319-1",
+   "kd319.L1@319-1"
+  ]
+ },
+ "stop": {
+  "ci95": 30.0,
+  "chunk_rounds": 10,
+  "min_rounds": 10,
+  "max_rounds": 200
+ },
+ "name": "leela-tl-f10-p1",
+ "dir": "leagues/arenas/diag/leela-tl-f10-p1",
+ "plies": [
+  1
+ ],
+ "description": "Cold read leela-tl-f10-p1: ply 1, version 50, only the contrast's lines, near argmax (T 0.02), round-robins until every 95% interval is at most 30 Elo; Elo 0 = the mean of ka, kb, kc, kd (4 players), no random player. Tags: zk=/home/iv/dev/chessai/models/from-scratch/leela/exp:^T-L-Ne-cap-f10$@50, ka=filtered-p1-twin:^T\\-L\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\+forget\\-factor=10\\.loc$@379, kb=error-dag-p1:^T\\-L\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\#1\\.loc$@361, kc=capped-l-f10-p1:^T\\-L\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\#2\\.loc$@319, kd=capped-l-f10-p1:^T\\-L\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\+forget\\-factor=10\\#1\\.loc$@319",
+ "entries": [
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:T-L-Ne-cap-f10@50",
+   "name": "zk50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp T-L-Ne-cap-f10 version v50"
+  },
+  {
+   "version": "filtered-p1-twin:T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc@379",
+   "name": "ka379.L1@379",
+   "label": "filtered-p1-twin T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10.loc version v379"
+  },
+  {
+   "version": "error-dag-p1:T-L-Ne+split-limit=4+split-threshold=1000000#1.loc@361",
+   "name": "kb361.L1@361",
+   "label": "error-dag-p1 T-L-Ne+split-limit=4+split-threshold=1000000#1.loc version v361"
+  },
+  {
+   "version": "capped-l-f10-p1:T-L-Ne+split-limit=4+split-threshold=1000000#2.loc@319",
+   "name": "kc319.L2@319",
+   "label": "capped-l-f10-p1 T-L-Ne+split-limit=4+split-threshold=1000000#2.loc version v319"
+  },
+  {
+   "version": "capped-l-f10-p1:T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10#1.loc@319",
+   "name": "kd319.L1@319",
+   "label": "capped-l-f10-p1 T-L-Ne+split-limit=4+split-threshold=1000000+forget-factor=10#1.loc version v319"
+  }
+ ]
+}

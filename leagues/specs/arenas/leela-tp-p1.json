@@ -1,0 +1,64 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid21",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": [
+   "ta366.L1@366-1",
+   "tb449.L2@449-1",
+   "tc392.L2@392-1",
+   "td337.L2@337-1"
+  ]
+ },
+ "stop": {
+  "ci95": 30.0,
+  "chunk_rounds": 10,
+  "min_rounds": 10,
+  "max_rounds": 200
+ },
+ "name": "leela-tp-p1",
+ "dir": "leagues/arenas/diag/leela-tp-p1",
+ "plies": [
+  1
+ ],
+ "description": "Cold read leela-tp-p1: ply 1, version 50, only the contrast's lines, near argmax (T 0.02), round-robins until every 95% interval is at most 30 Elo; Elo 0 = the mean of ta, tb, tc, td (4 players), no random player. Tags: zt=/home/iv/dev/chessai/models/from-scratch/leela/exp:^T-P-Ne-cap$@50, ta=error-dag-probit-p1:^T\\-P\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\+split\\-noise=0\\.03\\#1\\.loc$@366, tb=error-growth-p1:^T\\-P\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\+split\\-noise=0\\.03\\#2\\.loc$@449, tc=stall-p1:^T\\-P\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\+split\\-noise=0\\.03\\#2\\.loc$@392, td=probit-f10-p1:^T\\-P\\-Ne\\+split\\-limit=4\\+split\\-threshold=1000000\\+split\\-noise=0\\.03\\#2\\.loc$@337",
+ "entries": [
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:T-P-Ne-cap@50",
+   "name": "zt50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp T-P-Ne-cap version v50"
+  },
+  {
+   "version": "error-dag-probit-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@366",
+   "name": "ta366.L1@366",
+   "label": "error-dag-probit-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v366"
+  },
+  {
+   "version": "error-growth-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@449",
+   "name": "tb449.L2@449",
+   "label": "error-growth-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v449"
+  },
+  {
+   "version": "stall-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@392",
+   "name": "tc392.L2@392",
+   "label": "stall-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v392"
+  },
+  {
+   "version": "probit-f10-p1:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@337",
+   "name": "td337.L2@337",
+   "label": "probit-f10-p1 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v337"
+  }
+ ]
+}

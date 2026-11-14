@@ -1,0 +1,64 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid21",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": [
+   "pa250.L1@250-1",
+   "pb449.L1@449-1",
+   "pc392.L2@392-1",
+   "pd337.L2@337-1"
+  ]
+ },
+ "stop": {
+  "ci95": 30.0,
+  "chunk_rounds": 10,
+  "min_rounds": 10,
+  "max_rounds": 200
+ },
+ "name": "leela-fp-p1",
+ "dir": "leagues/arenas/diag/leela-fp-p1",
+ "plies": [
+  1
+ ],
+ "description": "Cold read leela-fp-p1: ply 1, version 50, only the contrast's lines, near argmax (T 0.02), round-robins until every 95% interval is at most 30 Elo; Elo 0 = the mean of pa, pb, pc, pd (4 players), no random player. Tags: zf=/home/iv/dev/chessai/models/from-scratch/leela/exp:^F-P$@50, pa=probit-widen-p1c:^F\\-P\\#1\\.loc$@250, pb=error-growth-p1:^F\\-P\\#1\\.loc$@449, pc=stall-p1:^F\\-P\\#2\\.loc$@392, pd=probit-f10-p1:^F\\-P\\#2\\.loc$@337",
+ "entries": [
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:F-P@50",
+   "name": "zf50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp F-P version v50"
+  },
+  {
+   "version": "probit-widen-p1c:F-P#1.loc@250",
+   "name": "pa250.L1@250",
+   "label": "probit-widen-p1c F-P#1.loc version v250"
+  },
+  {
+   "version": "error-growth-p1:F-P#1.loc@449",
+   "name": "pb449.L1@449",
+   "label": "error-growth-p1 F-P#1.loc version v449"
+  },
+  {
+   "version": "stall-p1:F-P#2.loc@392",
+   "name": "pc392.L2@392",
+   "label": "stall-p1 F-P#2.loc version v392"
+  },
+  {
+   "version": "probit-f10-p1:F-P#2.loc@337",
+   "name": "pd337.L2@337",
+   "label": "probit-f10-p1 F-P#2.loc version v337"
+  }
+ ]
+}

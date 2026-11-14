@@ -1,0 +1,64 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid18",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": [
+   "fa178.L1@178-4",
+   "fb178.L2@178-4",
+   "fc178.L3@178-4",
+   "fd178.L4@178-4"
+  ]
+ },
+ "stop": {
+  "ci95": 30.0,
+  "chunk_rounds": 10,
+  "min_rounds": 10,
+  "max_rounds": 200
+ },
+ "name": "leela-fl-p4",
+ "dir": "leagues/arenas/diag/leela-fl-p4",
+ "plies": [
+  4
+ ],
+ "description": "Cold read leela-fl-p4: ply 4, version 50, only the contrast's lines, near argmax (T 0.02), round-robins until every 95% interval is at most 30 Elo; Elo 0 = the mean of fa, fb, fc, fd (4 players), no random player. Tags: zl=/home/iv/dev/chessai/models/from-scratch/leela/exp:^F-L$@50, fa=flat-p3-w4:^F\\-L\\#1\\.loc$@178, fb=flat-p3-w4:^F\\-L\\#2\\.loc$@178, fc=flat-p3-w4:^F\\-L\\#3\\.loc$@178, fd=flat-p3-w4:^F\\-L\\#4\\.loc$@178",
+ "entries": [
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:F-L@50",
+   "name": "zl50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp F-L version v50"
+  },
+  {
+   "version": "flat-p3-w4:F-L#1.loc@178",
+   "name": "fa178.L1@178",
+   "label": "flat-p3-w4 F-L#1.loc version v178"
+  },
+  {
+   "version": "flat-p3-w4:F-L#2.loc@178",
+   "name": "fb178.L2@178",
+   "label": "flat-p3-w4 F-L#2.loc version v178"
+  },
+  {
+   "version": "flat-p3-w4:F-L#3.loc@178",
+   "name": "fc178.L3@178",
+   "label": "flat-p3-w4 F-L#3.loc version v178"
+  },
+  {
+   "version": "flat-p3-w4:F-L#4.loc@178",
+   "name": "fd178.L4@178",
+   "label": "flat-p3-w4 F-L#4.loc version v178"
+  }
+ ]
+}

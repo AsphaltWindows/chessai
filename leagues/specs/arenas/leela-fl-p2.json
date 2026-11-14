@@ -1,0 +1,64 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid21",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": [
+   "fa193.L1@193-2",
+   "fb599.L2@599-2",
+   "fc244.L4@244-2",
+   "fd334.L1@334-2"
+  ]
+ },
+ "stop": {
+  "ci95": 30.0,
+  "chunk_rounds": 10,
+  "min_rounds": 10,
+  "max_rounds": 200
+ },
+ "name": "leela-fl-p2",
+ "dir": "leagues/arenas/diag/leela-fl-p2",
+ "plies": [
+  2
+ ],
+ "description": "Cold read leela-fl-p2: ply 2, version 50, only the contrast's lines, near argmax (T 0.02), round-robins until every 95% interval is at most 30 Elo; Elo 0 = the mean of fa, fb, fc, fd (4 players), no random player. Tags: zl=/home/iv/dev/chessai/models/from-scratch/leela/exp:^F-L$@50, fa=lr-settings-new:^F\\-L\\+lr\\-rate=0\\.0125\\.loc$@193, fb=base-lr-p2:^F\\-L\\#2\\.loc$@599, fc=flat-p2:^F\\-L\\#4\\.loc$@244, fd=flat-p2-b:^F\\-L\\#1\\.loc$@334",
+ "entries": [
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:F-L@50",
+   "name": "zl50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp F-L version v50"
+  },
+  {
+   "version": "lr-settings-new:F-L+lr-rate=0.0125.loc@193",
+   "name": "fa193.L1@193",
+   "label": "lr-settings-new F-L+lr-rate=0.0125.loc version v193"
+  },
+  {
+   "version": "base-lr-p2:F-L#2.loc@599",
+   "name": "fb599.L2@599",
+   "label": "base-lr-p2 F-L#2.loc version v599"
+  },
+  {
+   "version": "flat-p2:F-L#4.loc@244",
+   "name": "fc244.L4@244",
+   "label": "flat-p2 F-L#4.loc version v244"
+  },
+  {
+   "version": "flat-p2-b:F-L#1.loc@334",
+   "name": "fd334.L1@334",
+   "label": "flat-p2-b F-L#1.loc version v334"
+  }
+ ]
+}

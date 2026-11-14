@@ -1,0 +1,334 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid18",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": "field"
+ },
+ "stop": {
+  "ci95": 0.0,
+  "chunk_rounds": 30,
+  "min_rounds": 30,
+  "max_rounds": 30
+ },
+ "name": "distill-p3-final",
+ "dir": "leagues/arenas/diag/distill-p3-final",
+ "plies": [
+  3
+ ],
+ "description": "Cold read distill-p3-final: ply 3, version 300, only the contrast's lines, near argmax (T 0.02), 30 round-robins; Elo 0 = the field's mean, no random player. Tags: fpa=distill-p2-s1:^F-P\\.loc$@302, fpa=distill-p2-s1:^F-P\\.loc$@307, fpa=distill-p2-s1:^F-P\\.loc$@312, fpb=distill-p2-s2:^F-P\\.loc$@438, fpb=distill-p2-s2:^F-P\\.loc$@443, fpb=distill-p2-s2:^F-P\\.loc$@448, fla=distill-p2-s1:^F-L\\.loc$@302, fla=distill-p2-s1:^F-L\\.loc$@307, fla=distill-p2-s1:^F-L\\.loc$@312, flb=distill-p2-s2:^F-L\\.loc$@438, flb=distill-p2-s2:^F-L\\.loc$@443, flb=distill-p2-s2:^F-L\\.loc$@448, tla=distill-p2-s1:^T-L-Ne-cap\\+label@302, tla=distill-p2-s1:^T-L-Ne-cap\\+label@307, tla=distill-p2-s1:^T-L-Ne-cap\\+label@312, tlb=distill-p2-s2:^T-L-Ne-cap\\+label@438, tlb=distill-p2-s2:^T-L-Ne-cap\\+label@443, tlb=distill-p2-s2:^T-L-Ne-cap\\+label@448, tpa=distill-p2-s1:^T-P-Ne-cap\\+label@302, tpa=distill-p2-s1:^T-P-Ne-cap\\+label@307, tpa=distill-p2-s1:^T-P-Ne-cap\\+label@312, tpb=distill-p2-s2:^T-P-Ne-cap\\+label@438, tpb=distill-p2-s2:^T-P-Ne-cap\\+label@443, tpb=distill-p2-s2:^T-P-Ne-cap\\+label@448, gla=distill-p2-s1:^T-L-Ne-grow-f10-std\\+label@302, gla=distill-p2-s1:^T-L-Ne-grow-f10-std\\+label@307, gla=distill-p2-s1:^T-L-Ne-grow-f10-std\\+label@312, glb=distill-p2-s2:^T-L-Ne-grow-f10-std\\+label@438, glb=distill-p2-s2:^T-L-Ne-grow-f10-std\\+label@443, glb=distill-p2-s2:^T-L-Ne-grow-f10-std\\+label@448, gpa=distill-p2-s1:^T-P-Ne-grow-std\\+label@302, gpa=distill-p2-s1:^T-P-Ne-grow-std\\+label@307, gpa=distill-p2-s1:^T-P-Ne-grow-std\\+label@312, gpb=distill-p2-s2:^T-P-Ne-grow-std\\+label@438, gpb=distill-p2-s2:^T-P-Ne-grow-std\\+label@443, gpb=distill-p2-s2:^T-P-Ne-grow-std\\+label@448, dla=distill-p2-s1:^D-L-Ne-ctx-grow-std\\+label@302, dla=distill-p2-s1:^D-L-Ne-ctx-grow-std\\+label@307, dla=distill-p2-s1:^D-L-Ne-ctx-grow-std\\+label@312, dlb=distill-p2-s2:^D-L-Ne-ctx-grow-std\\+label@438, dlb=distill-p2-s2:^D-L-Ne-ctx-grow-std\\+label@443, dlb=distill-p2-s2:^D-L-Ne-ctx-grow-std\\+label@448, dpa=distill-p2-s1:^D-P-Ne-ctx-grow-std\\+label@302, dpa=distill-p2-s1:^D-P-Ne-ctx-grow-std\\+label@307, dpa=distill-p2-s1:^D-P-Ne-ctx-grow-std\\+label@312, dpb=distill-p2-s2:^D-P-Ne-ctx-grow-std\\+label@438, dpb=distill-p2-s2:^D-P-Ne-ctx-grow-std\\+label@443, dpb=distill-p2-s2:^D-P-Ne-ctx-grow-std\\+label@448, yfp=replay-p2:^F-P#@299, ytr=replay-p2:^T-P-Ne\\+@299, vfp=diversity-p2:^F-P#@299, vtr=diversity-p2:^T-P-Ne\\+@299, lfp=probit-late-p2:^F-P#@299, ltr=probit-late-p2:^T-P-Ne\\+@299",
+ "entries": [
+  {
+   "version": "distill-p2-s1:F-P.loc@302",
+   "name": "fpa302.L1@302",
+   "label": "distill-p2-s1 F-P.loc version v302"
+  },
+  {
+   "version": "distill-p2-s1:F-P.loc@307",
+   "name": "fpa307.L1@307",
+   "label": "distill-p2-s1 F-P.loc version v307"
+  },
+  {
+   "version": "distill-p2-s1:F-P.loc@312",
+   "name": "fpa312.L1@312",
+   "label": "distill-p2-s1 F-P.loc version v312"
+  },
+  {
+   "version": "distill-p2-s2:F-P.loc@438",
+   "name": "fpb438.L1@438",
+   "label": "distill-p2-s2 F-P.loc version v438"
+  },
+  {
+   "version": "distill-p2-s2:F-P.loc@443",
+   "name": "fpb443.L1@443",
+   "label": "distill-p2-s2 F-P.loc version v443"
+  },
+  {
+   "version": "distill-p2-s2:F-P.loc@448",
+   "name": "fpb448.L1@448",
+   "label": "distill-p2-s2 F-P.loc version v448"
+  },
+  {
+   "version": "distill-p2-s1:F-L.loc@302",
+   "name": "fla302.L1@302",
+   "label": "distill-p2-s1 F-L.loc version v302"
+  },
+  {
+   "version": "distill-p2-s1:F-L.loc@307",
+   "name": "fla307.L1@307",
+   "label": "distill-p2-s1 F-L.loc version v307"
+  },
+  {
+   "version": "distill-p2-s1:F-L.loc@312",
+   "name": "fla312.L1@312",
+   "label": "distill-p2-s1 F-L.loc version v312"
+  },
+  {
+   "version": "distill-p2-s2:F-L.loc@438",
+   "name": "flb438.L1@438",
+   "label": "distill-p2-s2 F-L.loc version v438"
+  },
+  {
+   "version": "distill-p2-s2:F-L.loc@443",
+   "name": "flb443.L1@443",
+   "label": "distill-p2-s2 F-L.loc version v443"
+  },
+  {
+   "version": "distill-p2-s2:F-L.loc@448",
+   "name": "flb448.L1@448",
+   "label": "distill-p2-s2 F-L.loc version v448"
+  },
+  {
+   "version": "distill-p2-s1:T-L-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc@302",
+   "name": "tla302.L1@302",
+   "label": "distill-p2-s1 T-L-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc version v302"
+  },
+  {
+   "version": "distill-p2-s1:T-L-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc@307",
+   "name": "tla307.L1@307",
+   "label": "distill-p2-s1 T-L-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc version v307"
+  },
+  {
+   "version": "distill-p2-s1:T-L-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc@312",
+   "name": "tla312.L1@312",
+   "label": "distill-p2-s1 T-L-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc version v312"
+  },
+  {
+   "version": "distill-p2-s2:T-L-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc@438",
+   "name": "tlb438.L1@438",
+   "label": "distill-p2-s2 T-L-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc version v438"
+  },
+  {
+   "version": "distill-p2-s2:T-L-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc@443",
+   "name": "tlb443.L1@443",
+   "label": "distill-p2-s2 T-L-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc version v443"
+  },
+  {
+   "version": "distill-p2-s2:T-L-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc@448",
+   "name": "tlb448.L1@448",
+   "label": "distill-p2-s2 T-L-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc version v448"
+  },
+  {
+   "version": "distill-p2-s1:T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc@302",
+   "name": "tpa302.L1@302",
+   "label": "distill-p2-s1 T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc version v302"
+  },
+  {
+   "version": "distill-p2-s1:T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc@307",
+   "name": "tpa307.L1@307",
+   "label": "distill-p2-s1 T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc version v307"
+  },
+  {
+   "version": "distill-p2-s1:T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc@312",
+   "name": "tpa312.L1@312",
+   "label": "distill-p2-s1 T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc version v312"
+  },
+  {
+   "version": "distill-p2-s2:T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc@438",
+   "name": "tpb438.L1@438",
+   "label": "distill-p2-s2 T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc version v438"
+  },
+  {
+   "version": "distill-p2-s2:T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc@443",
+   "name": "tpb443.L1@443",
+   "label": "distill-p2-s2 T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc version v443"
+  },
+  {
+   "version": "distill-p2-s2:T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc@448",
+   "name": "tpb448.L1@448",
+   "label": "distill-p2-s2 T-P-Ne-cap+label-depth=2+label-result=0.5+label-model=F-P.loc version v448"
+  },
+  {
+   "version": "distill-p2-s1:T-L-Ne-grow-f10-std+label-depth=2+label-result=0.5+label-model=F-P.loc@302",
+   "name": "gla302.L1@302",
+   "label": "distill-p2-s1 T-L-Ne-grow-f10-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v302"
+  },
+  {
+   "version": "distill-p2-s1:T-L-Ne-grow-f10-std+label-depth=2+label-result=0.5+label-model=F-P.loc@307",
+   "name": "gla307.L1@307",
+   "label": "distill-p2-s1 T-L-Ne-grow-f10-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v307"
+  },
+  {
+   "version": "distill-p2-s1:T-L-Ne-grow-f10-std+label-depth=2+label-result=0.5+label-model=F-P.loc@312",
+   "name": "gla312.L1@312",
+   "label": "distill-p2-s1 T-L-Ne-grow-f10-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v312"
+  },
+  {
+   "version": "distill-p2-s2:T-L-Ne-grow-f10-std+label-depth=2+label-result=0.5+label-model=F-P.loc@438",
+   "name": "glb438.L1@438",
+   "label": "distill-p2-s2 T-L-Ne-grow-f10-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v438"
+  },
+  {
+   "version": "distill-p2-s2:T-L-Ne-grow-f10-std+label-depth=2+label-result=0.5+label-model=F-P.loc@443",
+   "name": "glb443.L1@443",
+   "label": "distill-p2-s2 T-L-Ne-grow-f10-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v443"
+  },
+  {
+   "version": "distill-p2-s2:T-L-Ne-grow-f10-std+label-depth=2+label-result=0.5+label-model=F-P.loc@448",
+   "name": "glb448.L1@448",
+   "label": "distill-p2-s2 T-L-Ne-grow-f10-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v448"
+  },
+  {
+   "version": "distill-p2-s1:T-P-Ne-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc@302",
+   "name": "gpa302.L1@302",
+   "label": "distill-p2-s1 T-P-Ne-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v302"
+  },
+  {
+   "version": "distill-p2-s1:T-P-Ne-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc@307",
+   "name": "gpa307.L1@307",
+   "label": "distill-p2-s1 T-P-Ne-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v307"
+  },
+  {
+   "version": "distill-p2-s1:T-P-Ne-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc@312",
+   "name": "gpa312.L1@312",
+   "label": "distill-p2-s1 T-P-Ne-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v312"
+  },
+  {
+   "version": "distill-p2-s2:T-P-Ne-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc@438",
+   "name": "gpb438.L1@438",
+   "label": "distill-p2-s2 T-P-Ne-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v438"
+  },
+  {
+   "version": "distill-p2-s2:T-P-Ne-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc@443",
+   "name": "gpb443.L1@443",
+   "label": "distill-p2-s2 T-P-Ne-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v443"
+  },
+  {
+   "version": "distill-p2-s2:T-P-Ne-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc@448",
+   "name": "gpb448.L1@448",
+   "label": "distill-p2-s2 T-P-Ne-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v448"
+  },
+  {
+   "version": "distill-p2-s1:D-L-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc@302",
+   "name": "dla302.L1@302",
+   "label": "distill-p2-s1 D-L-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v302"
+  },
+  {
+   "version": "distill-p2-s1:D-L-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc@307",
+   "name": "dla307.L1@307",
+   "label": "distill-p2-s1 D-L-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v307"
+  },
+  {
+   "version": "distill-p2-s1:D-L-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc@312",
+   "name": "dla312.L1@312",
+   "label": "distill-p2-s1 D-L-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v312"
+  },
+  {
+   "version": "distill-p2-s2:D-L-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc@438",
+   "name": "dlb438.L1@438",
+   "label": "distill-p2-s2 D-L-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v438"
+  },
+  {
+   "version": "distill-p2-s2:D-L-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc@443",
+   "name": "dlb443.L1@443",
+   "label": "distill-p2-s2 D-L-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v443"
+  },
+  {
+   "version": "distill-p2-s2:D-L-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc@448",
+   "name": "dlb448.L1@448",
+   "label": "distill-p2-s2 D-L-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v448"
+  },
+  {
+   "version": "distill-p2-s1:D-P-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc@302",
+   "name": "dpa302.L1@302",
+   "label": "distill-p2-s1 D-P-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v302"
+  },
+  {
+   "version": "distill-p2-s1:D-P-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc@307",
+   "name": "dpa307.L1@307",
+   "label": "distill-p2-s1 D-P-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v307"
+  },
+  {
+   "version": "distill-p2-s1:D-P-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc@312",
+   "name": "dpa312.L1@312",
+   "label": "distill-p2-s1 D-P-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v312"
+  },
+  {
+   "version": "distill-p2-s2:D-P-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc@438",
+   "name": "dpb438.L1@438",
+   "label": "distill-p2-s2 D-P-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v438"
+  },
+  {
+   "version": "distill-p2-s2:D-P-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc@443",
+   "name": "dpb443.L1@443",
+   "label": "distill-p2-s2 D-P-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v443"
+  },
+  {
+   "version": "distill-p2-s2:D-P-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc@448",
+   "name": "dpb448.L1@448",
+   "label": "distill-p2-s2 D-P-Ne-ctx-grow-std+label-depth=2+label-result=0.5+label-model=F-P.loc version v448"
+  },
+  {
+   "version": "replay-p2:F-P#1.loc@299",
+   "name": "yfp299.L1@299",
+   "label": "replay-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "replay-p2:F-P#2.loc@299",
+   "name": "yfp299.L2@299",
+   "label": "replay-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299",
+   "name": "ytr299.L1@299",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v299"
+  },
+  {
+   "version": "replay-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@299",
+   "name": "ytr299.L2@299",
+   "label": "replay-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v299"
+  },
+  {
+   "version": "diversity-p2:F-P#1.loc@299",
+   "name": "vfp299.L1@299",
+   "label": "diversity-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "diversity-p2:F-P#2.loc@299",
+   "name": "vfp299.L2@299",
+   "label": "diversity-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "diversity-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299",
+   "name": "vtr299.L1@299",
+   "label": "diversity-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v299"
+  },
+  {
+   "version": "diversity-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@299",
+   "name": "vtr299.L2@299",
+   "label": "diversity-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:F-P#1.loc@299",
+   "name": "lfp299.L1@299",
+   "label": "probit-late-p2 F-P#1.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:F-P#2.loc@299",
+   "name": "lfp299.L2@299",
+   "label": "probit-late-p2 F-P#2.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc@299",
+   "name": "ltr299.L1@299",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#1.loc version v299"
+  },
+  {
+   "version": "probit-late-p2:T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc@299",
+   "name": "ltr299.L2@299",
+   "label": "probit-late-p2 T-P-Ne+split-limit=4+split-threshold=1000000+split-noise=0.03#2.loc version v299"
+  }
+ ]
+}

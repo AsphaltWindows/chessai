@@ -1,0 +1,64 @@
+{
+ "seed": 1,
+ "nice": 15,
+ "threads": 2,
+ "jobs": 2,
+ "binary": "models/from-scratch/bin/chessai-hybrid21",
+ "owncal_binary": "models/from-scratch/bin/chessai-hybrid16",
+ "flags": [
+  "--reports-last",
+  "--sparse-fit",
+  "--policy",
+  "log-odds-softmax",
+  "--temperature",
+  "0.02"
+ ],
+ "references": [],
+ "anchor": {
+  "mean_of": [
+   "pa320.L2@320-2",
+   "pb299.L2@299-2",
+   "pc352.L3@352-2",
+   "pd559.L4@559-2"
+  ]
+ },
+ "stop": {
+  "ci95": 30.0,
+  "chunk_rounds": 10,
+  "min_rounds": 10,
+  "max_rounds": 200
+ },
+ "name": "leela-fp-p2",
+ "dir": "leagues/arenas/diag/leela-fp-p2",
+ "plies": [
+  2
+ ],
+ "description": "Cold read leela-fp-p2: ply 2, version 50, only the contrast's lines, near argmax (T 0.02), round-robins until every 95% interval is at most 30 Elo; Elo 0 = the mean of pa, pb, pc, pd (4 players), no random player. Tags: zf=/home/iv/dev/chessai/models/from-scratch/leela/exp:^F-P$@50, pa=fponly-p2:^F\\-P\\#2\\.loc$@320, pb=weight-p2:^F\\-P\\-w\\+weight\\-by\\-uncertainty=score\\#2\\.loc$@299, pc=fponly-p2b:^F\\-P\\#3\\.loc$@352, pd=fponly-p2-720:^F\\-P\\#4\\.loc$@559",
+ "entries": [
+  {
+   "version": "/home/iv/dev/chessai/models/from-scratch/leela/exp:F-P@50",
+   "name": "zf50.L1@50",
+   "label": "/home/iv/dev/chessai/models/from-scratch/leela/exp F-P version v50"
+  },
+  {
+   "version": "fponly-p2:F-P#2.loc@320",
+   "name": "pa320.L2@320",
+   "label": "fponly-p2 F-P#2.loc version v320"
+  },
+  {
+   "version": "weight-p2:F-P-w+weight-by-uncertainty=score#2.loc@299",
+   "name": "pb299.L2@299",
+   "label": "weight-p2 F-P-w+weight-by-uncertainty=score#2.loc version v299"
+  },
+  {
+   "version": "fponly-p2b:F-P#3.loc@352",
+   "name": "pc352.L3@352",
+   "label": "fponly-p2b F-P#3.loc version v352"
+  },
+  {
+   "version": "fponly-p2-720:F-P#4.loc@559",
+   "name": "pd559.L4@559",
+   "label": "fponly-p2-720 F-P#4.loc version v559"
+  }
+ ]
+}
